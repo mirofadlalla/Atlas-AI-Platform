@@ -1,13 +1,15 @@
 import logging
 from typing import List
 from app.rag.rerankers.base import BaseReranker, Document
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class CrossEncoderReranker(BaseReranker):
 
-    def __init__(self, model_name: str = "BAAI/bge-reranker-large"):
+    def __init__(self, model_name: str = None):
+        model_name = model_name or settings.cross_encoder_model
         try:
             from sentence_transformers import CrossEncoder
             self.model = CrossEncoder(model_name)

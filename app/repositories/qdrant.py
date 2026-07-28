@@ -4,6 +4,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, SparseVectorParams, PointStruct
 from fastembed import SparseTextEmbedding 
 from app.design_pattern.embedded_model import EmbeddedModel
+from app.core.config import settings
 
 _global_dense_model = None
 _global_sparse_model = None
@@ -17,13 +18,14 @@ def get_shared_dense_model():
 def get_shared_sparse_model():
     global _global_sparse_model
     if _global_sparse_model is None:
-        _global_sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
+        _global_sparse_model = SparseTextEmbedding(model_name=settings.sparse_embedding_model)
     return _global_sparse_model
 
 class QdrantRepository:
-    def __init__(self, url: str = os.getenv("QDRANT_URL", "http://localhost:6333")):
-        # Initialize Qdrant client
-        self.client = QdrantClient(url=url)
+    def __init__(self, url: str = None):
+        # Initialize Qdrant client from settings if url not provided
+        qdrant_url = url or settings.qdrant_url
+        self.client = QdrantClient(url=qdrant_url)
         
         # Share global model singletons for hybrid embeddings
         self.dense_model = get_shared_dense_model()

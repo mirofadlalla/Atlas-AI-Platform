@@ -12,15 +12,15 @@ from langchain_qdrant import QdrantVectorStore, FastEmbedSparse, RetrievalMode
 from qdrant_client import QdrantClient
 from qdrant_client import models
 from app.design_pattern.embedded_model import EmbeddedModel
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 qdrant_client = QdrantClient(
-    url=os.getenv("QDRANT_URL", "http://localhost:6333")
+    url=settings.qdrant_url
 )
 
-COLLECTION_NAME = "atlas_documents1"
-sparse_embeddings = FastEmbedSparse(model_name="Qdrant/bm25")
+sparse_embeddings = FastEmbedSparse(model_name=settings.sparse_embedding_model)
 
 # Cache the embedding model singleton at module level
 _embedding_model = EmbeddedModel()
@@ -39,7 +39,7 @@ def get_retriever(tenant_id: int):
     logger.info(f"Creating new retriever for tenant: {tenant_id}")
     vectorstore = QdrantVectorStore(
         client=qdrant_client,
-        collection_name=COLLECTION_NAME,
+        collection_name=settings.qdrant_collection_name,
         
         embedding=_embedding_model,  # Use singleton instance
         vector_name="dense",

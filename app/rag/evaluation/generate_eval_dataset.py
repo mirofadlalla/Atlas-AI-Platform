@@ -16,20 +16,17 @@ import uuid
 import logging
 from pathlib import Path
 
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-os.environ["HF_HUB_DISABLE_IMPLICIT_SYMLINKS"] = "1"
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
 from qdrant_client import QdrantClient
 from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
 from langchain_core.messages import HumanMessage
+from app.core.config import settings
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 
-QDRANT_URL      = os.getenv("QDRANT_URL", "http://localhost:6333")
-COLLECTION_NAME = "atlas_documents1"
+QDRANT_URL      = settings.qdrant_url
+COLLECTION_NAME = settings.qdrant_collection_name
 TENANT_ID       = "e44c9819-9437-47e5-9115-6caabbca918f"           # change to your tenant
 OUTPUT_PATH     = Path(__file__).parent / "evaluation_dataset.json"
 MAX_CHUNKS      = 30               # how many chunks to generate questions from

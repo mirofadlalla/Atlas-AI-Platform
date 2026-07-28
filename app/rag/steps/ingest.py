@@ -4,8 +4,7 @@ from pathlib import Path
 
 from app.repositories.qdrant import QdrantRepository
 from app.rag.steps.semantic_chunking_function import SemanticChunkingFunction
-
-COLLECTION_NAME = "atlas_documents1"
+from app.core.config import settings
 
 def main(text : str , my_metadata : dict):
     import logging
@@ -16,7 +15,8 @@ def main(text : str , my_metadata : dict):
         raise ValueError("Cannot chunk empty text")
     
     repo = QdrantRepository()
-    repo.create_collection(COLLECTION_NAME) 
+    collection_name = settings.qdrant_collection_name
+    repo.create_collection(collection_name) 
 
     logger.info("Chunking text...")
     logger.warning("Chunking text...")
@@ -69,7 +69,7 @@ def main(text : str , my_metadata : dict):
     
     logger.info(f"Inserting {len(data_to_insert)} chunks into Qdrant collection...")
     try:
-        repo.add_hybrid_documents(COLLECTION_NAME, data_to_insert)
+        repo.add_hybrid_documents(collection_name, data_to_insert)
     except Exception as e:
         logger.error(f"Failed to insert chunks into Qdrant: {e}")
         import traceback
@@ -84,7 +84,7 @@ def main(text : str , my_metadata : dict):
         "status": "success",
         "chunks_created": len(chunks_with_metadata),
         "chunks_inserted": len(data_to_insert),
-        "collection": COLLECTION_NAME
+        "collection": collection_name
     }
 
 

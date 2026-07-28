@@ -21,6 +21,16 @@ class Settings(BaseSettings):
     # Timeout in seconds for each embedding API request
     embedding_request_timeout: float = 120.0
 
+    # Qdrant & RAG settings
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_collection_name: str = "atlas_documents1"
+    sparse_embedding_model: str = "Qdrant/bm25"
+    cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2"
+
+    # LLM Cost Settings (per token)
+    QWEN_INPUT_TOKEN_COST : float = 0.0001
+    QWEN_OUTPUT_TOKEN_COST : float = 0.0001
+
     class Config:
         env_file = '.env'
         extra = "ignore"
