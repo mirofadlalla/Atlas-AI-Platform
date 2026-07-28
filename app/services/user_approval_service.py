@@ -95,6 +95,13 @@ class UserApprovalService:
             
             logger.info(f"User {user.email} approved by admin {current_user_id}")
             
+            # Send approval notification email
+            try:
+                from app.services.email_service import EmailService
+                EmailService.send_approval_status_email(user.email, user.name, "approved")
+            except Exception as mail_err:
+                logger.error(f"Failed to dispatch approval email to {user.email}: {mail_err}")
+
             return {
                 "user_id": user.id,
                 "email": user.email,
@@ -151,6 +158,13 @@ class UserApprovalService:
             
             logger.info(f"User {user.email} rejected by admin {current_user_id}")
             
+            # Send rejection notification email
+            try:
+                from app.services.email_service import EmailService
+                EmailService.send_approval_status_email(user.email, user.name, "rejected")
+            except Exception as mail_err:
+                logger.error(f"Failed to dispatch rejection email to {user.email}: {mail_err}")
+
             return {
                 "user_id": user.id,
                 "email": user.email,

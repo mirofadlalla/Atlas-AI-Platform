@@ -86,6 +86,17 @@ class TenantRegistrationService:
             
             logger.info(f"New tenant registered: {request.organization_name} with admin {request.admin_email}")
             
+            # Send welcome email to admin
+            try:
+                from app.services.email_service import EmailService
+                EmailService.send_welcome_email(
+                    to_email=admin_user.email,
+                    user_name=admin_user.name,
+                    org_name=tenant.name
+                )
+            except Exception as mail_err:
+                logger.error(f"Failed to dispatch welcome email to {admin_user.email}: {mail_err}")
+
             return TenantRegistrationResponse(
                 tenant_id=tenant.id,
                 admin_id=admin_user.id,

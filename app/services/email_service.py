@@ -89,3 +89,57 @@ class EmailService:
         """
 
         return EmailService.send_email(to_email, subject, body_html, body_text)
+
+    @staticmethod
+    def send_welcome_email(to_email: str, user_name: str, org_name: str) -> bool:
+        """Send welcome email upon tenant creation or user signup."""
+        subject = f"Welcome to Atlas AI Platform, {user_name}!"
+        body_html = f"""
+        <html>
+            <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+                    <h2 style="color: #4F46E5;">Welcome to Atlas AI, {user_name}!</h2>
+                    <p>Your workspace for <strong>{org_name}</strong> is ready.</p>
+                    <p>You can now log in to manage documents, search knowledge bases, and utilize high-performance RAG features.</p>
+                </div>
+            </body>
+        </html>
+        """
+        body_text = f"Welcome to Atlas AI Platform, {user_name}!\nYour workspace for {org_name} is now ready."
+        return EmailService.send_email(to_email, subject, body_html, body_text)
+
+    @staticmethod
+    def send_approval_status_email(to_email: str, user_name: str, status: str) -> bool:
+        """Send email when admin approves or rejects user registration."""
+        is_approved = status.lower() == "approved"
+        subject = f"Account Registration {'Approved' if is_approved else 'Updated'}"
+        
+        if is_approved:
+            body_html = f"""
+            <html>
+                <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+                    <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+                        <h2 style="color: #10B981;">Account Approved!</h2>
+                        <p>Hi {user_name},</p>
+                        <p>Your registration for Atlas AI Platform has been approved by your workspace administrator.</p>
+                        <p>You may now log in to your account.</p>
+                    </div>
+                </body>
+            </html>
+            """
+            body_text = f"Hi {user_name},\nYour registration for Atlas AI Platform has been approved by your administrator."
+        else:
+            body_html = f"""
+            <html>
+                <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+                    <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+                        <h2 style="color: #EF4444;">Account Registration Update</h2>
+                        <p>Hi {user_name},</p>
+                        <p>Your registration request for Atlas AI Platform was not approved by the workspace administrator.</p>
+                    </div>
+                </body>
+            </html>
+            """
+            body_text = f"Hi {user_name},\nYour registration request for Atlas AI Platform was not approved by the administrator."
+
+        return EmailService.send_email(to_email, subject, body_html, body_text)
