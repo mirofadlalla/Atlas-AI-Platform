@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.routes import auth_route, ingest_rag_route, eval_pipline, query_route, agent_route
+from app.routes import auth_route, ingest_rag_route, eval_pipline, query_route, agent_route, internal_metrics_route
 
 from logging_setup import setup_logging
 
@@ -52,7 +52,7 @@ app.include_router(ingest_rag_route.router, prefix="/api", tags=["ingest-rag"])
 app.include_router(eval_pipline.router, prefix="/api", tags=["eval-rag"])
 app.include_router(query_route.router, prefix="/api", tags=["query"])
 app.include_router(agent_route.router, prefix="/api", tags=["agent"])
-
+app.include_router(internal_metrics_route.router, prefix="/api", tags=["internal-metrics"])
 
 app.add_middleware(SentryAsgiMiddleware)
 

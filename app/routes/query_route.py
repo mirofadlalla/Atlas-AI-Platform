@@ -151,6 +151,20 @@ async def ask_question(
                 
                 # Trigger background logging to database and Prometheus metrics
                 try:
+                    # Also record metrics directly to Prometheus (fallback if webhook fails)
+                    from app.core.monitors import (
+                        llm_queries_total,
+                        query_pipeline_duration_seconds,
+                        llm_tokens_consumed,
+                        llm_tokens_generated,
+                        api_calls_cost_total
+                    )
+                    llm_queries_total.labels(tenant_id=tenant_id, model_name="Qwen2.5-1.5B").inc()
+                    query_pipeline_duration_seconds.labels(pipeline_stage="total").observe(latency)
+                    llm_tokens_consumed.labels(tenant_id=tenant_id, model_name="Qwen2.5-1.5B").inc(input_tokens + output_tokens)
+                    llm_tokens_generated.labels(tenant_id=tenant_id, model_name="Qwen2.5-1.5B").inc(output_tokens)
+                    api_calls_cost_total.labels(tenant_id=tenant_id, service="llm").inc(cost_usd)
+                    
                     trigger_query_logging(
                         tenant_id=int(tenant_id),
                         query=request.query,

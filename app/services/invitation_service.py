@@ -71,7 +71,7 @@ class InvitationService:
         
         # Check if active invitation already exists
         existing_invitations = self.invitation_repo.get_by_email(invited_email)
-        active_invitation = next(
+        active_invitation = next( # ده generator expression بيشوف لو في دعوة صالحة موجودة بنفس الإيميل
             (inv for inv in existing_invitations if inv.is_valid()),
             None
         )

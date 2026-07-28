@@ -14,7 +14,10 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 try:
-    redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True, socket_connect_timeout=2)
+    redis_client = redis.Redis(host="localhost",
+                                port=6379,
+                                  decode_responses=True,
+                                    socket_connect_timeout=2)
     redis_client.ping()
 except (redis.ConnectionError, redis.TimeoutError):
     redis_client = None
@@ -137,6 +140,9 @@ def _log_rate_limit_violation(
             'limit': limit,
             'timestamp': now
         }
+        #   redis_client.hset(name, key, value) 
+        #   Redis عنده نوع بيانات اسمه Hash (زي Dictionary في Python)
+        #   hset بتستخدم عشان تخزن مجموعة key-value جوه key واحد رئيسي  
         redis_client.hset(
             f"violation_details:{user_id}:{now // WINDOW}",
             mapping={str(k): str(v) for k, v in violation_details.items()}

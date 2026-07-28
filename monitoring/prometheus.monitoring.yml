@@ -1,6 +1,6 @@
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 10s
+  evaluation_interval: 10s
   external_labels:
     monitor: 'atlas-standalone'
 
@@ -16,9 +16,10 @@ scrape_configs:
     static_configs:
       - targets: ['host.docker.internal:8000']  # Reaches localhost:8000 on your Windows machine
     metrics_path: '/metrics'
-    scrape_interval: 10s        # Scrape every 10 seconds
-    scrape_timeout: 5s
+    scrape_interval: 5s         # Scrape every 5 seconds (faster feedback)
+    scrape_timeout: 4s
     honor_timestamps: true
+    scheme: 'http'
 
   - job_name: 'prometheus'
     static_configs:

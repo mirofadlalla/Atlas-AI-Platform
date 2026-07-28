@@ -1,357 +1,145 @@
-
 from app.agent.schemas import ActionDecision, format_instructions
 from app.services.llm_runner import call_llama
 from app.agent.core.state import AgentState
-from langchain_core.output_parsers import JsonOutputParser
-import json
 import re
 
+
 def extract_first_json_block(text: str) -> str:
-    """
-    Extract the first valid JSON object from text that may contain multiple JSON blocks.
-    Handles markdown code blocks and multiple concatenated JSON responses.
-    
-    Args:
-        text: Raw text that may contain JSON blocks
-        
-    Returns:
-        str: First valid JSON string
-    """
-    # Remove markdown code block markers
     text = text.strip()
-    
-    # Try to find JSON blocks wrapped in ``` markers
+
     code_block_pattern = r'```(?:json)?\s*([\s\S]*?)```'
     code_blocks = re.findall(code_block_pattern, text)
-    
+
     if code_blocks:
-        # Use the first code block found
         text = code_blocks[0].strip()
-    
-    # If there are multiple JSON objects concatenated, extract just the first one
-    # This handles cases like: {"action":"sql"}{"action":"sql"} -> get just the first
+
     brace_count = 0
     first_json = []
     in_string = False
     escape_next = False
-    
+
     for i, char in enumerate(text):
         if escape_next:
             first_json.append(char)
             escape_next = False
             continue
-            
+
         if char == '\\' and in_string:
             escape_next = True
             first_json.append(char)
             continue
-            
+
         if char == '"' and not escape_next:
             in_string = not in_string
-            
+
         first_json.append(char)
-        
+
         if not in_string:
             if char == '{':
                 brace_count += 1
             elif char == '}':
                 brace_count -= 1
-                if brace_count == 0 and i < len(text) - 1:
-                    # Found the end of first JSON object
+                if brace_count == 0:
                     return ''.join(first_json).strip()
-    
+
     return ''.join(first_json).strip()
 
 
 def thought_node(state: AgentState):
     """
-    Node responsible for generating the agent's thought process and deciding the next action.
-    Decomposes complex questions into steps and decides whether to use SQL, retrieval, or finish.
-    
-    Args:
-        state: The current agent state
-        
-    Returns:
-        dict: Updated state with thought, last_action, and incremented step_count
+    ONLY responsible for reasoning + selecting next action.
+    NO safety logic here.
     """
-    # Track what actions have been taken
-    has_queried_sql = bool(state.get('last_sql'))
-    has_retrieved_docs = bool(state.get('retrieval_context'))
-    
-    # Build context of what's been done
-    actions_taken = []
-    if has_queried_sql:
-        sql_result = state.get('sql_result', 'No result')
-        actions_taken.append(f"SQL database query EXECUTED and returned results: {sql_result[:100]}")
-    if has_retrieved_docs:
-        doc_count = len(state.get('retrieval_context', '')) if state.get('retrieval_context') else 0
-        actions_taken.append(f"Document retrieval completed - retrieved {doc_count} characters of documents")
-    
-    actions_context = "\n".join(f"- {a}" for a in actions_taken) if actions_taken else "None yet"
-    
-    # Use the active sub-question instead of the original full question
+
+    has_sql = bool(state.get('last_sql'))
+    has_retrieval = bool(state.get('retrieval_context'))
+
+    actions = []
+    if has_sql:
+        actions.append("SQL already executed")
+    if has_retrieval:
+        actions.append("Retrieval already executed")
+
+    actions_context = "\n".join(actions) if actions else "None"
+
     sub_questions = state.get('sub_questions', [state.get('question', '')])
-    current_idx = state.get('current_sub_question_index', 0)
-    current_question = sub_questions[current_idx] if current_idx < len(sub_questions) else state.get('question', '')
-    
-    # Use intelligent classification instead of fixed keyword lists
-    question_lower = current_question.lower()
-    
-    # Get question classification from helper function
+    idx = state.get('current_sub_question_index', 0)
+    current_question = sub_questions[idx] if idx < len(sub_questions) else state.get('question', '')
+
     question_type = _classify_question_type(current_question)
-    
-    # Build more specific guidance based on question type
+
     if question_type == "data":
-        action_guidance = "This question asks for QUANTITATIVE DATA (numbers, counts, statistics). Use SQL query to get actual data from the database."
+        guidance = "Use SQL"
     elif question_type == "knowledge":
-        action_guidance = "This question asks for KNOWLEDGE/INFORMATION/EXPLANATIONS. Use RETRIEVAL to search knowledge base documents and get explanations."
+        guidance = "Use RETRIEVAL"
     else:
-        action_guidance = "Analyze the question to determine if it needs DATA (SQL) or KNOWLEDGE (RETRIEVAL)."
-    
-    prompt = f"""You are an AI Agent for an Enterprise RAG system. Respond with ONLY one JSON object, no markdown, no extra text.
+        guidance = "Decide best action"
 
-ORIGINAL QUESTION: {state.get('original_question', state.get('question', ''))}
-CURRENT PART TO ANSWER: {current_question}
-Current Step: {state['step_count']} / 5
+    prompt = f"""
+You are an AI agent.
 
-{action_guidance}
+Question: {current_question}
+Step: {state.get("step_count", 0)}
 
-QUESTION CATEGORIES:
-- QUANTITATIVE DATA: How many? Count? Total? Revenue? Stats? → Use 'sql'
-- KNOWLEDGE/INFORMATION: What is? Explain? Information? Definitions? → Use 'retrieval'
-- ANSWERABLE: You have enough information → Use 'finish'
-
-PREVIOUS DATA GATHERED:
+Previous actions:
 {actions_context}
 
-CRITICAL INSTRUCTIONS:
-1. Output ONLY valid JSON, no markdown code blocks
-2. Do NOT repeat yourself or suggest the same action twice
-3. Do NOT output multiple JSON blocks
-4. If you already have SQL data or retrieved documents, ALWAYS choose 'finish'
-5. NEVER suggest the same action twice in a row
-6. Once data is gathered, ALWAYS move to 'finish' to synthesize the answer
+Guidance: {guidance}
 
-Output exactly one JSON object with no extra text:
-{format_instructions}"""
-    
-    response_dict = call_llama(prompt)
-    response_text = response_dict['content']
-    
-    # Determine action with improved parsing
-    next_action = _parse_action_decision(response_text, state, question_lower)
-    
-    # Explicitly preserve all critical state to prevent loss through graph transitions
-    preserved_state = {
+Return ONLY JSON:
+{format_instructions}
+"""
+
+    response = call_llama(prompt)
+    response_text = response["content"]
+
+    next_action = _parse_action_decision(response_text)
+
+    return {
+        **state,
         "thought": response_text,
         "last_action": next_action,
-        "step_count": state['step_count'] + 1,
-        "thoughts": state.get('thoughts', []) + [response_text],
-        "observation_history": state.get('observation_history', []) + [f"Thought step {state['step_count'] + 1}: Decision = {next_action}"],
+        "step_count": state.get("step_count", 0) + 1,
+        "observation_history": state.get("observation_history", []) + [
+            f"Decision = {next_action}"
+        ]
     }
-    
-    # Preserve all SQL-related fields
-    for sql_field in ['sql_attempted', 'sql_has_results', 'last_sql', 'sql_result']:
-        preserved_state[sql_field] = state.get(sql_field)
-    
-    # Preserve all retrieval-related fields
-    for retrieval_field in ['retrieval_context', 'retrieval_attempted']:
-        preserved_state[retrieval_field] = state.get(retrieval_field)
-    
-    # Preserve question tracking
-    for question_field in ['original_question', 'question', 'sub_questions', 'current_sub_question_index', 'sub_answers']:
-        preserved_state[question_field] = state.get(question_field)
-    
-    # Preserve other important fields
-    for important_field in ['tenant_id', 'total_cost']:
-        preserved_state[important_field] = state.get(important_field)
-    
-    return preserved_state
 
 
-# تفهم رد الـ LLM وتطلع منه action نظيف.
-'''
-طب قدام الا ال ام بيرجه ثوت واكشن ليه استهتخدم تاني احدد الاكشن لان 
-عشان:
-الـ LLM probabilistic model مش deterministic program
-ومينفعش تثق فيه blind trust في production
-الـ LLM مش مضمون يطلع JSON مظبوط
-
-حتى لو قلتله:
-
-Return ONLY valid JSON
-
-ممكن يرجعلك:
-
-Sure! Here's the decision:
-
-{
-  "action": "sql"
-}
-
-أو
-
-```json
-{
-  "action": "sql"
-}
-
-أو يطلعلك JSONين ورا بعض 
-
-أو يكتب comment جوه JSON
-
-لو انت معملتش:
-
-```python
-extract_first_json_block()
-
-السيستم هيقع.
-'''
-def _parse_action_decision(response_text: str, state: AgentState, question_lower: str) -> str:
-    """
-    Parse LLM response to extract action decision. Handles multiple JSON blocks and malformed responses.
-    Uses JsonOutputParser for robust parsing.
-    
-    Args:
-        response_text: Raw LLM response
-        state: Agent state for context
-        question_lower: Lowercased question for keyword analysis
-        
-    Returns:
-        str: The action to take ('sql', 'retrieval', or 'finish')
-    """
+def _parse_action_decision(response_text: str) -> str:
     try:
-        # Extract first JSON block from potentially multi-block response
         json_text = extract_first_json_block(response_text)
-        
-        # Parse using JsonOutputParser for robustness
-        parser = JsonOutputParser(pydantic_object=ActionDecision) # ensure that the parser is aware of the expected schema like the json has thought and action
-        action_decision = ActionDecision.model_validate_json(json_text) # this will raise if json is invalid or doesn't match schema
-        next_action = action_decision.action.lower().strip()
-        
-        # Validate action is one of allowed values
-        if next_action not in ['sql', 'retrieval', 'finish']:
-            next_action = 'finish'
-            
+        action_decision = ActionDecision.model_validate_json(json_text)
+        action = action_decision.action.lower().strip()
+
+        if action in ["sql", "retrieval", "finish"]:
+            return action
+
     except Exception as e:
-        print(f"Error parsing action decision: {e}, Response: {response_text[:200]}")
-        # Fallback: use keyword detection
-        next_action = _fallback_action_detection(question_lower, state)
-    
-    # Apply safety overrides using intelligent classification
-    has_queried_sql = bool(state.get('last_sql'))
-    has_retrieved_docs = bool(state.get('retrieval_context'))
-    has_sql_results = state.get('sql_has_results', False)
-    sql_attempted = state.get('sql_attempted', False)
-    
-    # Debug logging
-    print(f"[THOUGHT_NODE DEBUG] next_action={next_action}, has_queried_sql={has_queried_sql}, sql_attempted={sql_attempted}, has_sql_results={has_sql_results}")
-    
-    question_type = _classify_question_type(question_lower)
-    
-    # PREVENT INFINITE LOOPS: If we've already executed an action successfully and got results, move to finish
-    if next_action == 'sql' and (has_queried_sql or sql_attempted) and has_sql_results:
-        print(f"[PREVENTION] SQL already executed successfully with results, forcing FINISH")
-        next_action = 'finish'
-    elif next_action == 'sql' and sql_attempted and not has_sql_results:
-        print(f"[PREVENTION] SQL attempted but no results, trying retrieval or finish")
-        if not has_retrieved_docs:
-            next_action = 'retrieval'
-        else:
-            next_action = 'finish'
-    elif next_action == 'retrieval' and (has_retrieved_docs or state.get('retrieval_attempted', False)):
-        print(f"[PREVENTION] Retrieval already executed, forcing FINISH")
-        next_action = 'finish'
-    
-    # Override: if question clearly needs data but tries to finish without data, force appropriate action
-    if next_action == 'finish' and not has_queried_sql and not has_retrieved_docs: # if the model tries to finish without gathering any data, we can override based on question type 
-        if question_type == 'data':
-            next_action = 'sql'
-            print(f"Override: Forcing SQL for data question: '{question_lower[:50]}...'")
-        elif question_type == 'knowledge':
-            next_action = 'retrieval'
-            print(f"Override: Forcing RETRIEVAL for knowledge question: '{question_lower[:50]}...'")
-    
-    return next_action
+        print(f"[PARSE ERROR] {e}")
+
+    return "finish"
 
 
-def _fallback_action_detection(question_lower: str, state: AgentState) -> str:
-    """
-    Fallback action detection when JSON parsing fails.
-    Uses intelligent question classification instead of keyword matching.
-    
-    Args:
-        question_lower: Lowercased question
-        state: Agent state
-        
-    Returns:
-        str: The action to take
-    """
-    has_queried_sql = bool(state.get('last_sql'))
-    has_retrieved_docs = bool(state.get('retrieval_context'))
-    
-    # Classify question type intelligently
-    question_type = _classify_question_type(question_lower)
-    
-    # Route based on question type
-    if question_type == 'data' and not has_queried_sql:
-        return 'sql'
-    elif question_type == 'knowledge' and not has_retrieved_docs:
-        return 'retrieval'
-    
-    # Default to finish if we've tried data gathering
-    return 'finish'
-
-# First Step: Thought Node - Generate thought process and decide next action (sql, retrieval, finish) based on question analysis and gathered data. 
 def _classify_question_type(question: str) -> str:
-    """
-    Intelligently classify a question as 'data', 'knowledge', or 'mixed'.
-    Uses linguistic patterns to determine if question seeks:
-    - DATA: numbers, counts, statistics, specific values from database
-    - KNOWLEDGE: explanations, definitions, information, concepts, how-tos
-    
-    Args:
-        question: The user's question
-        
-    Returns:
-        str: 'data', 'knowledge', or 'mixed'
-    """
-    question_lower = question.lower().strip()
-    
-    # Quantitative/Data indicators - asking for specific numbers or measurements
+    q = question.lower()
+
     data_patterns = [
-        'how many', 'how much', 'count', 'total', 'sum', 'average', 'what % of',
-        'what is the total', 'what is the count', 'how many registered',
-        'number of', 'amount of', 'statistics', 'report', 'revenue', 'sales',
-        'percentage of', 'breakdown of', 'distribution of'
+        'how many', 'count', 'total', 'sum', 'average',
+        'number of', 'revenue', 'sales', 'statistics'
     ]
-    
-    # Knowledge/Conceptual indicators - asking for explanations or information
+
     knowledge_patterns = [
-        'what is', 'what are', 'explain', 'describe', 'definition', 'tell me about',
-        'how does', 'how to', 'why', 'information about', 'what does', 'list the',
-        'get me', 'show me', 'give me', 'provide', 'import', 'architecture',
-        'structure', 'benefit', 'advantage', 'feature', 'capability', 'improve'
+        'what is', 'explain', 'describe', 'how does',
+        'why', 'definition', 'information'
     ]
-    
-    # Count matches for each pattern
-    data_matches = sum(1 for pattern in data_patterns if pattern in question_lower)
-    knowledge_matches = sum(1 for pattern in knowledge_patterns if pattern in question_lower)
-    
-    # Simple decision logic
-    if data_matches > knowledge_matches and data_matches > 0:
-        return 'data'
-    elif knowledge_matches > data_matches and knowledge_matches > 0:
-        return 'knowledge'
-    
-    # If unclear, use question length heuristic
-    # Longer questions asking for explanation tend to be knowledge questions
-    if len(question) > 50 and any(word in question_lower.split() for word in ['explain', 'what', 'how']):
-        return 'knowledge'
-    
-    # Default: if it looks like asking for specific values/counts
-    if any(pattern in question_lower for pattern in ['how many', 'count', 'total', 'number']):
-        return 'data'
-    
-    # Otherwise default to knowledge (better to return docs than wrong query)
-    return 'knowledge'
+
+    data_score = sum(p in q for p in data_patterns)
+    knowledge_score = sum(p in q for p in knowledge_patterns)
+
+    if data_score > knowledge_score:
+        return "data"
+    elif knowledge_score > data_score:
+        return "knowledge"
+
+    return "knowledge"

@@ -23,7 +23,12 @@ class FolderProcessor(PathProcessor):
             return True
         return file_path.suffix.lower() in [ext.lower() for ext in self.file_extensions]
     
-    def process(self, path: Path, tenant_id: str, source: str, author: str, db: Session) -> Dict[str, Any]:
+    def process(self, 
+                path: Path,
+                 tenant_id: str,
+                   source: str,
+                     author: str,
+                       db: Session) -> Dict[str, Any]:
         print(f"📁 Processing folder: {path.name}")
         
         # Get all files

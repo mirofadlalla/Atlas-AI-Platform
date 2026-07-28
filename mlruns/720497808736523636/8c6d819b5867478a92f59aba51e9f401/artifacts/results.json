@@ -1,0 +1,110 @@
+[
+  {
+    "question": "What is included in a digital certificate?",
+    "retrieval_metrics": {
+      "precision": 0.1,
+      "recall": 1.0,
+      "f1": 0.18181818181818182,
+      "mrr": 1.0
+    },
+    "stability_metrics": {
+      "avg_jaccard": 1.0,
+      "rephrase_score": 0.8181818181818182
+    },
+    "generation_metrics": {
+      "token_f1": 0.5714
+    },
+    "prediction": "A digital certificate includes identity information, a public key, a CA signature, and an expiration date.",
+    "reference": "identity info, public key, CA signature, expiration"
+  },
+  {
+    "question": "Who is mentioned in the document chunk?",
+    "retrieval_metrics": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "mrr": 0.0
+    },
+    "stability_metrics": {
+      "avg_jaccard": 1.0,
+      "rephrase_score": 0.6025641025641025
+    },
+    "generation_metrics": {
+      "token_f1": 0.8
+    },
+    "prediction": "Dr. Mohamed Handosa",
+    "reference": "Mohamed Handosa"
+  },
+  {
+    "question": "What is the term for removing access that was previously granted?",
+    "retrieval_metrics": {
+      "precision": 0.1,
+      "recall": 1.0,
+      "f1": 0.18181818181818182,
+      "mrr": 1.0
+    },
+    "stability_metrics": {
+      "avg_jaccard": 1.0,
+      "rephrase_score": 0.6666666666666666
+    },
+    "generation_metrics": {
+      "token_f1": 1.0
+    },
+    "prediction": "Revocation",
+    "reference": "Revocation"
+  },
+  {
+    "question": "What is an example of a coarse-grained protection model?",
+    "retrieval_metrics": {
+      "precision": 0.1,
+      "recall": 1.0,
+      "f1": 0.18181818181818182,
+      "mrr": 1.0
+    },
+    "stability_metrics": {
+      "avg_jaccard": 1.0,
+      "rephrase_score": 0.8181818181818182
+    },
+    "generation_metrics": {
+      "token_f1": 0.4
+    },
+    "prediction": "An example of a coarse-grained protection model is the Unix user/root model.",
+    "reference": "Unix user/root model"
+  },
+  {
+    "question": "What type of functions are used for verifying data integrity and storing password hashes?",
+    "retrieval_metrics": {
+      "precision": 0.1,
+      "recall": 1.0,
+      "f1": 0.18181818181818182,
+      "mrr": 1.0
+    },
+    "stability_metrics": {
+      "avg_jaccard": 1.0,
+      "rephrase_score": 0.7424242424242424
+    },
+    "generation_metrics": {
+      "token_f1": 0.0
+    },
+    "prediction": "Hash Functions",
+    "reference": "One-way functions."
+  },
+  {
+    "question": "Who is mentioned in the document?",
+    "retrieval_metrics": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "mrr": 0.0
+    },
+    "stability_metrics": {
+      "avg_jaccard": 1.0,
+      "rephrase_score": 0.7424242424242424
+    },
+    "generation_metrics": {
+      "token_f1": 0.8
+    },
+    "prediction": "Dr. Mohamed Handosa",
+    "reference": "Mohamed Handosa"
+  }
+]

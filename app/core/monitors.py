@@ -6,6 +6,29 @@ This module provides:
 - Resource utilization tracking
 - Business metrics collection
 - Middleware integration for automatic request tracking
+
+Monitoring
+Metrics Collection
+Performance Tracking
+Cost Tracking
+System Health
+Business Analytics
+
+يعني بدل ما تقول:
+"السيستم بطيء"
+
+أنت هنا تقدر تعرف بدقة:
+
+أي endpoint بطيء؟
+أي tenant يستهلك أكثر؟
+كم تكلفة الـ LLM؟
+كم وقت الـ retrieval؟
+كم chunk تم استرجاعه؟
+هل الـ cache فعالة؟
+هل الـ agents تفكر كثيرًا؟
+هل الـ Celery queue مختنقة؟
+هل الـ CPU وصل 95%؟
+
 """
 
 from prometheus_client import Counter, Histogram, Gauge, Summary

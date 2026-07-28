@@ -2,12 +2,8 @@ import os
 import sys
 import logging
 from pathlib import Path
+import time
 
-# إغلاق تحذيرات ومشاكل الـ Symlinks في ويندوز
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-os.environ["HF_HUB_DISABLE_IMPLICIT_SYMLINKS"] = "1"
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.rag.steps.ingest import main
 from app.rag.steps.loader import DocumentLoader
 from app.rag.steps.file_tracker import FileTracker 
@@ -41,6 +37,7 @@ class RAGPipeline:
         # Extract tenant_id and file_name for tracking purposes
         tenant_id = str(custom_metadata["tenant_id"])
         file_name = Path(file_path).name
+        start_time = time.time()
         
         try:
             # 1. Calculate file hash to detect changes
@@ -98,6 +95,45 @@ class RAGPipeline:
             # 6. Mark the file as completed
             logger.info(f"Marking file as completed: {file_name}")
             FileTracker.mark_completed(tenant_id, file_hash, db)
+            
+            # 7. Record metrics via internal webhook
+            try:
+                latency = time.time() - start_time
+                # For standalone monitoring: Prometheus in Docker reaches host via host.docker.internal
+                # For orchestrated: Use service name 'api' in Docker network
+                api_host = os.environ.get("API_HOST", "http://host.docker.internal:8000")
+                if "localhost" in api_host and not api_host.startswith("http"):
+                    api_host = f"http://{api_host}"
+                    
+                webhook_url = f"{api_host}/api/internal/metrics/record"
+                
+                # Get chunks created from the result if available
+                chunks_created = 0
+                if isinstance(result, dict):
+                    chunks_created = result.get("chunks_created", result.get("chunks_inserted", 0))
+                
+                # Determine document type from extension
+                doc_type = "unknown"
+                if "." in file_name:
+                    doc_type = file_name.split(".")[-1].lower()
+                    
+                payload = {
+                    "metric_type": "ingest_run",
+                    "tenant_id": tenant_id,
+                    "chunks_created": chunks_created,
+                    "latency": float(latency),
+                    "document_type": doc_type
+                }
+                
+                import requests
+                # Fire and forget with short timeout
+                resp = requests.post(webhook_url, json=payload, timeout=2.0)
+                if resp.status_code == 200:
+                    logger.debug(f"Successfully sent ingest metrics for {file_name}")
+                else:
+                    logger.warning(f"API webhook returned status {resp.status_code}")
+            except Exception as metric_error:
+                logger.error(f"Error recording ingest metrics via webhook: {metric_error}")
             
             logger.warning(f"File processing complete for: {file_name}")
             return {"status": "success", "message": "File processed and ingested.", "details": result}

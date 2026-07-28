@@ -170,6 +170,39 @@ async def ask_agent(
                     retrieved_docs = final_result.get("retrieval_context", "")
                     total_cost = final_result.get("total_cost", 0.0)
                     
+                    # Record metrics directly to Prometheus (immediate)
+                    from app.core.monitors import (
+                        agent_queries_total,
+                        agent_reasoning_steps_total,
+                        agent_reasoning_duration_seconds,
+                        agent_reasoning_steps_count,
+                        llm_tokens_consumed,
+                        llm_tokens_generated,
+                        api_calls_cost_total
+                    )
+                    agent_queries_total.labels(
+                        tenant_id=current_user.tenant_id,
+                        agent_type="reasoning"
+                    ).inc()
+                    agent_reasoning_steps_total.labels(
+                        tenant_id=current_user.tenant_id,
+                        agent_type="reasoning"
+                    ).inc(step_count)
+                    agent_reasoning_duration_seconds.labels(agent_type="reasoning").observe(latency)
+                    agent_reasoning_steps_count.observe(step_count)
+                    llm_tokens_consumed.labels(
+                        tenant_id=current_user.tenant_id,
+                        model_name="Qwen2.5-1.5B"
+                    ).inc(input_tokens + output_tokens)
+                    llm_tokens_generated.labels(
+                        tenant_id=current_user.tenant_id,
+                        model_name="Qwen2.5-1.5B"
+                    ).inc(output_tokens)
+                    api_calls_cost_total.labels(
+                        tenant_id=current_user.tenant_id,
+                        service="llm"
+                    ).inc(float(total_cost))
+                    
                     # Trigger background logging task
                     # This will record metrics to both database and Prometheus
                     trigger_agent_logging(

@@ -20,7 +20,7 @@ class FileTracker:
         """
         path = Path(file_path)
         if not path.exists():
-            raise FileNotFoundError(f"[❌] Cannot hash missing file: {file_path}")
+            raise FileNotFoundError(f"Cannot hash missing file: {file_path}")
             
         hasher = hashlib.sha256()
         with open(file_path, 'rb') as f:
@@ -50,7 +50,7 @@ class FileTracker:
         tenant_id = str(tenant_id)  # Ensure tenant_id is a string for consistent database queries
         tracker_repo.add_processed_file(tenant_id, file_name, file_hash)
 
-        print(f"[💾] File tracker updated with new hash: {file_hash}")
+        print(f"File tracker updated with new hash: {file_hash}")
 
     @staticmethod
     def mark_processing(tenant_id: int, file_name: str, file_hash: str, db: Session):
@@ -61,7 +61,7 @@ class FileTracker:
         tracker_repo = TrackerDBFileRepository(db)
         tenant_id = str(tenant_id)
         tracker_repo.mark_processing(tenant_id, file_name, file_hash)
-        print(f"[⏳] File marked as processing: {file_name} (hash: {file_hash[:8]}...)")
+        print(f"File marked as processing: {file_name} (hash: {file_hash[:8]}...)")
 
     @staticmethod
     def mark_completed(tenant_id: int, file_hash: str, db: Session):
@@ -71,7 +71,7 @@ class FileTracker:
         tracker_repo = TrackerDBFileRepository(db)
         tenant_id = str(tenant_id)
         tracker_repo.mark_completed(tenant_id, file_hash)
-        print(f"[✅] File marked as completed: {file_hash[:8]}...")
+        print(f"File marked as completed: {file_hash[:8]}...")
 
     @staticmethod
     def mark_failed(tenant_id: int, file_hash: str, db: Session):
@@ -81,4 +81,4 @@ class FileTracker:
         tracker_repo = TrackerDBFileRepository(db)
         tenant_id = str(tenant_id)
         tracker_repo.mark_failed(tenant_id, file_hash)
-        print(f"[❌] File marked as failed: {file_hash[:8]}...")
+        print(f"File marked as failed: {file_hash[:8]}...")

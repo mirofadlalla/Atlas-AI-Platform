@@ -8,7 +8,7 @@ class Runs(Base):
     __tablename__ = "runs"
 
     run_id = uuid_pk()
-    tenant_id = Column(String, index=True) 
+    tenant_id = Column(String, index=True) #ForeignKey('tenants.id')
     query = Column(Text)
     answer = Column(Text)
     latency = Column(Float)

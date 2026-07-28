@@ -1,0 +1,14 @@
+artifact_uri: file:///E:/pyDS/atlas-ai/mlruns/844412608393458107/c9b24151bdc34c2885dccfa83f59c65f/artifacts
+end_time: 1772779594840
+entry_point_name: ''
+experiment_id: '844412608393458107'
+lifecycle_stage: active
+run_id: c9b24151bdc34c2885dccfa83f59c65f
+run_name: query_84708799-6434-46ca-9f4c-b1329abfe041_1772779594.5573125
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1772779594603
+status: 3
+tags: []
+user_id: omary

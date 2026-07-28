@@ -1,0 +1,80 @@
+[
+  {
+    "id": "q_001",
+    "question": "What is included in a digital certificate?",
+    "answer": "identity info, public key, CA signature, expiration",
+    "relevant_ids": [
+      "0128a624-4db3-eef1-4624-dea4d466942b"
+    ],
+    "paraphrases": [
+      "What information is contained in a digital certificate?",
+      "What does a digital certificate typically consist of?"
+    ],
+    "_source_chunk": "• Examples: SHA-256, SHA-3\n14\nDr. Mohamed Handosa\n\nDigital Certificates and PKI\n• Digital Certificate\n• Binds a public key to an entity (user, organization). • Issued and signed by a trusted authority (Certificate Authority, or CA). • Includes: identity info, public key, CA signature, expiration\n• P"
+  },
+  {
+    "id": "q_002",
+    "question": "Who is mentioned in the document chunk?",
+    "answer": "Mohamed Handosa",
+    "relevant_ids": [
+      "03f196ad-68d0-812a-88de-c732c3c9ce43"
+    ],
+    "paraphrases": [
+      "What is the name of the person mentioned?",
+      "Who is being referred to in this document?"
+    ],
+    "_source_chunk": "Mohamed Handosa"
+  },
+  {
+    "id": "q_003",
+    "question": "What is the term for removing access that was previously granted?",
+    "answer": "Revocation",
+    "relevant_ids": [
+      "0f0c23b4-28aa-7c6a-b025-933fab0c4d32"
+    ],
+    "paraphrases": [
+      "What happens when access is taken away from someone?",
+      "What is the process called when access rights are removed?"
+    ],
+    "_source_chunk": "Revocation of Access Rights\n• Revocation refers to removing access that was previously granted. • Types of Revocation:\n• Immediate versus Lazy\n• Immediate: takes effect instantly. • Lazy: rights are removed later, e.g., when subject logs out. • Selective versus Total\n• Selective: remove specific rig"
+  },
+  {
+    "id": "q_004",
+    "question": "What is an example of a coarse-grained protection model?",
+    "answer": "Unix user/root model",
+    "relevant_ids": [
+      "1005f578-ca76-31ff-31a7-c60d8fb8060a"
+    ],
+    "paraphrases": [
+      "What is a common example of coarse-grained protection?",
+      "What is an illustration of a coarse-grained protection approach?"
+    ],
+    "_source_chunk": "3\nDr. Mohamed Handosa\n\nGrain of Privilege\n• Coarse-Grained Protection:\n• Easier to manage, fewer access levels. • Example: Unix user/root model. • Fine-Grained Protection:\n• More complex but allows more precise control. • Example: File ACLs, RBAC, procedure-level domains."
+  },
+  {
+    "id": "q_005",
+    "question": "What type of functions are used for verifying data integrity and storing password hashes?",
+    "answer": "One-way functions.",
+    "relevant_ids": [
+      "136c666c-91a3-d1c5-66e2-e8c688c8ea2b"
+    ],
+    "paraphrases": [
+      "What kind of functions are used for data integrity and password storage?",
+      "What type of functions are used for data verification and password hashing?"
+    ],
+    "_source_chunk": "Password\n-\nBased Authentication\n• The most common but vulnerable. • Best practices\n• Avoid reuse across sites. • Use strong, long, and complex passwords. • Store password hashes, not plaintext (e.g., using bcrypt, PBKDF2). • Attacks\n• Brute-force: Trying all combinations. • Dictionary attack: Trying"
+  },
+  {
+    "id": "q_006",
+    "question": "Who is mentioned in the document?",
+    "answer": "Mohamed Handosa",
+    "relevant_ids": [
+      "1d9aa146-58b0-affe-ffc6-c94853e305d8"
+    ],
+    "paraphrases": [
+      "What person is listed in the document?",
+      "Who is the subject of this document?"
+    ],
+    "_source_chunk": "Mohamed Handosa"
+  }
+]

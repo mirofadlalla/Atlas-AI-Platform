@@ -3,16 +3,31 @@ import uuid
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, SparseVectorParams, PointStruct
 from fastembed import SparseTextEmbedding 
-from app.design_pattern.embedded_model import EmbeddedModel as embedding
+from app.design_pattern.embedded_model import EmbeddedModel
+
+_global_dense_model = None
+_global_sparse_model = None
+
+def get_shared_dense_model():
+    global _global_dense_model
+    if _global_dense_model is None:
+        _global_dense_model = EmbeddedModel()
+    return _global_dense_model
+
+def get_shared_sparse_model():
+    global _global_sparse_model
+    if _global_sparse_model is None:
+        _global_sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
+    return _global_sparse_model
 
 class QdrantRepository:
     def __init__(self, url: str = os.getenv("QDRANT_URL", "http://localhost:6333")):
         # Initialize Qdrant client
         self.client = QdrantClient(url=url)
         
-        # Initialize AI models (Dense & Sparse) for hybrid embeddings
-        self.dense_model = embedding()  
-        self.sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
+        # Share global model singletons for hybrid embeddings
+        self.dense_model = get_shared_dense_model()
+        self.sparse_model = get_shared_sparse_model()
 
     def create_collection(self, collection_name: str, vector_size: int = 1024):
         # Create collection if it does not exist
@@ -26,7 +41,7 @@ class QdrantRepository:
                     "sparse": SparseVectorParams()
                 }
             )
-            print(f"[✅] Collection '{collection_name}' created for Hybrid Search.")
+            print(f"Collection '{collection_name}' created for Hybrid Search.")
 
     def add_hybrid_documents(self, collection_name: str, documents: list[dict]):
         """
@@ -53,7 +68,7 @@ class QdrantRepository:
             # Create a set of existing IDs for O(1) lookups
             existing_ids = {point.id for point in existing_points}
         except Exception as e:
-            print(f"[⚠️] Error checking existing IDs: {e}")
+            print(f"Error checking existing IDs: {e}")
             existing_ids = set()
 
         # 3. Filter out documents that already exist in Qdrant to avoid redundant embeddings
@@ -61,10 +76,10 @@ class QdrantRepository:
 
         # 4. If no new documents, skip embedding and insertion to save resources
         if not new_documents:
-            print(f"[✅] All {len(documents)} chunks already exist in Qdrant. Skipping embedding to save resources.")
+            print(f"All {len(documents)} chunks already exist in Qdrant. Skipping embedding to save resources.")
             return
 
-        print(f"[⏳] Found {len(new_documents)} new chunks out of {len(documents)}. Generating embeddings...")
+        print(f"Found {len(new_documents)} new chunks out of {len(documents)}. Generating embeddings...")
 
         # 5. Generate Dense and Sparse embeddings for new documents only
         texts = [doc["text"] for doc in new_documents]
@@ -99,6 +114,7 @@ class QdrantRepository:
         )
         print(f"[✅] {len(points)} NEW Hybrid documents added to '{collection_name}'.")
 
+
     def delete_collection(self, collection_name: str):
         # Delete collection if exists
         if self.client.collection_exists(collection_name):
@@ -107,10 +123,12 @@ class QdrantRepository:
         else:
             print(f"[ℹ️] Collection '{collection_name}' does not exist in Qdrant.")
 
+
     def list_collections(self):
         # List all collections in Qdrant
         collections = self.client.get_collections()
         return [col.name for col in collections.collections]
+
 
     def search(self, collection_name: str, query_vector: list, top_k: int = 5):
         # Perform search in Qdrant collection

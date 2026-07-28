@@ -63,7 +63,7 @@ async def upload_file(
         HTTPException: If user is not admin or other validation fails
     """
     # Verify admin identity (case-insensitive)
-    user_role_lower = (user_role or "").lower().strip()
+    user_role_lower = (user_role).lower().strip()
     if user_role_lower != "admin":
         logger.warning(f"Unauthorized ingestion attempt by {current_user} (role: {user_role}, normalized: {user_role_lower})")
         raise HTTPException(
@@ -73,7 +73,7 @@ async def upload_file(
     
     # Apply rate limiting (admin-only endpoint)
     rate_limit(
-        user_id=current_user or "anonymous",
+        user_id=current_user,
         role="admin",
         endpoint="/ingest-rag/upload_file"
     )

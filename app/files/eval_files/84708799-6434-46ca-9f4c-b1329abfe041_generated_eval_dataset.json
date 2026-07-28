@@ -1,0 +1,41 @@
+[
+  {
+    "id": "q_001",
+    "question": "What is included in a digital certificate?",
+    "answer": "identity info, public key, CA signature, expiration",
+    "relevant_ids": [
+      "0128a624-4db3-eef1-4624-dea4d466942b"
+    ],
+    "paraphrases": [
+      "What information is contained in a digital certificate?",
+      "What components make up a digital certificate?"
+    ],
+    "_source_chunk": "• Examples: SHA-256, SHA-3\n14\nDr. Mohamed Handosa\n\nDigital Certificates and PKI\n• Digital Certificate\n• Binds a public key to an entity (user, organization). • Issued and signed by a trusted authority (Certificate Authority, or CA). • Includes: identity info, public key, CA signature, expiration\n• P"
+  },
+  {
+    "id": "q_002",
+    "question": "Who is mentioned in the document?",
+    "answer": "Mohamed Handosa",
+    "relevant_ids": [
+      "03f196ad-68d0-812a-88de-c732c3c9ce43"
+    ],
+    "paraphrases": [
+      "What is the name of the person mentioned?",
+      "Who is referred to in the document?"
+    ],
+    "_source_chunk": "Mohamed Handosa"
+  },
+  {
+    "id": "q_003",
+    "question": "What is the effect of Immediate revocation?",
+    "answer": "takes effect instantly",
+    "relevant_ids": [
+      "0f0c23b4-28aa-7c6a-b025-933fab0c4d32"
+    ],
+    "paraphrases": [
+      "What happens when access is revoked immediately?",
+      "How does Immediate revocation work?"
+    ],
+    "_source_chunk": "Revocation of Access Rights\n• Revocation refers to removing access that was previously granted. • Types of Revocation:\n• Immediate versus Lazy\n• Immediate: takes effect instantly. • Lazy: rights are removed later, e.g., when subject logs out. • Selective versus Total\n• Selective: remove specific rig"
+  }
+]

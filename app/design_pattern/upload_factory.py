@@ -4,9 +4,6 @@ from app.controllers.ingest_rag_controller import IngestController
 from sqlalchemy.orm import Session
 
 def process_upload(file_path: str, tenant_id: str, source: str, author: str, db: Session):
-    """
-    Simplified version for your use case
-    """
     path = Path(file_path)
     
     if not path.exists():

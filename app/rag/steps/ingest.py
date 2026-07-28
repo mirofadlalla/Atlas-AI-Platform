@@ -2,12 +2,6 @@ import os
 import sys
 from pathlib import Path
 
-# إغلاق تحذيرات ومشاكل الـ Symlinks في ويندوز
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-os.environ["HF_HUB_DISABLE_IMPLICIT_SYMLINKS"] = "1"
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from app.repositories.qdrant import QdrantRepository
 from app.rag.steps.semantic_chunking_function import SemanticChunkingFunction
 
@@ -18,14 +12,14 @@ def main(text : str , my_metadata : dict):
     logger = logging.getLogger(__name__)
     
     if not text or len(text.strip()) == 0:
-        logger.error("[❌] Input text is empty")
+        logger.error("Input text is empty")
         raise ValueError("Cannot chunk empty text")
     
     repo = QdrantRepository()
     repo.create_collection(COLLECTION_NAME) 
 
-    logger.info("[⏳] Chunking text...")
-    logger.warning("[⏳] Chunking text...")
+    logger.info("Chunking text...")
+    logger.warning("Chunking text...")
     
     # Initialize embeddings before chunking
     logger.info("Initializing embedding model for semantic chunking...")
@@ -33,20 +27,20 @@ def main(text : str , my_metadata : dict):
     try:
         chunks_with_metadata = SemanticChunkingFunction.process_document(text, my_metadata)
     except Exception as e:
-        logger.error(f"[❌] Chunking failed: {e}")
+        logger.error(f"Chunking failed: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise
     
     if not chunks_with_metadata:
-        logger.error("[❌] Chunking resulted in empty chunks")
+        logger.error("Chunking resulted in empty chunks")
         raise ValueError("Chunking produced no chunks")
     
-    logger.info(f"[✅] Chunking complete - Created {len(chunks_with_metadata)} chunks")
-    logger.warning(f"[✅] Chunking complete - Created {len(chunks_with_metadata)} chunks")
-    print(f"[✅] Chunking complete - Created {len(chunks_with_metadata)} chunks")
+    logger.info(f"Chunking complete - Created {len(chunks_with_metadata)} chunks")
+    logger.warning(f"Chunking complete - Created {len(chunks_with_metadata)} chunks")
+    print(f"Chunking complete - Created {len(chunks_with_metadata)} chunks")
 
-    logger.info("[⏳] Preparing chunks for insertion into Qdrant...")
+    logger.info("Preparing chunks for insertion into Qdrant...")
     data_to_insert = []
     for idx, doc in enumerate(chunks_with_metadata):
         try:
@@ -66,25 +60,25 @@ def main(text : str , my_metadata : dict):
             if (idx + 1) % 10 == 0:
                 logger.debug(f"Prepared {idx + 1}/{len(chunks_with_metadata)} chunks for insertion")
         except Exception as e:
-            logger.error(f"[❌] Error preparing chunk {idx}: {e}")
+            logger.error(f"Error preparing chunk {idx}: {e}")
             continue
     
     if not data_to_insert:
-        logger.error("[❌] No valid chunks to insert after preparation")
+        logger.error("No valid chunks to insert after preparation")
         raise ValueError("No valid chunks to insert")
     
-    logger.info(f"[⏳] Inserting {len(data_to_insert)} chunks into Qdrant collection...")
+    logger.info(f"Inserting {len(data_to_insert)} chunks into Qdrant collection...")
     try:
         repo.add_hybrid_documents(COLLECTION_NAME, data_to_insert)
     except Exception as e:
-        logger.error(f"[❌] Failed to insert chunks into Qdrant: {e}")
+        logger.error(f"Failed to insert chunks into Qdrant: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise
     
-    logger.info(f"[✅] Successfully inserted {len(data_to_insert)} chunks into Qdrant")
-    logger.warning(f"[✅] Successfully inserted {len(data_to_insert)} chunks into Qdrant")
-    print(f"[✅] Successfully inserted {len(data_to_insert)} chunks into Qdrant")
+    logger.info(f"Successfully inserted {len(data_to_insert)} chunks into Qdrant")
+    logger.warning(f"Successfully inserted {len(data_to_insert)} chunks into Qdrant")
+    print(f"Successfully inserted {len(data_to_insert)} chunks into Qdrant")
     
     return {
         "status": "success",

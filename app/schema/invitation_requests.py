@@ -30,6 +30,10 @@ class InvitationResponse(BaseModel):
     token: Optional[str] = None  # Only included when first created
     
     class Config:
+        #بتخلي Pydantic يقدر يحول:
+        # ORM object (زي SQLAlchemy model)
+        # إلى:
+        #Pydantic model مباشرة
         from_attributes = True
 
 

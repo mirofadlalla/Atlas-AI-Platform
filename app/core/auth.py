@@ -9,6 +9,8 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# JWT => HEADER.PAYLOAD.SIGNATURE
+
 # Utility functions for password hashing and token creation/verification
 def password_hash(password : str) -> str :
     return pwd_context.hash(password)

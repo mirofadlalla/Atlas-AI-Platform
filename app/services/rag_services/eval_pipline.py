@@ -70,6 +70,61 @@ def evaluate_task(self, tenant_id: str, path: str, runs: int = 2, run_id: str = 
                 mlflow.set_tag("status", "Evaluation completed")
                 mlflow.set_tag("success", "true")
                 
+                # إرسال المقاييس للـ API الداخلي عشان Prometheus يشوفها
+                try:
+                    import requests
+                    # For standalone monitoring: Prometheus in Docker reaches host via host.docker.internal
+                    # For orchestrated: Use service name 'api' in Docker network
+                    api_host = os.environ.get("API_HOST", "http://host.docker.internal:8000")
+                    if "localhost" in api_host and not api_host.startswith("http"):
+                        api_host = f"http://{api_host}"
+                        
+                    webhook_url = f"{api_host}/api/internal/metrics/record"
+                    
+                    # تجميع متوسط النتائج للمقاييس (لو موجودة في النتيجة)
+                    avg_scores = {}
+                    if results and len(results) > 0:
+                        total_precision = total_recall = total_f1 = total_mrr = total_token_f1 = 0
+                        valid_retrieval = valid_gen = 0
+                        
+                        for r in results:
+                            ret_metrics = r.get("retrieval_metrics", {})
+                            if ret_metrics:
+                                total_precision += ret_metrics.get("precision", 0)
+                                total_recall += ret_metrics.get("recall", 0)
+                                total_f1 += ret_metrics.get("f1", 0)
+                                total_mrr += ret_metrics.get("mrr", 0)
+                                valid_retrieval += 1
+                                
+                            gen_metrics = r.get("generation_metrics", {})
+                            if gen_metrics:
+                                total_token_f1 += gen_metrics.get("token_f1", 0)
+                                valid_gen += 1
+                        
+                        if valid_retrieval > 0:
+                            avg_scores["precision"] = total_precision / valid_retrieval
+                            avg_scores["recall"] = total_recall / valid_retrieval
+                            avg_scores["f1"] = total_f1 / valid_retrieval
+                            avg_scores["mrr"] = total_mrr / valid_retrieval
+                        if valid_gen > 0:
+                            avg_scores["token_f1"] = total_token_f1 / valid_gen
+                            
+                    payload = {
+                        "metric_type": "eval_run",
+                        "tenant_id": str(tenant_id),
+                        "latency": float(total_seconds),
+                        "runs": 1,
+                        "scores": avg_scores
+                    }
+                    
+                    resp = requests.post(webhook_url, json=payload, timeout=2.0)
+                    if resp.status_code == 200:
+                        logger.debug(f"Successfully sent evaluation metrics for tenant {tenant_id}")
+                    else:
+                        logger.warning(f"API webhook returned status {resp.status_code} for eval metrics")
+                except Exception as metric_error:
+                    logger.error(f"Error recording evaluation metrics via webhook: {metric_error}")
+                
                 return results
                 
     except Exception as e:

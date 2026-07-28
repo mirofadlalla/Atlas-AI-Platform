@@ -12,6 +12,7 @@ celery_app = Celery(
 
 default_exchange = Exchange("atlas_ai_exchange" , type="direct")
 
+# define queus
 celery_app.conf.task_queues = (
     Queue("ingest_data_queue" , default_exchange , routing_key="ingest"),
     Queue("eval_data_queue" , default_exchange , routing_key="eval"),
@@ -23,7 +24,7 @@ celery_app.conf.task_default_queue = "logging_queue"
 celery_app.conf.task_default_exchange = "atlas_ai_exchange"
 celery_app.conf.task_default_routing_key = "logging"
 
-
+# define when task cames which queue and routes should go 
 celery_app.conf.task_routes = {
     "app.services.rag_services.ingest_rag_service.ingest_file_task": {
         "queue": "ingest_data_queue",

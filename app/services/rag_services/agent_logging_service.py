@@ -12,14 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.repositories.runs_repository import RunsRepository
 from app.repositories.cost_log_repository import CostLogRepository
-from app.core.monitors import (
-    agent_queries_total,
-    agent_reasoning_steps_count,
-    agent_reasoning_duration_seconds,
-    track_llm_cost,
-    llm_tokens_consumed,
-    llm_tokens_generated,
-)
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +35,7 @@ def log_agent_run_and_cost(
     """
     Background task to log agent runs and costs to the database.
     
-    Also records Prometheus metrics for monitoring and analytics.
+    Also records Prometheus metrics via internal API webhook for monitoring.
     Runs asynchronously to avoid blocking the response stream.
     Retries up to 3 times on failure.
     
@@ -103,45 +96,37 @@ def log_agent_run_and_cost(
         else:
             logger.info(f"Logged agent run {run.run_id} - Tenant: {tenant_id} (no token usage)")
         
-        # Record Prometheus metrics for monitoring and analytics
+        # Record Prometheus metrics via internal webhook so they register on the API server
         try:
-            # Track agent execution metrics
-            agent_queries_total.labels(
-                tenant_id=str(tenant_id),
-                agent_type="reasoning"
-            ).inc()
+            import os
+            # For standalone monitoring: Prometheus in Docker reaches host via host.docker.internal
+            # For orchestrated: Use service name 'api' in Docker network
+            api_host = os.environ.get("API_HOST", "http://host.docker.internal:8000")
+            if "localhost" in api_host and not api_host.startswith("http"):
+                api_host = f"http://{api_host}"
+                
+            webhook_url = f"{api_host}/api/internal/metrics/record"
             
-            # Track reasoning steps
-            agent_reasoning_steps_count.observe(step_count)
+            payload = {
+                "metric_type": "agent_run",
+                "tenant_id": str(tenant_id),
+                "model_name": model_name,
+                "input_tokens": int(input_tokens),
+                "output_tokens": int(output_tokens),
+                "cost_usd": float(cost_usd),
+                "latency": float(latency),
+                "step_count": int(step_count)
+            }
             
-            # Track agent latency
-            agent_reasoning_duration_seconds.labels(
-                agent_type="reasoning"
-            ).observe(float(latency))
-            
-            # Track LLM cost and token usage
-            track_llm_cost(
-                tenant_id=str(tenant_id),
-                model_name=model_name,
-                input_tokens=int(input_tokens),
-                output_tokens=int(output_tokens),
-                cost=float(cost_usd)
-            )
-            
-            # Track token consumption
-            llm_tokens_consumed.labels(
-                tenant_id=str(tenant_id),
-                model_name=model_name
-            ).inc(int(input_tokens) + int(output_tokens))
-            
-            llm_tokens_generated.labels(
-                tenant_id=str(tenant_id),
-                model_name=model_name
-            ).inc(int(output_tokens))
-            
-            logger.debug(f"Recorded Prometheus metrics for agent run {run.run_id}")
+            # Fire and forget with short timeout
+            response = requests.post(webhook_url, json=payload, timeout=2.0)
+            if response.status_code == 200:
+                logger.debug(f"Successfully sent agent metrics to API webhook for run {run.run_id}")
+            else:
+                logger.warning(f"API webhook returned status {response.status_code}: {response.text}")
+                
         except Exception as metric_error:
-            logger.error(f"Error recording Prometheus metrics: {metric_error}")
+            logger.error(f"Error recording Prometheus agent metrics via webhook: {metric_error}")
             # Don't fail the entire task if metrics recording fails
         
         # Clean up database session

@@ -270,6 +270,12 @@ class RetrievalPipeline:
         # Create cache key from query
         cache_key = f"{self.tenant_id}:{hashlib.md5(query.encode()).hexdigest()}"
         
+        # Clean up expired entries periodically
+        now = time.time()
+        expired_keys = [k for k, v in _query_cache.items() if now - v.get('timestamp', 0) > _query_cache_ttl]
+        for k in expired_keys:
+            _query_cache.pop(k, None)
+
         # 1. Check local query cache first (fastest)
         if cache_key in _query_cache:
             cached_result = _query_cache[cache_key]

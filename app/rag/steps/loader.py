@@ -13,7 +13,8 @@ from langchain_core.documents import Document
 class DocumentLoader:
     
     @staticmethod
-    def load_file(file_path: str, custom_metadata: Dict[str, Any] = None) -> List[Document]:
+    def load_file(file_path: str,
+                   custom_metadata: Dict[str, Any] = None) -> List[Document]:
         """
         Load a file and attach custom metadata (e.g., tenant_id).
         
@@ -28,7 +29,7 @@ class DocumentLoader:
         
         # 1. Check if file exists
         if not path.exists():
-            raise FileNotFoundError(f"[❌] File not found: {file_path}")
+            raise FileNotFoundError(f"File not found: {file_path}")
 
         # 2. Extract file extension (lowercase for consistency, e.g. .PDF → .pdf)
         extension = path.suffix.lower()

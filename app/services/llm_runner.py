@@ -65,8 +65,15 @@ class CustomLocalLLM(LLM):
     def _call(self, prompt: str, **kwargs) -> str:
         # Normal Method using invoke
         llm = LLMService()
-        res = llm.generate(prompt, system_prompt="")
-        return res
+        res = llm.generate(prompt)  # Removed system_prompt as it's not accepted by generate
+        
+        # Save usage for pipeline metrics
+        CustomLocalLLM.last_usage = {
+            "input": res.get("input_tokens", 0),
+            "output": res.get("output_tokens", 0)
+        }
+        
+        return res["content"]
 
     @property
     def _llm_type(self) -> str:
