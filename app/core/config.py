@@ -27,9 +27,13 @@ class Settings(BaseSettings):
     sparse_embedding_model: str = "Qdrant/bm25"
     cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2"
 
-    # LLM Cost Settings (per token)
-    QWEN_INPUT_TOKEN_COST : float = 0.0001
-    QWEN_OUTPUT_TOKEN_COST : float = 0.0001
+    # SMTP & Email Settings
+    smtp_server: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    email_from: str = "noreply@atlas-ai.com"
+    frontend_url: str = "http://localhost:3000"
 
     class Config:
         env_file = '.env'

@@ -7,7 +7,6 @@ data_base = create_engine(
     pool_pre_ping=True
 )
 
-
 Sessions = sessionmaker(
     autoflush=False,
     autocommit=False,

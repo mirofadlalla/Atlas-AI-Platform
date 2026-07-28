@@ -96,6 +96,13 @@ class InvitationService:
             f"in tenant {tenant_id}"
         )
         
+        # Send invitation token via email service
+        try:
+            from app.services.email_service import EmailService
+            EmailService.send_invitation_email(invited_email, token, tenant_id)
+        except Exception as mail_err:
+            logger.error(f"Failed to dispatch invitation email to {invited_email}: {mail_err}")
+
         return invitation
     
     def validate_invitation(self, token: str):

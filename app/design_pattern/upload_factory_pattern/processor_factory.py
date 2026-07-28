@@ -16,6 +16,7 @@ class PathProcessorFactory:
         """Register default processors"""
         self.register_processor(FileProcessor())
         self.register_processor(FolderProcessor())
+        # self.register_processor(CustomProcessor())
     
     def register_processor(self, processor: PathProcessor):
         """Register a new processor"""

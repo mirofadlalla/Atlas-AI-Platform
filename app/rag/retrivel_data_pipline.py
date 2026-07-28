@@ -46,6 +46,7 @@ _embedding_model = EmbeddedModel()
 _ranking_services = {}
 _ranking_services_lock = threading.Lock()
 
+# "BM25" : boj
 
 def _get_ranking_service(strategy: str = "hybrid"):
     """Get or create a RankingService singleton for the given strategy (thread-safe)."""

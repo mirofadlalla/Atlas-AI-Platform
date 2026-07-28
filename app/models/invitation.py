@@ -53,3 +53,14 @@ class Invitation(Base):
             self.status == 'pending' 
             and not self.is_expired()
         )
+
+# backref
+# الـ backref بيعمل علاقة عكسية أوتوماتيك من الجدول التاني.
+# في المثال:
+
+# python
+# invited_by_user = relationship("Users", foreign_keys=[invited_by], backref="invitations_sent")
+# ده معناه:
+
+# من جدول Invitation تقدر توصل للمستخدم اللي بعت الدعوة عن طريق invited_by_user.
+# ومن جدول Users تقدر توصل لكل الدعوات اللي بعتها عن طريق user.invitations_sent.
