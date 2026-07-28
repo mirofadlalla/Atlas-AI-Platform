@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 from app.models.runs import Runs
 from app.models.costLog import CostLog
-from app.rag.reranker import RankingService
+from app.rag.rerankers import RankingService
 from app.repositories.runs_repository import RunsRepository
 from app.repositories.cost_log_repository import CostLogRepository
 from app.services.rag_services.query_logging_service import trigger_query_logging
