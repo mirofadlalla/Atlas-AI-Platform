@@ -10,6 +10,13 @@ class Settings(BaseSettings):
     hf_api : str = ""
     api_secret_key : str = ""
 
+    # LLM — Groq
+    groq_api_key: str = ""
+
+    # Embeddings — Jina AI (primary) + ngrok vLLM (secondary fallback)
+    jina_api_key: str = ""
+    remote_embed_url: str = ""  # e.g. https://xxx.ngrok-free.dev  (fine-tuned vLLM on remote device)
+
     # Internal service-to-service authentication token (used by Celery → FastAPI metrics endpoint)
     internal_metrics_api_key: str = ""
     

@@ -6,9 +6,9 @@ logger = logging.getLogger(__name__)
 
 def call_llama(
     prompt: str,
-    model_name: str = "Qwen/Qwen2.5-1.5B-Instruct",
-    # system_prompt: str = "",
-    temperature: float = 0.2
+    model_name: str = "llama-3.3-70b-versatile",
+    system_prompt: str = "You are a helpful assistant.",
+    temperature: float = 1.0
 ):
     """
     Call the Local LLM to generate a response.
@@ -26,7 +26,7 @@ def call_llama(
         llm = LLMService()
         output = llm.generate(
             prompt,
-            # system_prompt=system_prompt,
+            system_prompt=system_prompt,
             temperature=temperature
         )
         # generate() now returns a plain str; token counts are not available via the API
@@ -77,4 +77,4 @@ class CustomLocalLLM(LLM):
 
     @property
     def _llm_type(self) -> str:
-        return "custom_huggingface_stream"
+        return "groq_llama_stream"
