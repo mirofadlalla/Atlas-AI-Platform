@@ -126,7 +126,7 @@ def log_query_run_and_cost(
 
 
 def trigger_query_logging(
-    tenant_id: int,
+    tenant_id: str | int,
     query: str,
     answer: str,
     latency: float,

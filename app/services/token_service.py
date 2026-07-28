@@ -2,7 +2,9 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import os
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your_secret_key")
+from app.core.config import settings
+
+SECRET_KEY = settings.api_secret_key or os.getenv("SECRET_KEY", "atlas_ai_default_secret_key_change_in_prod")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 

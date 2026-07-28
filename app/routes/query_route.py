@@ -166,7 +166,7 @@ async def ask_question(
                     api_calls_cost_total.labels(tenant_id=tenant_id, service="llm").inc(cost_usd)
                     
                     trigger_query_logging(
-                        tenant_id=int(tenant_id),
+                        tenant_id=tenant_id,
                         query=request.query,
                         answer=full_answer,
                         latency=latency,

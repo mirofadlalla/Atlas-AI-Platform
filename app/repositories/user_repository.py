@@ -12,6 +12,10 @@ class UserRepository:
         """Find user by email."""
         return self.db.query(Users).filter(Users.email == email).first()
     
+    def find_by_email_and_tenant(self, email: str, tenant_id: str):
+        """Find user by email scoped to a specific tenant."""
+        return self.db.query(Users).filter(Users.email == email, Users.tenant_id == tenant_id).first()
+    
     def find_by_id(self, user_id: str):
         """Find user by ID."""
         return self.db.query(Users).filter(Users.id == user_id).first()

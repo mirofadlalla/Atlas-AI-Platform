@@ -34,7 +34,7 @@ sentry_sdk.init(
 app = FastAPI(
     title="Atlas AI Platform",
     description="A platform for RAG and LLM applications",
-    version="1.0.0",
+    version="3.0.0",
     # lifespan=lifespan
 )
 
