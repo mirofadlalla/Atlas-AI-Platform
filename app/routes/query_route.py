@@ -6,7 +6,7 @@ Records metrics to Prometheus and database for monitoring and analytics.
 """
 import logging
 import time
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.schema.query_request import QueryRequest
 from app.rag.retrivel_data_pipline import RetrievalPipeline
 from app.services.mlflow_service import MLflowService
 from app.services.rag_services.query_logging_service import trigger_query_logging
+from app.services.auth_services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,7 @@ router = APIRouter(
 @router.post("/ask")
 async def ask_question(
     request: QueryRequest,
-    current_user: str = Header(None, alias="current-user"),
-    tenant_id: str = Header(..., alias="tenant-id"),
+    current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -53,10 +53,12 @@ async def ask_question(
     Raises:
         HTTPException: If query processing fails
     """
+    tenant_id: str = str(current_user.tenant_id)
+
     # Apply rate limiting (user gets standard limit)
     rate_limit(
-        user_id=current_user or "anonymous",
-        role="user",
+        user_id=str(current_user.id),
+        role=current_user.role,
         endpoint="/query/ask"
     )
     
@@ -204,8 +206,7 @@ async def ask_question(
 @router.post("/retrieve")
 async def retrieve_documents(
     request: QueryRequest,
-    current_user: str = Header(None, alias="current-user"),
-    tenant_id: str = Header(..., alias="tenant-id"),
+    current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -225,10 +226,12 @@ async def retrieve_documents(
     Returns:
         List of retrieved documents with relevance scores
     """
+    tenant_id: str = str(current_user.tenant_id)
+
     # Apply rate limiting
     rate_limit(
-        user_id=current_user or "anonymous",
-        role="user",
+        user_id=str(current_user.id),
+        role=current_user.role,
         endpoint="/query/retrieve"
     )
     
@@ -266,8 +269,7 @@ async def retrieve_documents(
 
 @router.get("/cost-analytics")
 async def get_cost_analytics(
-    current_user: str = Header(None, alias="current-user"),
-    tenant_id: str = Header(..., alias="tenant-id"),
+    current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -276,6 +278,8 @@ async def get_cost_analytics(
     Returns:
         dict: Cost breakdown by model, date, and total costs
     """
+    tenant_id: str = str(current_user.tenant_id)
+
     try:
         from app.models.costLog import CostLog
         from app.models.runs import Runs
@@ -325,8 +329,7 @@ async def get_cost_analytics(
 
 @router.get("/runs")
 async def get_runs(
-    current_user: str = Header(None, alias="current-user"),
-    tenant_id: str = Header(..., alias="tenant-id"),
+    current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -335,6 +338,8 @@ async def get_runs(
     Returns:
         list: Recent query runs with latency and document info
     """
+    tenant_id: str = str(current_user.tenant_id)
+
     try:
         from app.repositories.runs_repository import RunsRepository
         from app.models.runs import Runs

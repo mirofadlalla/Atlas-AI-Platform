@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     postgres_db : str =  ""
     hf_api : str = ""
     api_secret_key : str = ""
+
+    # Internal service-to-service authentication token (used by Celery → FastAPI metrics endpoint)
+    internal_metrics_api_key: str = ""
     
     # Redis settings
     redis_host: str = "localhost"

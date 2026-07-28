@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Security
+from fastapi.security.api_key import APIKeyHeader
 from typing import Optional, Dict, Any, List
 import logging
+
+from app.core.config import settings
 
 from app.core.monitors import (
     track_llm_cost,
@@ -21,6 +24,17 @@ from app.core.monitors import (
 
 logger = logging.getLogger(__name__)
 
+# Internal API key security — Celery workers must include this header
+_internal_key_header = APIKeyHeader(name="X-Internal-Token", auto_error=False)
+
+
+def _verify_internal_token(api_key: str = Security(_internal_key_header)):
+    """Allow only callers that present the correct internal service token."""
+    expected = settings.internal_metrics_api_key
+    if not expected or api_key != expected:
+        raise HTTPException(status_code=403, detail="Invalid or missing internal service token")
+
+
 router = APIRouter(
     prefix="/internal/metrics",
     tags=["internal-metrics"]
@@ -29,7 +43,8 @@ router = APIRouter(
 
 @router.post("/record")
 async def record_metrics(
-    payload: Dict[str, Any] = Body(...)
+    payload: Dict[str, Any] = Body(...),
+    _: None = Depends(_verify_internal_token)
 ):
     """
     Internal endpoint to record Prometheus metrics from background Celery workers.

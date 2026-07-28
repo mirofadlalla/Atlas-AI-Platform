@@ -167,8 +167,8 @@ def trigger_query_logging(
                 output_tokens,
                 model_name,
             ),
-            queue="default",
-            routing_key="default",
+            queue="logging_queue",
+            routing_key="logging",
         )
         logger.debug(f"Queued logging task for query: {query[:50]}...")
     except Exception as e:

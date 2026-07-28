@@ -13,4 +13,5 @@ class Tenants(Base):
     plan = Column(String , nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    users = relationship("Users", back_populates="tenant")    
+    users = relationship("Users", back_populates="tenant")
+    tracked_files = relationship("TRACKER_DB_FILE", back_populates="tenant", cascade="all, delete-orphan")

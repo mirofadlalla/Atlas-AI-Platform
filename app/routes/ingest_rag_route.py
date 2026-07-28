@@ -13,7 +13,7 @@ from app.core.rate_limitizer import rate_limit
 from app.services.rag_services.path_processing_service import PathProcessingService
 from app.services.mlflow_service import MLflowService
 from app.services.rag_services.ingest_rag_service import ingest_file_task
-from app.schema.upload_request import UploadRequest
+from app.services.auth_services.auth_service import require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +30,7 @@ async def upload_file(
     file: UploadFile = File(...),
     recursive: bool = Form(False),
     file_extensions: str = Form(None),
-    current_user: str = Form(...),
-    user_role: str = Form(...),
+    current_admin=Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -62,18 +61,9 @@ async def upload_file(
     Raises:
         HTTPException: If user is not admin or other validation fails
     """
-    # Verify admin identity (case-insensitive)
-    user_role_lower = (user_role).lower().strip()
-    if user_role_lower != "admin":
-        logger.warning(f"Unauthorized ingestion attempt by {current_user} (role: {user_role}, normalized: {user_role_lower})")
-        raise HTTPException(
-            status_code=403,
-            detail=f"Only admins can ingest data. Your role: {user_role or 'not set'}"
-        )
-    
     # Apply rate limiting (admin-only endpoint)
     rate_limit(
-        user_id=current_user,
+        user_id=str(current_admin.id),
         role="admin",
         endpoint="/ingest-rag/upload_file"
     )
@@ -105,7 +95,7 @@ async def upload_file(
             run_name=f"ingest_{tenant_id}_{__import__('time').time()}",
             tags={
                 'tenant_id': tenant_id,
-                'admin_id': current_user,
+                'admin_id': str(current_admin.id),
                 'uploaded_file': file.filename
             }
         )

@@ -9,9 +9,10 @@ from app.repositories.runs_repository import RunsRepository
 from app.repositories.cost_log_repository import CostLogRepository
 from app.core.rate_limitizer import rate_limit
 from app.core.db import get_db
+from app.services.auth_services.auth_service import require_admin
 
 import logging
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Header
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
 from pathlib import Path
 from sqlalchemy.orm import Session
 
@@ -27,8 +28,7 @@ async def evaluate(
     tenant_id: str = Form(...),
     file: UploadFile = File(...),
     runs: int = Form(2),
-    current_user: str = Header(None, alias="current-user"),
-    user_role: str = Header(None, alias="user-role"),
+    current_admin=Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -55,18 +55,9 @@ async def evaluate(
     Raises:
         HTTPException: If user is not admin
     """
-    # Verify admin identity
-    user_role_lower = (user_role or "").lower().strip()
-    if user_role_lower != "admin":
-        logger.warning(f"Unauthorized evaluation attempt by {current_user} (role: {user_role})")
-        raise HTTPException(
-            status_code=403,
-            detail=f"Only admins can run evaluations. Your role: {user_role or 'not set'}"
-        )
-    
     # Apply rate limiting (admin-only endpoint)
     rate_limit(
-        user_id=current_user or "anonymous",
+        user_id=str(current_admin.id),
         role="admin",
         endpoint="/eval/evaluate"
     )
@@ -87,7 +78,7 @@ async def evaluate(
             run_name=f"eval_run_{tenant_id}_{int(__import__('time').time())}",
             tags={
                 'tenant_id': tenant_id,
-                'user_id': current_user or 'anonymous',
+                'user_id': str(current_admin.id),
                 'endpoint': '/eval/evaluate'
             }
         )
@@ -141,25 +132,15 @@ async def evaluate(
 async def generate_dataset(
     tenant_id: str = Form(...),
     max_chunks: int = Form(30),
-    current_user: str = Header(None, alias="current-user"),
-    user_role: str = Header(None, alias="user-role"),
+    current_admin=Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """
     Start a task to generate an evaluation dataset (admin only).
     """
-    # Verify admin identity
-    user_role_lower = (user_role or "").lower().strip()
-    if user_role_lower != "admin":
-        logger.warning(f"Unauthorized generate dataset attempt by {current_user} (role: {user_role})")
-        raise HTTPException(
-            status_code=403,
-            detail=f"Only admins can generate datasets. Your role: {user_role or 'not set'}"
-        )
-    
     # Apply rate limiting
     rate_limit(
-        user_id=current_user or "anonymous",
+        user_id=str(current_admin.id),
         role="admin",
         endpoint="/eval/generate_dataset"
     )
