@@ -270,13 +270,12 @@ class ApiService {
   }
 
   // Invitation endpoints
-  async sendInvitation(email, tenantId) {
+  async sendInvitation(email) {
     const response = await fetch(`${this.baseURL}/auth/invitations/send`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
         invited_email: email,
-        tenant_id: tenantId,
       }),
     });
     return this.handleResponse(response);

@@ -62,7 +62,7 @@ function AdminPanel({ user }) {
     setInviteSending(true);
     try {
       console.log('Sending invitation for:', email);
-      const resp = await apiService.sendInvitation(email, user.tenant_id);
+      const resp = await apiService.sendInvitation(email);
       // If API returns token immediately, show it; otherwise pending list will include it
       if (resp && resp.token) {
         alert('Invitation sent successfully!\nToken: ' + resp.token);

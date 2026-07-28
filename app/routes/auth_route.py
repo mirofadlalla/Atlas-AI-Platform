@@ -137,7 +137,7 @@ def send_invitation(
     return invitation_service.send_invitation(
         invited_email=request.invited_email,
         invited_by_id=current_admin.id,
-        tenant_id=request.tenant_id,
+        tenant_id=str(current_admin.tenant_id),  # Always from JWT — never trust client
         admin_id=current_admin.id
     )
 

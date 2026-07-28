@@ -76,8 +76,8 @@ The metrics are exposed on the /metrics endpoint for Prometheus scraping.
 All metrics are automatically recorded and pushed to the metrics collection.
 """
 
-from prometheus_client import Counter, Histogram, REGISTRY
-from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Counter, Histogram, REGISTRY, generate_latest, CONTENT_TYPE_LATEST
+from fastapi.responses import Response
 from app.core.monitors import record_resource_metrics
 from starlette.middleware.base import BaseHTTPMiddleware
 from time import time
@@ -152,9 +152,12 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 # Add metrics middleware to track HTTP requests
 app.add_middleware(MetricsMiddleware)
 
-# Register Prometheus FastAPI Instrumentator for advanced metrics
-# This adds automatic instrumentation for all FastAPI endpoints
-Instrumentator().instrument(app).expose(app, endpoint="/metrics", tags=["monitoring"])
+# Expose Prometheus metrics endpoint directly — avoids _IncludedRouter bug
+# in prometheus_fastapi_instrumentator with nested routers
+@app.get("/metrics", tags=["monitoring"], include_in_schema=False)
+async def metrics():
+    """Prometheus metrics scrape endpoint."""
+    return Response(generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
 
 # Background task for recording system resource metrics
 @app.on_event("startup")

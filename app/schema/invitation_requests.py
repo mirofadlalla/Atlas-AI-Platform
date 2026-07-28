@@ -9,13 +9,12 @@ from datetime import datetime
 class SendInvitationRequest(BaseModel):
     """Request to send an invitation to a user."""
     invited_email: EmailStr
-    tenant_id: str
+    tenant_id: Optional[str] = None  # Ignored — derived from the admin's JWT token server-side
     
     class Config:
         json_schema_extra = {
             "example": {
-                "invited_email": "user@example.com",
-                "tenant_id": "tenant-123"
+                "invited_email": "user@example.com"
             }
         }
 
