@@ -51,7 +51,7 @@ async def upload_file(
         file: Uploaded file from browser
         recursive: Whether to process directories recursively
         file_extensions: Comma-separated file extensions to process
-        current_user: Current user ID (from form)
+        current_admin: Authenticated admin user (from JWT)
         user_role: Current user role (must be 'admin')
         db: Database session
         
@@ -129,7 +129,7 @@ async def upload_file(
             raise
         
         logger.info(
-            f"File ingestion task queued - Admin: {current_user}, "
+            f"File ingestion task queued - Admin: {current_admin.id}, "
             f"Tenant: {tenant_id}, File: {file.filename}, Task ID: {task.id}"
         )
         
