@@ -23,12 +23,12 @@ class SQLTool(AgentTool):
     def run(self, state: AgentState) -> ToolResult:
         question = get_current_question(state)
         try:
-            raw_sql = generate_sql(question)
+            raw_sql = generate_sql(question, tenant_id=state.get("tenant_id"))
             safe_sql, params = SQLValidator.validate_and_enforce_tenant(
                 raw_sql,
                 state["tenant_id"],
             )
-            cost = SQLValidator.get_query_cost(safe_sql, params)
+            cost, rows = SQLValidator.explain_and_execute(safe_sql, params, execute=True)
 
             if cost > agent_settings.sql_max_allowed_cost:
                 msg = (
@@ -43,7 +43,7 @@ class SQLTool(AgentTool):
                     },
                 )
 
-            rows = SQLValidator.execute_query(safe_sql, params)
+            rows = rows[: agent_settings.sql_max_rows]
             result_str, has_data = format_sql_results(rows)
             observation = f"[DATABASE] SQL executed:\n{result_str}"
 

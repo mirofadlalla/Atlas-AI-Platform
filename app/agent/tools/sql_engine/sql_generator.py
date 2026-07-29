@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import logging
 
+from pydantic import BaseModel, Field
+
+from app.agent.core.config import agent_settings
+from app.agent.prompts.registry import prompt_registry
 from app.agent.tools.sql_engine.schema_provider import get_schema_description
+from app.agent.utils.context_budget import truncate_to_token_budget
+from app.agent.utils.llm import call_agent_llm
 from app.agent.utils.parsing import extract_first_json_block
 from app.agent.utils.retry import with_retry
-from app.services.llm_runner import call_llama
-from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -17,31 +21,17 @@ class SQLQuery(BaseModel):
     sql: str = Field(description="PostgreSQL SELECT query only")
 
 
-_FORMAT = (
-    '{"sql": "SELECT ... FROM ... WHERE ..."}'
-)
-
-
-def generate_sql(question: str) -> str:
+def generate_sql(question: str, tenant_id: str | None = None) -> str:
     schema = get_schema_description()
+    schema = truncate_to_token_budget(schema, agent_settings.prompt_max_tokens // 2)
+    prompt = prompt_registry.sql_generation(schema, question)
 
-    prompt = f"""You are a SQL generator for a SaaS multi-tenant system.
-
-RULES:
-- Only generate SELECT queries.
-- NEVER use UPDATE, DELETE, INSERT, DROP, or ALTER.
-- Do not hallucinate tables or columns.
-- tenant_id filtering is added automatically; do not hard-code tenant values.
-- Return ONLY JSON matching this schema: {_FORMAT}
-
-DATABASE SCHEMA:
-{schema}
-
-QUESTION:
-{question}
-"""
-
-    response_dict = with_retry(call_llama, prompt)
+    response_dict = with_retry(
+        call_agent_llm,
+        prompt,
+        tier="routing",
+        tenant_id=tenant_id,
+    )
     content = response_dict.get("content", response_dict.get("text", "")).strip()
 
     try:

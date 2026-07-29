@@ -20,11 +20,39 @@ def _tool_attempted(state: AgentState, tool_name: str) -> bool:
     return bool(state.get(tool.attempted_key, False))
 
 
-def _tool_has_data(state: AgentState, tool_name: str) -> bool:
-    tool = tool_registry.get(tool_name)
-    if not tool:
-        return False
-    return bool(state.get(tool.has_data_key, False))
+def _extract_action_history(state: AgentState) -> list[str]:
+    stored = state.get("action_history")
+    if stored:
+        return list(stored)
+
+    actions: list[str] = []
+    for obs in state.get("observation_history", []):
+        if obs.startswith("Decision = "):
+            action = obs.replace("Decision = ", "").split(" ")[0].strip()
+            if action:
+                actions.append(action)
+    return actions
+
+
+def _detect_action_loop(actions: list[str]) -> bool:
+    """Detect identical repeats or sql↔retrieval oscillation."""
+    window = agent_settings.loop_detection_window
+    recent = actions[-window:]
+    if len(recent) >= 2 and recent[-1] == recent[-2]:
+        return True
+
+    if len(recent) >= 4:
+        a, b, c, d = recent[-4], recent[-3], recent[-2], recent[-1]
+        if a == c and b == d and a != b:
+            return True
+
+    if len(recent) >= 6:
+        pattern = recent[-3:]
+        prev = recent[-6:-3]
+        if pattern == prev:
+            return True
+
+    return False
 
 
 def route_action(state: AgentState) -> str:
@@ -53,6 +81,10 @@ def route_action(state: AgentState) -> str:
 
     if len(observation_history) >= 2 and observation_history[-1] == observation_history[-2]:
         logger.info("Repeated observation → finish")
+        return "finish"
+
+    if _detect_action_loop(_extract_action_history(state)):
+        logger.info("Action loop detected → finish")
         return "finish"
 
     if last_action == "sql" and has_sql_results:

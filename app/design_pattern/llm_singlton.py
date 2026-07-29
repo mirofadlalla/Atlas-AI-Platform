@@ -29,12 +29,13 @@ class LLMService:
         system_prompt: str = "You are a helpful assistant.",
         max_new_tokens: int = 2048,
         temperature: float = 1.0,
+        model: str | None = None,
     ) -> dict:
         """
         Non-streaming generation. Returns content + token usage.
         """
         completion = self.client.chat.completions.create(
-            model=self.model,
+            model=model or self.model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},

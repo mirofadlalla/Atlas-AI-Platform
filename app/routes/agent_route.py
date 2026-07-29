@@ -13,6 +13,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.agent.core.graph import agent_app
+from app.agent.observability.metrics import agent_executions_total
+from app.agent.utils.run_cache import cache_run_result, get_cached_run_result
 from app.agent.utils.state_helpers import create_initial_state
 from app.services.rag_services.agent_logging_service import trigger_agent_logging
 from app.services.auth_services.auth_service import get_current_user
@@ -24,6 +26,7 @@ logger = logging.getLogger(__name__)
 class AgentRequest(BaseModel):
     """Request model for agent endpoints"""
     question: str
+    run_id: str | None = None  # optional idempotency key for retries
 
 @router.post("/ask-agent")
 async def ask_agent(
@@ -257,26 +260,28 @@ async def ask_agent_batch(
     start_time = time.time()
     
     inputs = create_initial_state(request.question, current_user.tenant_id)
+    if request.run_id:
+        inputs["run_id"] = request.run_id
+        cached = get_cached_run_result(request.run_id)
+        if cached:
+            logger.info("Returning cached agent result for run_id=%s", request.run_id)
+            return cached
     
     try:
         # Execute the agent graph and wait for completion
-        # This is a blocking operation that waits for all reasoning steps
         result = await agent_app.ainvoke(inputs)
         
         # Calculate total execution time
         latency = time.time() - start_time
         step_count = result.get("step_count", 0)
+        input_tokens = result.get("input_tokens", 0)
+        output_tokens = result.get("output_tokens", 0)
+        llm_cost = result.get("llm_cost_usd", 0.0)
         
         logger.info(
             f"Agent batch execution completed - Tenant: {current_user.tenant_id}, "
-            f"Steps: {step_count}, Latency: {latency:.2f}s"
+            f"Steps: {step_count}, Latency: {latency:.2f}s, LLM cost: ${llm_cost:.4f}"
         )
-        
-        # Extract token usage from the model
-        from app.services.llm_runner import CustomLocalLLM
-        usage = CustomLocalLLM.last_usage or {}
-        input_tokens = usage.get("input", 0)
-        output_tokens = usage.get("output", 0)
         
         # Log the agent run asynchronously to database and Prometheus
         try:
@@ -284,36 +289,45 @@ async def ask_agent_batch(
             retrieved_docs = result.get("retrieval_context", "")
             total_cost = result.get("total_cost", 0.0)
             
-            # Trigger background logging task
-            # This will record metrics to both database and Prometheus
             trigger_agent_logging(
                 tenant_id=current_user.tenant_id,
                 question=request.question,
                 final_answer=result.get("final_answer", ""),
                 latency=latency,
                 step_count=step_count,
-                total_cost=float(total_cost),
+                total_cost=float(total_cost) + float(llm_cost),
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 sql_queries=sql_queries if sql_queries else "",
                 retrieved_docs=retrieved_docs[:200] if retrieved_docs else "",
-                model_name="Qwen2.5-1.5B"
+                model_name="llama-3.3-70b-versatile"
             )
+            agent_executions_total.labels(
+                tenant_id=str(current_user.tenant_id),
+                status="success",
+            ).inc()
             logger.debug(f"Triggered logging for agent batch run - Latency: {latency:.2f}s")
         except Exception as log_error:
             logger.error(f"Error triggering agent logging: {log_error}")
         
-        # Return complete response
-        return {
+        response = {
             "success": True,
+            "run_id": result.get("run_id"),
             "question": request.question,
             "final_answer": result.get("final_answer"),
             "thoughts": result.get("thoughts", []),
             "step_count": step_count,
             "total_cost": result.get("total_cost", 0.0),
+            "llm_cost_usd": llm_cost,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
             "sql_queries": [result.get("last_sql")] if result.get("last_sql") else [],
-            "retrieved_context": result.get("retrieval_context", "")
+            "retrieved_context": result.get("retrieval_context", ""),
+            "degraded": result.get("degraded", False),
         }
+        if request.run_id:
+            cache_run_result(request.run_id, response)
+        return response
     except Exception as e:
         logger.error(f"Error during agent batch execution: {str(e)}", exc_info=True)
         # Return error response

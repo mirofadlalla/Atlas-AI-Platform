@@ -42,6 +42,8 @@ def create_initial_state(question: str, tenant_id: str | int) -> AgentState:
         "total_step_count": 0,
         "total_cost": 0.0,
         "llm_cost_usd": 0.0,
+        "input_tokens": 0,
+        "output_tokens": 0,
         "thought": None,
         "last_action": None,
         "observation": None,
@@ -60,6 +62,8 @@ def create_initial_state(question: str, tenant_id: str | int) -> AgentState:
         "degraded": False,
         "degraded_reason": None,
         "data_sources": [],
+        "action_history": [],
+        "tool_observations": [],
     }
 
 

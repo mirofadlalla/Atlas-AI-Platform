@@ -16,20 +16,25 @@ from app.agent.observability.metrics import (
     agent_node_executions_total,
     agent_sql_rows_returned,
 )
-from app.agent.schemas import ActionDecision, format_instructions
+from app.agent.observability.tracing import trace_span
+from app.agent.prompts.registry import prompt_registry
+from app.agent.schemas import ActionDecision
 from app.agent.tools.base import tool_registry
 from app.agent.tools.retrieval_tool import RetrievalTool
 from app.agent.tools.sql_tool import SQLTool
 from app.agent.utils.classification import classify_question_type
+from app.agent.utils.llm import call_agent_llm, llm_usage_updates
 from app.agent.utils.parsing import extract_first_json_block
 from app.agent.utils.retry import with_retry
 from app.agent.utils.state_helpers import (
-    append_sub_answer,
     budget_exceeded_update,
     get_current_question,
-    per_subquestion_reset,
 )
-from app.services.llm_runner import call_llama
+from app.agent.utils.state_transitions import (
+    build_subquestion_answer_update,
+    is_single_subquestion,
+    should_synthesize_final,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,51 +42,65 @@ tool_registry.register(SQLTool())
 tool_registry.register(RetrievalTool())
 
 
-def _apply_tool_result(state: AgentState, result) -> dict:
+def _apply_tool_result(state: AgentState, result, tool_name: str) -> dict:
     history = state.get("observation_history", [])
-    update = {
+    obs_record = result.to_observation_record(tool_name)
+    tool_observations = list(state.get("tool_observations", []))
+    tool_observations.append(
+        {
+            "tool": obs_record.tool,
+            "observation": obs_record.observation[:500],
+            "has_data": obs_record.has_data,
+        }
+    )
+    return {
         "observation": result.observation,
         "observation_history": history + [result.observation],
+        "tool_observations": tool_observations,
         **result.state_updates,
     }
-    return update
 
 
 async def _run_node(name: str, state: AgentState, fn):
     start = time.time()
     status = "success"
-    try:
-        if budget := budget_exceeded_update(state):
-            return budget
-        result = await fn(state)
-        return result
-    except Exception as exc:
-        status = "error"
-        logger.error("%s node failed: %s", name, exc, exc_info=True)
-        raise
-    finally:
-        agent_node_executions_total.labels(node=name, status=status).inc()
-        agent_node_duration_seconds.labels(node=name).observe(time.time() - start)
+    with trace_span(
+        name,
+        run_id=state.get("run_id"),
+        tenant_id=state.get("tenant_id"),
+    ):
+        try:
+            if budget := budget_exceeded_update(state):
+                return budget
+            result = await fn(state)
+            return result
+        except Exception as exc:
+            status = "error"
+            logger.error("%s node failed: %s", name, exc, exc_info=True)
+            raise
+        finally:
+            agent_node_executions_total.labels(node=name, status=status).inc()
+            agent_node_duration_seconds.labels(node=name).observe(time.time() - start)
 
 
 async def decompose_node(state: AgentState):
     async def _inner(s: AgentState):
         question = s.get("question", "")
-        prompt = f"""You are an AI planner for an Enterprise RAG and Database system.
-Analyze whether the question is compound and must be split into sub-questions.
-
-Return ONLY JSON:
-{{"is_compound": true/false, "sub_questions": ["...", "..."]}}
-
-Question: "{question}"
-"""
+        prompt = prompt_registry.decompose(question)
         try:
-            response_dict = await asyncio.to_thread(with_retry, call_llama, prompt)
+            response_dict = await asyncio.to_thread(
+                with_retry,
+                call_agent_llm,
+                prompt,
+                "routing",
+                s.get("tenant_id"),
+            )
             parsed = json.loads(extract_first_json_block(response_dict["content"]))
             sub_questions = parsed.get("sub_questions") or [question]
         except Exception as exc:
             logger.error("Decompose failed: %s", exc)
             sub_questions = [question]
+            response_dict = {}
 
         if not sub_questions:
             sub_questions = [question]
@@ -93,8 +112,7 @@ Question: "{question}"
             degraded = True
             degraded_reason = f"Trimmed to {agent_settings.max_subquestions} sub-questions"
 
-        log_node_event(logger, s, "decompose", "completed", parts=len(sub_questions))
-        return {
+        update = {
             "original_question": question,
             "sub_questions": sub_questions,
             "current_sub_question_index": 0,
@@ -104,6 +122,11 @@ Question: "{question}"
             "observation_history": s.get("observation_history", [])
             + [f"Decomposed into {len(sub_questions)} sub-question(s)"],
         }
+        if response_dict:
+            update.update(llm_usage_updates(response_dict, s))
+
+        log_node_event(logger, s, "decompose", "completed", parts=len(sub_questions))
+        return update
 
     return await _run_node("decompose", state, _inner)
 
@@ -126,21 +149,20 @@ async def thought_node(state: AgentState):
             "knowledge": "Use RETRIEVAL",
         }.get(question_type, "Decide best action")
 
-        prompt = f"""You are an AI agent.
-
-Question: {current_question}
-Step: {s.get("step_count", 0)}
-
-Previous actions:
-{actions_context}
-
-Guidance: {guidance}
-
-Return ONLY JSON:
-{format_instructions}
-"""
+        prompt = prompt_registry.thought(
+            current_question,
+            s.get("step_count", 0),
+            actions_context,
+            guidance,
+        )
         try:
-            response = await asyncio.to_thread(with_retry, call_llama, prompt)
+            response = await asyncio.to_thread(
+                with_retry,
+                call_agent_llm,
+                prompt,
+                "routing",
+                s.get("tenant_id"),
+            )
             next_action = _parse_action_decision(response["content"])
             thought = response["content"]
         except Exception as exc:
@@ -152,6 +174,7 @@ Return ONLY JSON:
                 "last_action": next_action,
                 "step_count": s.get("step_count", 0) + 1,
                 "total_step_count": s.get("total_step_count", 0) + 1,
+                "action_history": s.get("action_history", []) + [next_action],
                 "degraded": True,
                 "degraded_reason": "LLM call failed during reasoning",
                 "observation_history": s.get("observation_history", [])
@@ -165,8 +188,10 @@ Return ONLY JSON:
             "last_action": next_action,
             "step_count": step,
             "total_step_count": total,
+            "action_history": s.get("action_history", []) + [next_action],
             "observation_history": s.get("observation_history", [])
             + [f"Decision = {next_action}"],
+            **llm_usage_updates(response, s),
         }
         if step >= agent_settings.max_steps_per_subquestion:
             update["degraded"] = True
@@ -194,7 +219,7 @@ async def sql_node(state: AgentState):
         tool = tool_registry.get("sql")
         assert tool is not None
         result = await asyncio.to_thread(tool.run, s)
-        update = _apply_tool_result(s, result)
+        update = _apply_tool_result(s, result, "sql")
         if result.has_data:
             agent_sql_rows_returned.observe(1)
         log_node_event(logger, s, "sql_tool", "completed", has_data=result.has_data)
@@ -208,7 +233,7 @@ async def retrieval_node(state: AgentState):
         tool = tool_registry.get("retrieval")
         assert tool is not None
         result = await asyncio.to_thread(tool.run, s)
-        update = _apply_tool_result(s, result)
+        update = _apply_tool_result(s, result, "retrieval")
         log_node_event(logger, s, "retrieval_tool", "completed", has_data=result.has_data)
         return update
 
@@ -218,38 +243,33 @@ async def retrieval_node(state: AgentState):
 async def finish_node(state: AgentState):
     async def _inner(s: AgentState):
         try:
-            sub_questions = s.get("sub_questions") or [s.get("question", "")]
-            current_idx = s.get("current_sub_question_index", 0)
-            current_question = get_current_question(s)
-            is_final_synthesis = current_idx >= len(sub_questions) - 1
-            sub_answers = list(s.get("sub_answers", []))
+            sub_answer_text, data_sources, llm_result = await asyncio.to_thread(
+                answer_subquestion, s
+            )
+            next_state = build_subquestion_answer_update(s, sub_answer_text, data_sources)
+            next_state.update(llm_usage_updates(llm_result, s))
 
-            sub_answer_text, data_sources = await asyncio.to_thread(answer_subquestion, s)
-            sub_answers = append_sub_answer(sub_answers, current_question, sub_answer_text)
-
-            next_state = {
-                "sub_answers": sub_answers,
-                "current_sub_question_index": current_idx + 1,
-                **per_subquestion_reset(),
-                "observation_history": s.get("observation_history", [])
-                + [f"Answered part {current_idx + 1}: {sub_answer_text[:100]}..."],
-                "data_sources": data_sources,
-            }
-            if s.get("degraded"):
-                next_state["degraded"] = True
-                next_state["degraded_reason"] = s.get("degraded_reason")
-
-            if is_final_synthesis:
-                if len(sub_questions) == 1:
+            if should_synthesize_final(s):
+                if is_single_subquestion(s):
                     next_state["final_answer"] = sub_answer_text
                 else:
                     original = s.get("original_question", s.get("question", ""))
-                    final = await asyncio.to_thread(
-                        synthesize_final_answer, original, sub_answers
+                    final, synth_result = await asyncio.to_thread(
+                        synthesize_final_answer,
+                        original,
+                        next_state["sub_answers"],
+                        s.get("tenant_id"),
                     )
                     next_state["final_answer"] = final
+                    next_state.update(llm_usage_updates(synth_result, {**s, **next_state}))
 
-            log_node_event(logger, s, "finish", "completed", part=current_idx + 1)
+            log_node_event(
+                logger,
+                s,
+                "finish",
+                "completed",
+                part=s.get("current_sub_question_index", 0) + 1,
+            )
             return next_state
         except Exception as exc:
             logger.error("Finish node failed: %s", exc)

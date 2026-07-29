@@ -11,6 +11,7 @@ from sqlglot import exp
 from sqlalchemy import text
 
 from app.agent.core.config import agent_settings
+from app.agent.utils.circuit_breaker import db_circuit_breaker
 from app.agent.utils.db_session import agent_db_session
 
 logger = logging.getLogger(__name__)
@@ -93,33 +94,54 @@ class SQLValidator:
         return sql, params
 
     @staticmethod
+    def _set_statement_timeout(db) -> None:
+        db.execute(
+            text(
+                f"SET LOCAL statement_timeout = "
+                f"'{int(agent_settings.sql_query_timeout_seconds * 1000)}'"
+            )
+        )
+
+    @staticmethod
     def get_query_cost(sql: str, params: dict[str, Any] | None = None) -> float:
         """Estimate query cost via EXPLAIN. Fail-closed on errors."""
-        params = params or {}
         try:
-            with agent_db_session() as db:
-                db.execute(
-                    text(
-                        f"SET LOCAL statement_timeout = "
-                        f"'{int(agent_settings.sql_query_timeout_seconds * 1000)}'"
-                    )
-                )
-                plan = db.execute(text(f"EXPLAIN {sql}"), params).fetchall()
-            match = re.search(r"cost=[\d.]+\.\.([\d.]+)", str(plan[0]))
-            if match:
-                return float(match.group(1))
-            return agent_settings.sql_cost_unknown_default
+            cost, _ = SQLValidator.explain_and_execute(sql, params or {}, execute=False)
+            return cost
         except Exception as exc:
             logger.warning("Could not estimate SQL cost, failing closed: %s", exc)
             return agent_settings.sql_cost_unknown_default
 
     @staticmethod
-    def execute_query(sql: str, params: dict[str, Any]) -> list[Any]:
-        with agent_db_session() as db:
-            db.execute(
-                text(
-                    f"SET LOCAL statement_timeout = "
-                    f"'{int(agent_settings.sql_query_timeout_seconds * 1000)}'"
+    def explain_and_execute(
+        sql: str,
+        params: dict[str, Any],
+        *,
+        execute: bool = True,
+    ) -> tuple[float, list[Any]]:
+        """
+        Single DB session for EXPLAIN (+ optional execute).
+        Returns (estimated_cost, rows). Rows empty when execute=False.
+        """
+
+        def _run() -> tuple[float, list[Any]]:
+            with agent_db_session() as db:
+                SQLValidator._set_statement_timeout(db)
+                plan = db.execute(text(f"EXPLAIN {sql}"), params).fetchall()
+                match = re.search(r"cost=[\d.]+\.\.([\d.]+)", str(plan[0]))
+                cost = (
+                    float(match.group(1))
+                    if match
+                    else agent_settings.sql_cost_unknown_default
                 )
-            )
-            return list(db.execute(text(sql), params).fetchall())
+                if not execute:
+                    return cost, []
+                rows = list(db.execute(text(sql), params).fetchall())
+                return cost, rows
+
+        return db_circuit_breaker.call(_run)
+
+    @staticmethod
+    def execute_query(sql: str, params: dict[str, Any]) -> list[Any]:
+        _, rows = SQLValidator.explain_and_execute(sql, params, execute=True)
+        return rows

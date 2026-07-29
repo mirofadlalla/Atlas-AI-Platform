@@ -10,10 +10,24 @@ from app.agent.core.state import AgentState
 
 
 @dataclass
+class ToolObservation:
+    tool: str
+    observation: str
+    has_data: bool = False
+
+
+@dataclass
 class ToolResult:
     observation: str
     has_data: bool = False
     state_updates: dict[str, Any] = field(default_factory=dict)
+
+    def to_observation_record(self, tool_name: str) -> ToolObservation:
+        return ToolObservation(
+            tool=tool_name,
+            observation=self.observation,
+            has_data=self.has_data,
+        )
 
 
 class AgentTool(ABC):

@@ -25,22 +25,26 @@ app/agent/
 ├── core/
 │   ├── config.py       # AGENT_* settings (pydantic-settings)
 │   ├── graph.py        # LangGraph compile → agent_app
-│   ├── router.py       # route_action, route_after_finish
+│   ├── router.py       # route_action, route_after_finish, loop detection
 │   └── state.py        # AgentState TypedDict
 ├── nodes/
 │   ├── __init__.py     # async node implementations
 │   └── finish_helpers.py
 ├── tools/
-│   ├── base.py         # AgentTool protocol + registry
+│   ├── base.py         # AgentTool protocol + ToolObservation + registry
 │   ├── sql_tool.py
 │   ├── retrieval_tool.py
 │   ├── retrieval_cache.py
 │   └── sql_engine/
 │       ├── sql_generator.py
 │       ├── schema_provider.py  # cached schema + table allow-list
-│       └── validator.py        # sqlglot AST validation + tenant bind
-├── utils/              # state, parsing, classification, retry, db session
-├── observability/      # structured log helpers + Prometheus node metrics
+│       └── validator.py        # sqlglot AST + single-session EXPLAIN/execute
+├── prompts/
+│   └── registry.py     # versioned prompt templates
+├── eval/
+│   └── harness.py      # offline golden-question routing eval
+├── utils/              # llm, state, parsing, classification, retry, guardrails
+├── observability/      # logging, metrics, tracing spans
 └── schemas.py          # ActionDecision (Pydantic)
 ```
 
@@ -54,39 +58,61 @@ All settings use the `AGENT_` env prefix (see `app/agent/core/config.py`):
 | `AGENT_MAX_SUBQUESTIONS` | 10 | Max decomposed parts |
 | `AGENT_MAX_TOTAL_STEPS` | 50 | Total think steps across run |
 | `AGENT_AGENT_TIMEOUT_SECONDS` | 120 | Wall-clock deadline |
+| `AGENT_LLM_TIMEOUT_SECONDS` | 45 | Per LLM call timeout |
 | `AGENT_SQL_QUERY_TIMEOUT_SECONDS` | 30 | DB statement timeout |
 | `AGENT_SQL_MAX_ROWS` | 1000 | Max rows fetched |
 | `AGENT_SQL_MAX_RESULT_ROWS_IN_PROMPT` | 20 | Rows shown to LLM |
-| `AGENT_SQL_MAX_ALLOWED_COST` | 1000 | EXPLAIN cost ceiling |
+| `AGENT_PROMPT_MAX_TOKENS` | 12000 | Context budget (~chars/4) |
+| `AGENT_LLM_ROUTING_MODEL` | *(empty → generation model)* | Cheaper model for decompose/think/sql-gen |
+| `AGENT_LLM_GENERATION_MODEL` | llama-3.3-70b-versatile | Answer/synthesis model |
+| `AGENT_RUN_IDEMPOTENCY_ENABLED` | true | Cache completed runs by `run_id` |
 | `AGENT_SQL_NAMESPACE` | *(empty)* | Comma-separated allowed tables |
-| `AGENT_SCHEMA_CACHE_TTL_SECONDS` | 300 | Schema reflection cache |
-| `AGENT_RETRIEVAL_CACHE_TTL_SECONDS` | 300 | Redis retrieval cache TTL |
 
 ## API entry points
 
 - `POST /api/agent/ask-agent` — SSE stream (`agent_app.astream_events`)
 - `POST /api/agent/ask-agent-batch` — JSON (`agent_app.ainvoke`)
 
-Initial state is built via `create_initial_state()` in `app/agent/utils/state_helpers.py`
-(`run_id`, `start_time`, budget counters included).
+Optional `run_id` in request body enables idempotent retries (Redis cache).
+
+Initial state: `create_initial_state()` includes `run_id`, `start_time`, token/cost counters.
 
 ## Security
 
-- SQL is parsed with **sqlglot**; only `SELECT` (and `UNION` of selects) is allowed.
-- Tenant isolation uses **bound parameters** (`:tenant_id`), not string interpolation.
-- Optional table/column allow-lists via `AGENT_SQL_NAMESPACE`.
-- Tool outputs are framed as untrusted data in synthesis prompts.
+- SQL parsed with **sqlglot**; only `SELECT` / `UNION` allowed; multi-statement rejected.
+- Tenant isolation via **bound parameters** (`:tenant_id`).
+- Table/column allow-lists via `AGENT_SQL_NAMESPACE` / `AGENT_SQL_ALLOWED_COLUMNS`.
+- Untrusted tool output sanitized; synthesis prompts label data as non-instructional.
+- Basic numeric grounding check on final answers.
 
 ## Observability
 
-- Structured log context: `run_id`, `tenant_id`, `node` via `app/agent/observability/logging.py`
-- Prometheus: `atlas_agent_node_executions_total`, `atlas_agent_node_duration_seconds`
-- Route-level metrics remain in `app/routes/agent_route.py` + `app/core/monitors.py`
+- Structured logs: `run_id`, `tenant_id`, `node` via `observability/logging.py`
+- Tracing spans per node via `observability/tracing.py`
+- Prometheus:
+  - `atlas_agent_node_executions_total`
+  - `atlas_agent_node_duration_seconds`
+  - `atlas_agent_tokens_total`
+  - `atlas_agent_llm_cost_usd_total`
+  - `atlas_agent_executions_total`
 
-## Tests
+## Resilience
+
+- LLM/DB **circuit breakers** (`utils/circuit_breaker.py`)
+- **Retry** with exponential backoff (`tenacity`)
+- **Loop detection** for repeated actions and sql↔retrieval oscillation
+- Single DB session for EXPLAIN + execute
+
+## Tests & eval
 
 ```bash
 pytest tests/agent -v
+```
+
+Offline routing eval:
+
+```bash
+python -c "from app.agent.eval.harness import evaluate_routing_cases; print(evaluate_routing_cases())"
 ```
 
 ## Dependencies

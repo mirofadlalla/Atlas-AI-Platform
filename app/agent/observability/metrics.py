@@ -20,3 +20,21 @@ agent_sql_rows_returned = Histogram(
     "Rows returned by agent SQL queries",
     buckets=(0, 1, 5, 10, 20, 50, 100, 500, 1000),
 )
+
+agent_llm_tokens_total = Counter(
+    "atlas_agent_tokens_total",
+    "LLM tokens consumed by agent runs",
+    ["tenant_id", "direction"],
+)
+
+agent_llm_cost_usd_total = Counter(
+    "atlas_agent_llm_cost_usd_total",
+    "Estimated LLM cost in USD for agent runs",
+    ["tenant_id"],
+)
+
+agent_executions_total = Counter(
+    "atlas_agent_executions_total",
+    "Completed agent graph runs",
+    ["tenant_id", "status"],
+)

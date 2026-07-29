@@ -1,0 +1,18 @@
+[
+  {
+    "question": "How many users registered last month?",
+    "expected_type": "data"
+  },
+  {
+    "question": "What is the RAG architecture?",
+    "expected_type": "knowledge"
+  },
+  {
+    "question": "Explain how tenant isolation works",
+    "expected_type": "knowledge"
+  },
+  {
+    "question": "What was total revenue in Q4?",
+    "expected_type": "data"
+  }
+]

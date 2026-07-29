@@ -33,11 +33,15 @@ class AgentState(TypedDict, total=False):
     total_step_count: int
     total_cost: float
     llm_cost_usd: float
+    input_tokens: int
+    output_tokens: int
 
     final_answer: str | None
     degraded: bool
     degraded_reason: str | None
     data_sources: list[str]
+    action_history: list[str]
+    tool_observations: list[dict[str, str | bool]]
 
     original_question: str | None
     sub_questions: list[str]
