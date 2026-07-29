@@ -1,81 +1,91 @@
-def route_action(state):
-    """
-    THE ONLY place for control logic.
-    Prevent loops, enforce execution rules.
-    """
+"""Conditional routing and loop control for the agent graph."""
 
+from __future__ import annotations
+
+import logging
+
+from app.agent.core.config import agent_settings
+from app.agent.core.state import AgentState
+from app.agent.tools.base import tool_registry
+from app.agent.utils.classification import classify_question_type
+from app.agent.utils.state_helpers import get_current_question
+
+logger = logging.getLogger(__name__)
+
+
+def _tool_attempted(state: AgentState, tool_name: str) -> bool:
+    tool = tool_registry.get(tool_name)
+    if not tool:
+        return False
+    return bool(state.get(tool.attempted_key, False))
+
+
+def _tool_has_data(state: AgentState, tool_name: str) -> bool:
+    tool = tool_registry.get(tool_name)
+    if not tool:
+        return False
+    return bool(state.get(tool.has_data_key, False))
+
+
+def route_action(state: AgentState) -> str:
+    """Return the next node name based on agent state."""
     last_action = state.get("last_action", "finish")
-
-    has_sql_data = bool(state.get("sql_result") or state.get("last_sql"))
-    has_sql_results = state.get("sql_has_results", False)
-    has_retrieval_data = bool(state.get("retrieval_context"))
-
-    sql_attempted = state.get("sql_attempted", False)
-    retrieval_attempted = state.get("retrieval_attempted", False)
-
-    observation_history = state.get("observation_history", [])
     step_count = state.get("step_count", 0)
+    observation_history = state.get("observation_history", [])
+    current_question = get_current_question(state)
+    question_type = classify_question_type(current_question)
 
-    from app.agent.nodes.thought_node import _classify_question_type
-    question_type = _classify_question_type(state.get("question", ""))
+    has_sql_results = state.get("sql_has_results", False)
+    has_retrieval_data = state.get("retrieval_has_results", False) or bool(
+        state.get("retrieval_context")
+    )
 
-    # 1. Hard stop
-    if step_count >= 6:
-        print("[ROUTER] Max steps reached → FINISH")
+    if state.get("degraded") and last_action == "finish":
+        logger.info("Degraded run → finish")
         return "finish"
 
-    # 2. Validate action
-    if last_action not in ["sql", "retrieval", "finish"]:
+    if step_count >= agent_settings.max_steps_per_subquestion:
+        logger.info("Max steps per sub-question reached → finish")
         return "finish"
 
-    # 3. Loop detection
-    if len(observation_history) >= 2:
-        if observation_history[-1] == observation_history[-2]:
-            print("[ROUTER] Repeated decision → FINISH")
-            return "finish"
+    if last_action not in tool_registry.list_tools() + ["finish"]:
+        return "finish"
 
-    # 4. Success → finish
+    if len(observation_history) >= 2 and observation_history[-1] == observation_history[-2]:
+        logger.info("Repeated observation → finish")
+        return "finish"
+
     if last_action == "sql" and has_sql_results:
         return "finish"
 
     if last_action == "retrieval" and has_retrieval_data:
         return "finish"
 
-    # 5. SQL failed → try retrieval
-    if last_action == "sql" and sql_attempted and not has_sql_data:
-        if not retrieval_attempted:
-            print("[ROUTER] SQL failed → trying retrieval")
+    if last_action == "sql" and _tool_attempted(state, "sql") and not has_sql_results:
+        if not _tool_attempted(state, "retrieval"):
+            logger.info("SQL failed → trying retrieval")
             return "retrieval"
         return "finish"
 
-    # 6. Retrieval failed → finish
-    if last_action == "retrieval" and retrieval_attempted and not has_retrieval_data:
+    if last_action == "retrieval" and _tool_attempted(state, "retrieval") and not has_retrieval_data:
         return "finish"
 
-    # 7. Force data if needed
     if last_action == "finish":
-        if question_type == "data" and not has_sql_data:
-            print("[ROUTER] Forcing SQL")
+        if question_type == "data" and not has_sql_results:
+            logger.info("Forcing SQL for data question")
             return "sql"
-
         if question_type == "knowledge" and not has_retrieval_data:
-            print("[ROUTER] Forcing retrieval")
+            logger.info("Forcing retrieval for knowledge question")
             return "retrieval"
 
     return last_action
 
 
-def route_after_finish(state):
-    """
-    Move to next sub-question or end.
-    """
-
+def route_after_finish(state: AgentState) -> str:
     idx = state.get("current_sub_question_index", 0)
     subs = state.get("sub_questions", [])
-
     if idx < len(subs):
-        print(f"[ROUTER] Next sub-question {idx+1}/{len(subs)}")
+        logger.info("Next sub-question %s/%s", idx + 1, len(subs))
         return "think"
-    else:
-        print("[ROUTER] All done")
-        return "end"
+    logger.info("All sub-questions complete")
+    return "end"

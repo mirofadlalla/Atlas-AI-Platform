@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.agent.core.graph import agent_app
-from app.agent.core.state import AgentState
+from app.agent.utils.state_helpers import create_initial_state
 from app.services.rag_services.agent_logging_service import trigger_agent_logging
 from app.services.auth_services.auth_service import get_current_user
 from app.core.db import get_db
@@ -81,22 +81,7 @@ async def ask_agent(
         input_tokens = 0
         output_tokens = 0
         
-        # Initialize the agent graph state with user inputs
-        inputs: AgentState = {
-            "question": request.question, 
-            "tenant_id": current_user.tenant_id,
-            "thoughts": [],
-            "observation_history": [],
-            "step_count": 0,
-            "total_cost": 0.0,
-            "thought": None,
-            "last_action": None,
-            "observation": None,
-            "last_sql": None,
-            "retrieval_context": None,
-            "sql_result": None,
-            "final_answer": None
-        }
+        inputs = create_initial_state(request.question, current_user.tenant_id)
 
         try:
             # Stream events from the agent graph execution
@@ -271,22 +256,7 @@ async def ask_agent_batch(
     """
     start_time = time.time()
     
-    # Initialize the agent graph state
-    inputs: AgentState = {
-        "question": request.question, 
-        "tenant_id": current_user.tenant_id,
-        "thoughts": [],
-        "observation_history": [],
-        "step_count": 0,
-        "total_cost": 0.0,
-        "thought": None,
-        "last_action": None,
-        "observation": None,
-        "last_sql": None,
-        "retrieval_context": None,
-        "sql_result": None,
-        "final_answer": None
-    }
+    inputs = create_initial_state(request.question, current_user.tenant_id)
     
     try:
         # Execute the agent graph and wait for completion
