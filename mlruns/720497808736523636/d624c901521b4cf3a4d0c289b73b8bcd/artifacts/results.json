@@ -1,0 +1,92 @@
+[
+  {
+    "question": "How many compounds were indexed in the FAISS-IVF vector store?",
+    "retrieval_metrics": {
+      "precision": 0.1,
+      "recall": 1.0,
+      "f1": 0.18181818181818182,
+      "mrr": 1.0
+    },
+    "stability_metrics": {
+      "avg_jaccard": 1.0,
+      "rephrase_score": 1.0
+    },
+    "generation_metrics": {
+      "token_f1": 0.2
+    },
+    "prediction": "1M+ compounds were indexed in the FAISS-IVF vector store.",
+    "reference": "1M+"
+  },
+  {
+    "question": "When did the Computer Science faculty period start at Mansoura University?",
+    "retrieval_metrics": {
+      "precision": 0.1,
+      "recall": 1.0,
+      "f1": 0.18181818181818182,
+      "mrr": 1.0
+    },
+    "stability_metrics": {
+      "avg_jaccard": 1.0,
+      "rephrase_score": 1.0
+    },
+    "generation_metrics": {
+      "token_f1": 0.0
+    },
+    "prediction": "The Computer Science faculty period at Mansoura University started in October 2022.",
+    "reference": "Oct 2022"
+  },
+  {
+    "question": "How many approved drugs are screened in the Drug Repurposing Pipeline?",
+    "retrieval_metrics": {
+      "precision": 0.1,
+      "recall": 1.0,
+      "f1": 0.18181818181818182,
+      "mrr": 1.0
+    },
+    "stability_metrics": {
+      "avg_jaccard": 1.0,
+      "rephrase_score": 1.0
+    },
+    "generation_metrics": {
+      "token_f1": 0.1818
+    },
+    "prediction": "5,000+ approved drugs are screened in the Drug Repurposing Pipeline.",
+    "reference": "5,000+"
+  },
+  {
+    "question": "What is OMAR FADLALLAH's profession?",
+    "retrieval_metrics": {
+      "precision": 0.1,
+      "recall": 1.0,
+      "f1": 0.18181818181818182,
+      "mrr": 1.0
+    },
+    "stability_metrics": {
+      "avg_jaccard": 1.0,
+      "rephrase_score": 0.9091
+    },
+    "generation_metrics": {
+      "token_f1": 0.25
+    },
+    "prediction": "OMAR FADLALLAH is an AI Engineer.",
+    "reference": "AI Engineer"
+  },
+  {
+    "question": "What was the initial Character Error Rate before fine-tuning Gemma-3-4b-it?",
+    "retrieval_metrics": {
+      "precision": 0.1,
+      "recall": 1.0,
+      "f1": 0.18181818181818182,
+      "mrr": 1.0
+    },
+    "stability_metrics": {
+      "avg_jaccard": 1.0,
+      "rephrase_score": 1.0
+    },
+    "generation_metrics": {
+      "token_f1": 0.0
+    },
+    "prediction": "The initial Character Error Rate (CER) before fine-tuning Gemma-3-4b-it was 0.74.",
+    "reference": "0.74"
+  }
+]

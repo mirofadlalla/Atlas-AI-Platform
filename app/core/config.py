@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_username: str = ""
     smtp_password: str = ""
-    email_from: str = "noreply@atlas-ai.com"
+    email_from: str = ""
     frontend_url: str = "http://localhost:3000"
 
     class Config:

@@ -10,16 +10,23 @@ from fastapi import HTTPException, status
 import redis
 from typing import Optional
 
+from app.core.config import settings
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
 try:
-    redis_client = redis.Redis(host="localhost",
-                                port=6379,
-                                  decode_responses=True,
-                                    socket_connect_timeout=2)
+    redis_client = redis.Redis(
+        host=settings.redis_host,
+        port=settings.redis_port,
+        password=settings.redis_password or None,
+        db=settings.redis_db,
+        decode_responses=True,
+        socket_connect_timeout=2
+    )
     redis_client.ping()
-except (redis.ConnectionError, redis.TimeoutError):
+except (redis.ConnectionError, redis.TimeoutError, redis.ResponseError) as e:
+    logger.warning(f"Redis connection error in rate limiter: {e}")
     redis_client = None
 
 # Rate limit configuration (requests per window)

@@ -73,10 +73,9 @@ def evaluate_task(self, tenant_id: str, path: str, runs: int = 2, run_id: str = 
                 # إرسال المقاييس للـ API الداخلي عشان Prometheus يشوفها
                 try:
                     import requests
-                    # For standalone monitoring: Prometheus in Docker reaches host via host.docker.internal
-                    # For orchestrated: Use service name 'api' in Docker network
-                    api_host = os.environ.get("API_HOST", "http://host.docker.internal:8000")
-                    if "localhost" in api_host and not api_host.startswith("http"):
+                    from app.core.config import settings
+                    api_host = os.environ.get("API_HOST", "http://localhost:8000")
+                    if not api_host.startswith("http"):
                         api_host = f"http://{api_host}"
                         
                     webhook_url = f"{api_host}/api/internal/metrics/record"
@@ -117,7 +116,11 @@ def evaluate_task(self, tenant_id: str, path: str, runs: int = 2, run_id: str = 
                         "scores": avg_scores
                     }
                     
-                    resp = requests.post(webhook_url, json=payload, timeout=2.0)
+                    headers = {}
+                    if settings.internal_metrics_api_key:
+                        headers["X-Internal-Token"] = settings.internal_metrics_api_key
+
+                    resp = requests.post(webhook_url, json=payload, headers=headers, timeout=2.0)
                     if resp.status_code == 200:
                         logger.debug(f"Successfully sent evaluation metrics for tenant {tenant_id}")
                     else:

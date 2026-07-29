@@ -25,7 +25,6 @@ router = APIRouter(
 
 @router.post("/evaluate")
 async def evaluate(
-    tenant_id: str = Form(...),
     file: UploadFile = File(...),
     runs: int = Form(2),
     current_admin=Depends(require_admin),
@@ -55,6 +54,8 @@ async def evaluate(
     Raises:
         HTTPException: If user is not admin
     """
+    tenant_id = str(current_admin.tenant_id)
+
     # Apply rate limiting (admin-only endpoint)
     rate_limit(
         user_id=str(current_admin.id),
@@ -130,7 +131,6 @@ async def evaluate(
 
 @router.post("/generate_dataset")
 async def generate_dataset(
-    tenant_id: str = Form(...),
     max_chunks: int = Form(30),
     current_admin=Depends(require_admin),
     db: Session = Depends(get_db)
@@ -138,6 +138,8 @@ async def generate_dataset(
     """
     Start a task to generate an evaluation dataset (admin only).
     """
+    tenant_id = str(current_admin.tenant_id)
+
     # Apply rate limiting
     rate_limit(
         user_id=str(current_admin.id),

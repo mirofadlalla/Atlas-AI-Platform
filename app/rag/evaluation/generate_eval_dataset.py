@@ -9,15 +9,11 @@ Usage:
     python -m app.rag.evaluation.generate_eval_dataset
 """
 
-import os
-import sys
 import json
-import uuid
 import logging
 from pathlib import Path
 
 from qdrant_client import QdrantClient
-from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
 from langchain_core.messages import HumanMessage
 from app.core.config import settings
 
@@ -27,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 QDRANT_URL      = settings.qdrant_url
 COLLECTION_NAME = settings.qdrant_collection_name
-TENANT_ID       = "e44c9819-9437-47e5-9115-6caabbca918f"           # change to your tenant
+TENANT_ID       = None           # change to your tenant
 OUTPUT_PATH     = Path(__file__).parent / "evaluation_dataset.json"
 MAX_CHUNKS      = 30               # how many chunks to generate questions from
 
@@ -37,6 +33,9 @@ def fetch_points(tenant_id: str, max_chunks: int = MAX_CHUNKS) -> list[dict]:
     client = QdrantClient(url=QDRANT_URL)
     all_points = []
     offset = None
+
+    global TENANT_ID
+    TENANT_ID = tenant_id  # store for later use in main()
 
     logger.info(f"Fetching points for tenant_id='{tenant_id}' from '{COLLECTION_NAME}' ...")
 
@@ -77,15 +76,9 @@ def fetch_points(tenant_id: str, max_chunks: int = MAX_CHUNKS) -> list[dict]:
 
 
 def build_llm():
-    """Initialize the HuggingFace LLM."""
-    endpoint = HuggingFaceEndpoint(
-        repo_id="meta-llama/Meta-Llama-3-8B-Instruct",
-        task="text-generation",
-        max_new_tokens=512,
-        temperature=0.3,
-        huggingfacehub_api_token=os.getenv("HF_TOKEN_O"),
-    )
-    return ChatHuggingFace(llm=endpoint)
+    """Initialize the Groq LLM via CustomLocalLLM wrapper."""
+    from app.services.llm_runner import CustomLocalLLM
+    return CustomLocalLLM()
 
 
 PROMPT_TEMPLATE = """\
@@ -113,8 +106,9 @@ def generate_qa(llm, content: str) -> dict | None:
     """Ask the LLM to generate a QA pair from a chunk. Returns None on failure."""
     prompt = PROMPT_TEMPLATE.format(content=content.strip())
     try:
-        response = llm.invoke([HumanMessage(content=prompt)])
-        raw = response.content.strip()
+        response = llm.invoke(prompt)
+        raw = response if isinstance(response, str) else getattr(response, "content", str(response))
+        raw = raw.strip()
 
         # Try to parse JSON — the LLM might wrap it in backticks
         if "```" in raw:
@@ -122,7 +116,7 @@ def generate_qa(llm, content: str) -> dict | None:
             if raw.startswith("json"):
                 raw = raw[4:]
 
-        return json.loads(raw)
+        return json.loads(raw.strip())
     except Exception as e:
         logger.warning(f"  LLM generation failed: {e}")
         return None

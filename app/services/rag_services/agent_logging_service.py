@@ -99,10 +99,9 @@ def log_agent_run_and_cost(
         # Record Prometheus metrics via internal webhook so they register on the API server
         try:
             import os
-            # For standalone monitoring: Prometheus in Docker reaches host via host.docker.internal
-            # For orchestrated: Use service name 'api' in Docker network
-            api_host = os.environ.get("API_HOST", "http://host.docker.internal:8000")
-            if "localhost" in api_host and not api_host.startswith("http"):
+            from app.core.config import settings
+            api_host = os.environ.get("API_HOST", "http://localhost:8000")
+            if not api_host.startswith("http"):
                 api_host = f"http://{api_host}"
                 
             webhook_url = f"{api_host}/api/internal/metrics/record"
@@ -118,8 +117,12 @@ def log_agent_run_and_cost(
                 "step_count": int(step_count)
             }
             
+            headers = {}
+            if settings.internal_metrics_api_key:
+                headers["X-Internal-Token"] = settings.internal_metrics_api_key
+
             # Fire and forget with short timeout
-            response = requests.post(webhook_url, json=payload, timeout=2.0)
+            response = requests.post(webhook_url, json=payload, headers=headers, timeout=2.0)
             if response.status_code == 200:
                 logger.debug(f"Successfully sent agent metrics to API webhook for run {run.run_id}")
             else:

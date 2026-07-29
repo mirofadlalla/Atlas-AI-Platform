@@ -1,0 +1,67 @@
+[
+  {
+    "id": "q_001",
+    "question": "How many compounds were indexed in the FAISS-IVF vector store?",
+    "answer": "1M+",
+    "relevant_ids": [
+      "06a4463c-286f-8d15-1495-72f2c3367b3b"
+    ],
+    "paraphrases": [
+      "What is the number of compounds stored in the FAISS-IVF vector store?",
+      "How many compounds were stored in the FAISS-IVF index?"
+    ],
+    "_source_chunk": "Live Demo \n• Engineered scalable REST APIs with async processing and production-ready architecture. KEY PROJECTS \nComputational Drug Discovery & Repurposing Platform  ★ Graduation Project — Lead AI & Backend Engineer  ·  Team of 9 \nFlask · FAISS-IVF · RDKit · Chemprop · PyTorch Lightning · DeepPurpo"
+  },
+  {
+    "id": "q_002",
+    "question": "When did the Computer Science faculty period start at Mansoura University?",
+    "answer": "Oct 2022",
+    "relevant_ids": [
+      "078e9d85-78cb-aa31-4f71-3180b608922a"
+    ],
+    "paraphrases": [
+      "What is the start date of the Computer Science period at Mansoura University?",
+      "At what date did the Computer Science period begin at Mansoura University?"
+    ],
+    "_source_chunk": "Computer Science  ·  Faculty of Computers and Information, Mansoura University Oct 2022 – Jun 2026"
+  },
+  {
+    "id": "q_003",
+    "question": "How many approved drugs are screened in the Drug Repurposing Pipeline?",
+    "answer": "5,000+",
+    "relevant_ids": [
+      "12fd50fb-efec-4898-31ac-ecc09e5ceebd"
+    ],
+    "paraphrases": [
+      "What is the number of approved drugs tested in the Drug Repurposing Pipeline?",
+      "How many drugs are involved in the high-throughput screening of the Drug Repurposing Pipeline?"
+    ],
+    "_source_chunk": "• Drug Repurposing Pipeline: High-throughput screening of 5,000+ approved drugs against protein targets using binding-affinity \nmodels, with automated external API enrichment. • Molecular Dynamics: Productized a multi-step simulation protocol into a single autonomous API with real-time job status up"
+  },
+  {
+    "id": "q_004",
+    "question": "What is OMAR FADLALLAH's profession?",
+    "answer": "AI Engineer",
+    "relevant_ids": [
+      "23746e25-76e3-131b-b945-909c3015bbed"
+    ],
+    "paraphrases": [
+      "What does OMAR FADLALLAH work as?",
+      "What is OMAR FADLALLAH's job title?"
+    ],
+    "_source_chunk": "OMAR FADLALLAH \nAI Engineer | LLM Systems | RAG Architectures | NLP \nMansoura, Egypt  •  +20 127 745 7703  •  omaryaser311@gmail.com  •  LinkedIn  • GitHub  •  Portfolio \nPROFESSIONAL SUMMARY \nAI Engineer who started in Data Analysis and BI before moving deliberately into ML and production GenAI — m"
+  },
+  {
+    "id": "q_005",
+    "question": "What was the initial Character Error Rate before fine-tuning Gemma-3-4b-it?",
+    "answer": "0.74",
+    "relevant_ids": [
+      "4b422259-0d3a-6d45-0d2d-5f3a7858cc90"
+    ],
+    "paraphrases": [
+      "What Character Error Rate did Gemma-3-4b-it have before fine-tuning?",
+      "What was the starting Character Error Rate for Gemma-3-4b-it before fine-tuning?"
+    ],
+    "_source_chunk": "• Added per-request cost and token tracking with real-time observability via Prometheus and Grafana (latency, token usage, drift \nalerts). • Built a LangGraph-based agentic reasoning layer supporting multi-step query decomposition and tool use for complex questions. Arabic Legal OCR — Fine-tuning Vi"
+  }
+]

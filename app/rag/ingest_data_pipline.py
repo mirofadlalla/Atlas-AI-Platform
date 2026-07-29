@@ -99,10 +99,9 @@ class RAGPipeline:
             # 7. Record metrics via internal webhook
             try:
                 latency = time.time() - start_time
-                # For standalone monitoring: Prometheus in Docker reaches host via host.docker.internal
-                # For orchestrated: Use service name 'api' in Docker network
-                api_host = os.environ.get("API_HOST", "http://host.docker.internal:8000")
-                if "localhost" in api_host and not api_host.startswith("http"):
+                from app.core.config import settings
+                api_host = os.environ.get("API_HOST", "http://localhost:8000")
+                if not api_host.startswith("http"):
                     api_host = f"http://{api_host}"
                     
                 webhook_url = f"{api_host}/api/internal/metrics/record"
@@ -126,8 +125,12 @@ class RAGPipeline:
                 }
                 
                 import requests
+                headers = {}
+                if settings.internal_metrics_api_key:
+                    headers["X-Internal-Token"] = settings.internal_metrics_api_key
+
                 # Fire and forget with short timeout
-                resp = requests.post(webhook_url, json=payload, timeout=2.0)
+                resp = requests.post(webhook_url, json=payload, headers=headers, timeout=2.0)
                 if resp.status_code == 200:
                     logger.debug(f"Successfully sent ingest metrics for {file_name}")
                 else:

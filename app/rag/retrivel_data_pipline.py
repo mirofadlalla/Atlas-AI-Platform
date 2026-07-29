@@ -86,7 +86,7 @@ _OUTPUT_TOKEN_COST = getattr(settings, "QWEN_OUTPUT_TOKEN_COST", _DEFAULT_OUTPUT
 
 
 class RetrievalPipeline:
-    def __init__(self, tenant_id: int, use_reranker: bool = True, reranker_strategy: str = None, db: Session = None):
+    def __init__(self, tenant_id: int, use_reranker: bool = False, reranker_strategy: str = None, db: Session = None):
         """
         Initialize the retrieval pipeline with optional reranking.
 

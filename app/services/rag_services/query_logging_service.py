@@ -87,9 +87,9 @@ def log_query_run_and_cost(
         try:
             import os
             # For standalone monitoring: Prometheus in Docker reaches host via host.docker.internal
-            # For orchestrated: Use service name 'api' in Docker network
-            api_host = os.environ.get("API_HOST", "http://host.docker.internal:8000")
-            if "localhost" in api_host and not api_host.startswith("http"):
+            from app.core.config import settings
+            api_host = os.environ.get("API_HOST", "http://localhost:8000")
+            if not api_host.startswith("http"):
                 api_host = f"http://{api_host}"
             
             # Send metrics to FastAPI so Prometheus can scrape them
@@ -105,8 +105,12 @@ def log_query_run_and_cost(
                 "latency": float(latency)
             }
             
+            headers = {}
+            if settings.internal_metrics_api_key:
+                headers["X-Internal-Token"] = settings.internal_metrics_api_key
+
             # Fire and forget with short timeout so Celery task doesn't hang
-            response = requests.post(webhook_url, json=payload, timeout=2.0)
+            response = requests.post(webhook_url, json=payload, headers=headers, timeout=2.0)
             if response.status_code == 200:
                 logger.debug(f"Successfully sent query metrics to API webhook for run {run.run_id}")
             else:
