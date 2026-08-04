@@ -56,8 +56,13 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 EXPOSE 8000
 
 # Run application with proper logging
+# --log-config must point at a JSON/YAML dictConfig file (not a Python module).
+# --workers is 1 to prevent the background asyncio metrics task from running
+# in all 4 processes simultaneously (audit finding #28). Use a process
+# manager or Gunicorn with multiple workers + shared state if horizontal
+# scaling is needed.
 CMD ["uvicorn", "main:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
-     "--workers", "4", \
-     "--log-config", "logging_setup.py"]
+     "--workers", "1", \
+     "--log-config", "/app/logging_config.json"]

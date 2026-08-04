@@ -1,7 +1,7 @@
 from .base import Base
 from sqlalchemy import Column, String, ForeignKey, DateTime, Text
 from sqlalchemy.orm import relationship
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from .uuid import uuid_pk
 
 
@@ -34,9 +34,9 @@ class Invitation(Base):
     user_id = Column(String, ForeignKey('users.id'), nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(days=7), nullable=False)
-    accepted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    expires_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc) + timedelta(days=7), nullable=False)
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
     
     # Relationships
     invited_by_user = relationship("Users", foreign_keys=[invited_by], backref="invitations_sent")
@@ -45,7 +45,7 @@ class Invitation(Base):
     
     def is_expired(self) -> bool:
         """Check if the invitation has expired."""
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
     
     def is_valid(self) -> bool:
         """Check if the invitation is valid and can still be used."""

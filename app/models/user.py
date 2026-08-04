@@ -2,7 +2,7 @@ from .base import Base
 from sqlalchemy import Column, DateTime, String, ForeignKey
 from .uuid import uuid_pk
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Users(Base):
@@ -13,7 +13,7 @@ class Users(Base):
     name = Column(String, nullable=False)
     tenant_id = Column(String, ForeignKey('tenants.id'))
     email = Column(String, nullable=False, unique=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     hashed_password = Column(String, nullable=False)
     role = Column(String, default="user")

@@ -403,22 +403,61 @@ class ApiService {
 
   // Helper method to handle responses
   async handleResponse(response) {
+    // ── 401 Unauthorized: token expired or invalid ─────────────────────────
+    // Clear stored credentials and redirect to login so the user can
+    // re-authenticate. Pass a message via sessionStorage so the login page
+    // can display a friendly explanation.
+    if (response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      sessionStorage.setItem(
+        'auth_redirect_message',
+        'Your session has expired. Please log in again.'
+      );
+      window.location.href = '/login';
+      // Return a pending promise — the page is navigating away anyway.
+      return new Promise(() => {});
+    }
+
+    // ── 403 Forbidden: account approval revoked mid-session ────────────────
+    // The backend now checks approval_status on every request, so a user
+    // whose account was rejected after login will start getting 403s.
+    // We check the detail message to distinguish a real 403 (e.g. "not admin")
+    // from a session-revocation 403 ("Account is not approved").
+    if (response.status === 403) {
+      try {
+        const body = await response.clone().json();
+        const detail = (body.detail || '').toLowerCase();
+        if (detail.includes('not approved') || detail.includes('awaiting')) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          sessionStorage.setItem(
+            'auth_redirect_message',
+            'Your account access has been revoked. Please contact your administrator.'
+          );
+          window.location.href = '/login';
+          return new Promise(() => {});
+        }
+      } catch (_) {
+        // If we can't parse the body just fall through to normal error handling
+      }
+    }
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
       console.error(`API Error [${response.status}]:`, error);
-      
+
       // Extract meaningful error message
       let errorMessage = 'Unknown error';
       if (typeof error.detail === 'string') {
         errorMessage = error.detail;
       } else if (error.detail && typeof error.detail === 'object') {
-        // If detail is an object, try to extract message
         console.error('Error detail is object:', error.detail);
         errorMessage = error.detail.message || JSON.stringify(error.detail);
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
+
       const customError = new Error(errorMessage);
       customError.status = response.status;
       customError.data = error;

@@ -17,7 +17,7 @@ class Runs(Base):
     cache_hit = Column(Boolean, default=False)
     retrieved_docs_ids = Column(Text) 
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    # (One-to-One , One-to-Many)
-    cost_details = relationship("CostLog", back_populates="run", uselist=False)
+    # One run → many cost entries (one per LLM call)
+    cost_details = relationship("CostLog", back_populates="run", uselist=True)

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import apiService from '../services/apiService';
 import './LoginPage.css';
@@ -8,7 +8,17 @@ function LoginPage({ setIsAuthenticated, setUser }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [redirectMessage, setRedirectMessage] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Show a message if the user was automatically redirected (e.g. session expired)
+  useEffect(() => {
+    const msg = sessionStorage.getItem('auth_redirect_message');
+    if (msg) {
+      setRedirectMessage(msg);
+      sessionStorage.removeItem('auth_redirect_message');
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -70,6 +80,21 @@ function LoginPage({ setIsAuthenticated, setUser }) {
           <h1>🌍 Atlas AI</h1>
           <p>RAG Platform Login</p>
         </div>
+
+        {/* Auto-redirect message (e.g. session expired, account revoked) */}
+        {redirectMessage && (
+          <div className="info-message" style={{
+            background: 'rgba(59, 130, 246, 0.15)',
+            border: '1px solid rgba(59, 130, 246, 0.4)',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            marginBottom: '16px',
+            color: '#93c5fd',
+            fontSize: '0.9rem'
+          }}>
+            ℹ️ {redirectMessage}
+          </div>
+        )}
 
         {error && <div className="error-message">{error}</div>}
 

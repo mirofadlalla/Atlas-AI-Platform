@@ -16,7 +16,7 @@ import CostAnalyticsPage from './pages/CostAnalyticsPage';
 
 // Import components
 import Navigation from './components/Navigation';
-import ProtectedRoute from './components/ProtectedRoute';
+import ProtectedRoute, { AdminRoute } from './components/ProtectedRoute';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -162,13 +162,13 @@ function App() {
               </ProtectedRoute>
             } 
           />
-          <Route 
-            path="/admin" 
+          <Route
+            path="/admin"
             element={
-              <ProtectedRoute isAuthenticated={isAuthenticated}>
+              <AdminRoute isAuthenticated={isAuthenticated} user={user}>
                 <AdminPanel user={user} />
-              </ProtectedRoute>
-            } 
+              </AdminRoute>
+            }
           />
 
           {/* Catch all */}
