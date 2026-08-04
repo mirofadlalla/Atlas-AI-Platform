@@ -67,16 +67,28 @@ class AuthService:
                 detail="Invalid email or password",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
+        # Block pending/rejected users before issuing any token
+        if user.approval_status == "pending":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your account is awaiting admin approval.",
+            )
+        if user.approval_status == "rejected":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your account registration was not approved.",
+            )
+
         access_token = create_access_token({
-            "sub": user.email, 
+            "sub": user.email,
             "user_id": user.id,
             "role": user.role,
             "approval_status": user.approval_status,
             "tenant_id": user.tenant_id
         })
-        
+
         return {
-            "access_token": access_token, 
+            "access_token": access_token,
             "token_type": "bearer"
         }

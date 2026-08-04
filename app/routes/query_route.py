@@ -196,11 +196,14 @@ async def ask_question(
         return StreamingResponse(answer_generator(), media_type="text/plain")
         
     except Exception as e:
-        logger.error(f"Error processing query: {e}")
+        logger.error(f"Error processing query: {e}", exc_info=True)
         # End the run if it was started
         if mlflow_run_id:
             MLflowService.end_run(status="FAILED")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while processing your query. Please try again.",
+        )
 
 
 @router.post("/retrieve")
@@ -264,8 +267,11 @@ async def retrieve_documents(
         }
         
     except Exception as e:
-        logger.error(f"Error retrieving documents: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error retrieving documents: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while retrieving documents. Please try again.",
+        )
 
 @router.get("/cost-analytics")
 async def get_cost_analytics(
@@ -323,8 +329,11 @@ async def get_cost_analytics(
         return analytics
         
     except Exception as e:
-        logger.error(f"Error retrieving cost analytics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error retrieving cost analytics: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while retrieving cost analytics. Please try again.",
+        )
 
 
 @router.get("/runs")
@@ -371,5 +380,8 @@ async def get_runs(
         }
         
     except Exception as e:
-        logger.error(f"Error retrieving runs: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error retrieving runs: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while retrieving runs. Please try again.",
+        )

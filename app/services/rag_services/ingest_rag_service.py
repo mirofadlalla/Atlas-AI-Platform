@@ -16,18 +16,27 @@ def ingest_file_task(self, file_path: str, tenant_id: str, source: str, author: 
     """
     Async task to ingest files into RAG pipeline.
     Imports RAGPipeline here to avoid loading heavy dependencies during worker startup.
+
+    The database session is managed via a context manager so it is always
+    closed and rolled back on exception — preventing connection pool leaks
+    inside long-lived Celery worker processes.
     """
     try:
-        db = get_db_session()  # Get a new database session for this task
         from app.rag.ingest_data_pipline import RAGPipeline
-        
-        # Prepare custom metadata for the RAG pipeline
+
         custom_metadata = {
             "tenant_id": tenant_id,
             "source": source,
-            "author": author
+            "author": author,
         }
-        return RAGPipeline.process_file(file_path=file_path, custom_metadata=custom_metadata,db=db)
+
+        # Use context manager — session is closed even if process_file raises.
+        with get_db_session() as db:
+            return RAGPipeline.process_file(
+                file_path=file_path,
+                custom_metadata=custom_metadata,
+                db=db,
+            )
     except MemoryError:
         self.retry(countdown=60, exc=MemoryError("Not enough memory to process file"), max_retries=3)
     except Exception as exc:

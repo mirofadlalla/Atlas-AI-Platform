@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import apiService from '../services/apiService';
 import './QueryPage.css';
 
@@ -7,7 +7,10 @@ function QueryPage({ user }) {
   const [answer, setAnswer] = useState('');
   const [retrievedDocs, setRetrievedDocs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('answer');
+  const [error, setError] = useState('');
   const [recommendedQA, setRecommendedQA] = useState([]);
+  const answerBoxRef = useRef(null);
 
   useEffect(() => {
     const fetchRecommended = async () => {
