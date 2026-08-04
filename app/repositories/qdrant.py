@@ -1,10 +1,19 @@
 import os
 import uuid
+import logging
 from qdrant_client import QdrantClient
-from qdrant_client.models import VectorParams, Distance, SparseVectorParams, PointStruct
-from fastembed import SparseTextEmbedding 
+from qdrant_client.models import (
+    VectorParams,
+    Distance,
+    SparseVectorParams,
+    PointStruct,
+    PayloadSchemaType,
+)
+from fastembed import SparseTextEmbedding
 from app.design_pattern.embedded_model import EmbeddedModel
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 _global_dense_model = None
 _global_sparse_model = None
@@ -32,18 +41,82 @@ class QdrantRepository:
         self.sparse_model = get_shared_sparse_model()
 
     def create_collection(self, collection_name: str, vector_size: int = 1024):
-        # Create collection if it does not exist
+        """Create collection if it does not exist, then ensure payload indexes."""
         if not self.client.collection_exists(collection_name):
             self.client.recreate_collection(
                 collection_name=collection_name,
                 vectors_config={
                     "dense": VectorParams(size=vector_size, distance=Distance.COSINE)
-                },  
+                },
                 sparse_vectors_config={
                     "sparse": SparseVectorParams()
                 }
             )
+            logger.info(f"Collection '{collection_name}' created for Hybrid Search.")
             print(f"Collection '{collection_name}' created for Hybrid Search.")
+
+        # Always ensure indexes exist — idempotent and fast when already present.
+        self.ensure_payload_indexes(collection_name)
+
+    def ensure_payload_indexes(self, collection_name: str) -> None:
+        """
+        Create payload indexes for all fields used in filters.
+
+        Qdrant performs a full-collection linear scan on unindexed payload fields.
+        For a multi-tenant platform, ``payload.tenant_id`` is filtered on *every*
+        single query, so indexing it is critical for performance at any scale.
+
+        Field paths follow the nested structure stored by ``add_hybrid_documents``:
+            - Chunk payload shape:  { "content": "...", "payload": { <metadata> } }
+            - Filter key format:    "payload.<field_name>"
+
+        Indexes created:
+        +-----------------------+----------+----------------------------------+
+        | Field path            | Schema   | Why                              |
+        +-----------------------+----------+----------------------------------+
+        | payload.tenant_id     | KEYWORD  | Tenant isolation on every query  |
+        | payload.file_type     | KEYWORD  | Filter by document type (PDF...) |
+        | payload.department    | KEYWORD  | Filter by department / team      |
+        | payload.language      | KEYWORD  | Filter by content language       |
+        | payload.source        | KEYWORD  | Filter by source document name   |
+        | payload.author        | KEYWORD  | Filter by document author        |
+        +-----------------------+----------+----------------------------------+
+
+        This method is idempotent — calling it on a collection that already has
+        an index is a no-op (Qdrant returns success without duplicating the index).
+        """
+        # Map each filterable field path to its schema type.
+        # All current filters use exact-match (KEYWORD) semantics.
+        filterable_fields: dict[str, PayloadSchemaType] = {
+            "payload.tenant_id":  PayloadSchemaType.KEYWORD,
+            "payload.file_type":  PayloadSchemaType.KEYWORD,
+            "payload.department": PayloadSchemaType.KEYWORD,
+            "payload.language":   PayloadSchemaType.KEYWORD,
+            "payload.source":     PayloadSchemaType.KEYWORD,
+            "payload.author":     PayloadSchemaType.KEYWORD,
+        }
+
+        for field_path, schema_type in filterable_fields.items():
+            try:
+                self.client.create_payload_index(
+                    collection_name=collection_name,
+                    field_name=field_path,
+                    field_schema=schema_type,
+                )
+                logger.debug("Payload index ensured: %s (%s)", field_path, schema_type)
+            except Exception as e:
+                # Log but don't crash — a missing index degrades performance,
+                # it does not break correctness.
+                logger.warning(
+                    "Failed to create payload index for '%s' on '%s': %s",
+                    field_path, collection_name, e,
+                )
+
+        logger.info(
+            "Payload indexes ensured for collection '%s': %s",
+            collection_name,
+            list(filterable_fields.keys()),
+        )
 
     def add_hybrid_documents(self, collection_name: str, documents: list[dict]):
         """
