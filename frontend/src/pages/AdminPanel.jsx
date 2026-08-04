@@ -3,13 +3,19 @@ import apiService from '../services/apiService';
 import './AdminPanel.css';
 
 function AdminPanel({ user }) {
-  const [activeTab, setActiveTab] = useState('invitations'); // 'invitations', 'approvals'
+  const [activeTab, setActiveTab] = useState('invitations'); // 'invitations', 'approvals', 'recommended'
   const [invitations, setInvitations] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
+  const [recommendedQA, setRecommendedQA] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [email, setEmail] = useState('');
   const [inviteSending, setInviteSending] = useState(false);
+  
+  // Recommended QA form state
+  const [newQuestion, setNewQuestion] = useState('');
+  const [newAnswer, setNewAnswer] = useState('');
+  const [addingQA, setAddingQA] = useState(false);
 
   useEffect(() => {
     if (user?.role !== 'admin') {
@@ -42,18 +48,54 @@ function AdminPanel({ user }) {
     setLoading(true);
     setError('');
     try {
-      const [invData, appData] = await Promise.all([
-        apiService.getPendingInvitations(),
-        apiService.getPendingApprovals(),
+      const [invData, appData, recData] = await Promise.all([
+        apiService.getPendingInvitations().catch(() => ({ invitations: [] })),
+        apiService.getPendingApprovals().catch(() => ({ pending_users: [] })),
+        apiService.getRecommendedQuestions().catch(() => ({ recommended_qa: [] })),
       ]);
       setInvitations(invData.invitations || []);
       setPendingUsers(appData.pending_users || []);
+      setRecommendedQA(recData.recommended_qa || []);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const handleAddRecommendedQA = async (e) => {
+    e.preventDefault();
+    if (!newQuestion.trim() || !newAnswer.trim()) return;
+
+    if (recommendedQA.length >= 10) {
+      alert('Maximum limit of 10 recommended questions reached for this tenant!');
+      return;
+    }
+
+    setAddingQA(true);
+    try {
+      await apiService.addRecommendedQuestion(newQuestion, newAnswer);
+      alert('Recommended Q&A pair added successfully!');
+      setNewQuestion('');
+      setNewAnswer('');
+      loadData();
+    } catch (err) {
+      alert('Error adding recommended Q&A: ' + getErrorMessage(err));
+    } finally {
+      setAddingQA(false);
+    }
+  };
+
+  const handleDeleteRecommendedQA = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this recommended question?')) return;
+    try {
+      await apiService.deleteRecommendedQuestion(id);
+      alert('Deleted successfully!');
+      loadData();
+    } catch (err) {
+      alert('Error deleting recommended Q&A: ' + getErrorMessage(err));
+    }
+  };
 
   const handleSendInvitation = async (e) => {
     e.preventDefault();
@@ -132,6 +174,12 @@ function AdminPanel({ user }) {
           onClick={() => setActiveTab('approvals')}
         >
           ✅ Approve Users
+        </button>
+        <button
+          className={`tab-button ${activeTab === 'recommended' ? 'active' : ''}`}
+          onClick={() => setActiveTab('recommended')}
+        >
+          💡 Recommended Q&A ({recommendedQA.length}/10)
         </button>
       </div>
 
@@ -237,6 +285,79 @@ function AdminPanel({ user }) {
               </div>
             ) : (
               <div className="empty-state">No pending approvals</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'recommended' && (
+        <div className="tab-content">
+          <div className="send-invitation-form">
+            <h3>💡 Add Recommended Question & Answer (Tenant Level, Max 10)</h3>
+            <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '15px' }}>
+              These questions will be cached in memory per tenant and automatically presented as recommended/suggested questions when users load the chat interface.
+            </p>
+            <form onSubmit={handleAddRecommendedQA}>
+              <div className="form-group">
+                <label htmlFor="rec-question">Question</label>
+                <input
+                  type="text"
+                  id="rec-question"
+                  value={newQuestion}
+                  onChange={(e) => setNewQuestion(e.target.value)}
+                  placeholder="e.g. What is the company policy on remote work?"
+                  required
+                />
+              </div>
+              <div className="form-group" style={{ marginTop: '10px' }}>
+                <label htmlFor="rec-answer">Answer</label>
+                <textarea
+                  id="rec-answer"
+                  value={newAnswer}
+                  onChange={(e) => setNewAnswer(e.target.value)}
+                  placeholder="Pre-defined answer text to present or use as guidance..."
+                  rows={4}
+                  required
+                  style={{ width: '100%', background: '#1e293b', color: '#fff', border: '1px solid #334155', borderRadius: '6px', padding: '8px' }}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={addingQA || recommendedQA.length >= 10}
+                className="btn-primary"
+                style={{ marginTop: '10px' }}
+              >
+                {addingQA ? 'Adding...' : recommendedQA.length >= 10 ? 'Limit Reached (10/10)' : '➕ Add Recommended Q&A'}
+              </button>
+            </form>
+          </div>
+
+          <div className="invitations-list" style={{ marginTop: '20px' }}>
+            <h3>📋 Tenant Recommended Questions ({recommendedQA.length}/10)</h3>
+            {loading ? (
+              <div className="loading">Loading...</div>
+            ) : recommendedQA.length > 0 ? (
+              <div className="list-items">
+                {recommendedQA.map((item) => (
+                  <div key={item.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                      <h4 style={{ color: '#6366f1' }}>❓ {item.question}</h4>
+                      <button
+                        onClick={() => handleDeleteRecommendedQA(item.id)}
+                        className="btn-danger"
+                        style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                    <div style={{ marginTop: '8px', color: '#cbd5e1', background: '#0f172a', padding: '10px', borderRadius: '6px', width: '100%' }}>
+                      <strong>Answer:</strong> {item.answer}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">No recommended questions added for this tenant yet</div>
             )}
           </div>
         </div>

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.routes import auth_route, ingest_rag_route, eval_pipline, query_route, agent_route, internal_metrics_route
+from app.routes import auth_route, ingest_rag_route, eval_pipline, query_route, agent_route, internal_metrics_route, recommended_qa_route
 
 from logging_setup import setup_logging
 
@@ -53,6 +53,7 @@ app.include_router(eval_pipline.router, prefix="/api", tags=["eval-rag"])
 app.include_router(query_route.router, prefix="/api", tags=["query"])
 app.include_router(agent_route.router, prefix="/api", tags=["agent"])
 app.include_router(internal_metrics_route.router, prefix="/api", tags=["internal-metrics"])
+app.include_router(recommended_qa_route.router, prefix="/api", tags=["recommended-qa"])
 
 app.add_middleware(SentryAsgiMiddleware)
 
@@ -191,6 +192,15 @@ async def startup_event():
             except Exception as e:
                 logger.error(f"Error recording metrics: {e}")
                 await asyncio.sleep(10)
+
+    # Load tenant recommended Q&A pairs into in-memory cache
+    try:
+        from app.core.db import Sessions
+        from app.services.recommended_qa_service import RecommendedQAService
+        with Sessions() as db:
+            RecommendedQAService.load_all_recommended_questions(db)
+    except Exception as e:
+        logger.error(f"Error loading tenant recommended Q&A into in-memory cache: {e}")
 
     # Start the metrics recording task in background
     asyncio.create_task(record_metrics_periodically())

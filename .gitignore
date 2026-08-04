@@ -1,2 +1,49 @@
+# Environments
 .env
+.env.local
+.env.*.local
+
+# MLflow & Experiment Tracking
+mlruns/
+mlruns
+
+# Logs
 celery_worker.log
+*.log
+*.syslog
+logs/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Node & Frontend Build Artifacts
+node_modules/
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+frontend/.next/
+frontend/out/
+
+# IDE & OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary & System Artifacts
+tmp/
+.system_generated/
+scratch/

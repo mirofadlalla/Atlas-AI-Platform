@@ -14,7 +14,29 @@ const AgentPage = () => {
   const [totalCost, setTotalCost] = useState(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [recommendedQA, setRecommendedQA] = useState([]);
   const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    const fetchRecommended = async () => {
+      try {
+        const res = await apiService.getRecommendedQuestions();
+        if (res && res.recommended_qa) {
+          setRecommendedQA(res.recommended_qa);
+        }
+      } catch (err) {
+        console.warn('Failed to load recommended questions:', err);
+      }
+    };
+    fetchRecommended();
+  }, []);
+
+  const handleSelectRecommended = (qa) => {
+    setQuestion(qa.question);
+    if (qa.answer) {
+      setFinalAnswer(qa.answer);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -223,6 +245,36 @@ const AgentPage = () => {
             <span className="mode-badge">Batch</span>
           )}
         </div>
+
+        {recommendedQA.length > 0 && (
+          <div className="recommended-section" style={{ marginBottom: '15px' }}>
+            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#94a3b8', marginBottom: '8px' }}>
+              💡 Recommended Questions (Tenant Loaded):
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {recommendedQA.map((qa) => (
+                <button
+                  key={qa.id}
+                  type="button"
+                  onClick={() => handleSelectRecommended(qa)}
+                  style={{
+                    background: 'rgba(99, 102, 241, 0.15)',
+                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                    color: '#c7d2fe',
+                    padding: '6px 12px',
+                    borderRadius: '16px',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    textAlign: 'left'
+                  }}
+                >
+                  ❓ {qa.question}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="agent-form">
           <div className="form-group">

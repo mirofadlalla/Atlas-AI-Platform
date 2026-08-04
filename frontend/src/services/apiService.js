@@ -375,6 +375,32 @@ class ApiService {
     return this.handleResponse(response);
   }
 
+  // Recommended Q&A Endpoints
+  async getRecommendedQuestions() {
+    const response = await fetch(`${this.baseURL}/recommended-qa`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse(response);
+  }
+
+  async addRecommendedQuestion(question, answer) {
+    const response = await fetch(`${this.baseURL}/recommended-qa`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ question, answer }),
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteRecommendedQuestion(qaId) {
+    const response = await fetch(`${this.baseURL}/recommended-qa/${qaId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse(response);
+  }
+
   // Helper method to handle responses
   async handleResponse(response) {
     if (!response.ok) {

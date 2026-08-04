@@ -5,3 +5,4 @@ from .TRACKER_DB_FILE import TRACKER_DB_FILE
 from .invitation import Invitation
 from .runs import Runs
 from .costLog import CostLog
+from .recommended_qa import RecommendedQA

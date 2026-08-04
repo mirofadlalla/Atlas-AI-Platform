@@ -387,27 +387,56 @@ class RetrievalPipeline:
         logger.info(f"Starting answer generation for query: {query[:50]}...")
         logger.info(f"Number of context documents: {len(docs)}")
 
+        # Format full prompt string (matching document_chain prompt template)
+        context_text = "\n\n".join([doc.page_content for doc in docs])
+        full_prompt = (
+            "Answer the following question based only on the provided context:\n\n"
+            f"Context: {context_text}\n\n"
+            f"Question: {query}\n\n"
+            "Answer:"
+        )
+
         # -----------------------------------------------------------
-        # FIX #3: previously "was this a Redis cache hit" was guessed
-        # purely from wall-clock latency (< 1.5s), which is unreliable
-        # (a warm GPU or a short query can also be fast, and a busy
-        # Redis instance can be slow even on a real hit). We now ask the
-        # configured cache object directly via its `lookup()` API before
-        # streaming, which is what LangChain itself uses internally to
-        # decide whether to call the LLM at all.
+        # FIX: Check tenant-scoped Redis Semantic Cache for cache hit
+        # before invoking LLM generation. If hit, return cached answer.
         # -----------------------------------------------------------
-        redis_cache = get_llm_cache()
-        cache_probably_hit = False
+        redis_cache = getattr(self, "llm_cache", None) or get_llm_cache()
+        llm_string = getattr(self.local_llm, "_llm_type", "custom_huggingface_stream")
+        cached_generations = None
+
         if redis_cache is not None:
             try:
-                # RedisSemanticCache.lookup(prompt, llm_string) returns the
-                # cached generations if a semantically similar entry exists,
-                # or None otherwise. Using the actual cache lookup instead of
-                # a timing heuristic gives a ground-truth answer.
-                llm_string = getattr(self.local_llm, "_llm_type", "custom_huggingface_stream")
-                cache_probably_hit = redis_cache.lookup(query, llm_string) is not None
+                cached_generations = redis_cache.lookup(full_prompt, llm_string)
             except Exception as e:
-                logger.debug(f"Redis cache lookup check failed (non-fatal): {e}")
+                logger.debug(f"Redis semantic cache lookup failed (non-fatal): {e}")
+
+        if cached_generations:
+            cached_text = (
+                cached_generations[0].text
+                if hasattr(cached_generations[0], 'text')
+                else str(cached_generations[0])
+            )
+            if cached_text and cached_text.strip():
+                logger.info(f"[⚡ REDIS SEMANTIC CACHE HIT] Returning cached answer for tenant {self.tenant_id}: {query[:50]}...")
+                cache_hits_total.labels(cache_type="redis").inc()
+                yield cached_text
+
+                latency = time.time() - start_time
+                retrieved_docs_ids = ",".join([doc.metadata.get('_id', '') for doc in docs])
+                if use_local_cache:
+                    self._set_cached(cache_key, {
+                        'answer': cached_text,
+                        'docs_ids': retrieved_docs_ids,
+                        'timestamp': time.time()
+                    })
+                self._log_run(
+                    query, cached_text, latency, True, retrieved_docs_ids,
+                    0, 0, "Qwen2.5-1.5B (REDIS_CACHED)"
+                )
+                return
+
+        logger.info(f"[🔄 REDIS CACHE MISS] Generating new LLM response for tenant {self.tenant_id}: {query[:50]}...")
+        cache_misses_total.labels(cache_type="redis").inc()
 
         llm_start_time = time.time()
         for chunk in self.document_chain.stream({"input": query, "context": docs}):
@@ -421,16 +450,14 @@ class RetrievalPipeline:
                 yield chunk
         llm_time = time.time() - llm_start_time
 
-        if cache_probably_hit and full_answer:
-            logger.info(f"[⚡ REDIS CACHE HIT] LLM response time: {llm_time:.2f}s")
-            cache_source = "REDIS"
-            cache_hit = True
-            cache_hits_total.labels(cache_type="redis").inc()
-        else:
-            logger.info(f"[🔄 LLM GENERATED NEW RESPONSE] Response time: {llm_time:.2f}s (Redis available: {redis_cache is not None})")
-            cache_source = "LLM_GENERATED"
-            cache_hit = False
-            cache_misses_total.labels(cache_type="redis").inc()
+        # Update Redis Semantic Cache with new answer for future inference lookups
+        if redis_cache is not None and full_answer.strip():
+            try:
+                from langchain_core.outputs import Generation
+                redis_cache.update(full_prompt, llm_string, [Generation(text=full_answer)])
+                logger.info(f"✅ Saved generation to Redis Semantic Cache for tenant {self.tenant_id}")
+            except Exception as e:
+                logger.warning(f"Failed to update Redis semantic cache: {e}")
 
         logger.info(f"Answer generation completed. Length: {len(full_answer)} chars")
 
