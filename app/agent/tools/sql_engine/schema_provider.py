@@ -21,6 +21,7 @@ def get_schema_description(force_refresh: bool = False) -> str:
 
     if not force_refresh and cache_key in _cache:
         cached_at, cached_value = _cache[cache_key]
+        # Check if the cached value is still valid based on the TTL setting
         if now - cached_at < agent_settings.schema_cache_ttl_seconds:
             return cached_value
 

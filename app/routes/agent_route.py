@@ -83,8 +83,19 @@ async def ask_agent(
         step_count = 0
         input_tokens = 0
         output_tokens = 0
+        degraded = False
+        degraded_reason = None
         
-        inputs = create_initial_state(request.question, current_user.tenant_id)
+        inputs = create_initial_state(request.question, current_user.tenant_id, run_id=request.run_id)
+        if request.run_id:
+            cached = get_cached_run_result(request.run_id)
+            if cached:
+                logger.info("Returning cached agent result for run_id=%s", request.run_id)
+                if cached.get("final_answer"):
+                    yield f"data: {json.dumps({'type': 'answer', 'content': cached['final_answer']})}\n\n"
+                    yield f"data: {json.dumps({'type': 'complete', 'final_answer': cached['final_answer'], 'degraded': cached.get('degraded', False), 'degraded_reason': cached.get('degraded_reason')})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'status': 'success', 'degraded': cached.get('degraded', False), 'degraded_reason': cached.get('degraded_reason')})}\n\n"
+                return
 
         try:
             # Stream events from the agent graph execution
@@ -109,6 +120,11 @@ async def ask_agent(
                 elif event_type == "on_chain_end":
                     data = event.get("data", {})
                     output = data.get("output", {})
+                    if isinstance(output, dict):
+                        if output.get("degraded"):
+                            degraded = True
+                            if output.get("degraded_reason"):
+                                degraded_reason = output.get("degraded_reason")
                     
                     # Stream thought content from thinking node
                     if event_name == "think" and "thought" in output:
@@ -121,7 +137,7 @@ async def ask_agent(
                         final_answer = output.get("final_answer", "")
                         if final_answer:
                             yield f"data: {json.dumps({'type': 'answer', 'content': final_answer})}\n\n"
-                            yield f"data: {json.dumps({'type': 'complete', 'final_answer': final_answer})}\n\n"
+                            yield f"data: {json.dumps({'type': 'complete', 'final_answer': final_answer, 'degraded': degraded, 'degraded_reason': degraded_reason})}\n\n"
                             # Capture result for post-execution logging
                             final_result = output
                             step_count = output.get("step_count", 0)
@@ -136,7 +152,7 @@ async def ask_agent(
                         yield f"data: {json.dumps({'type': 'tool_end', 'tool': node_display})}\n\n"
             
             # Signal successful completion
-            yield f"data: {json.dumps({'type': 'done', 'status': 'success'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'status': 'success', 'degraded': degraded, 'degraded_reason': degraded_reason})}\n\n"
             
             # Calculate total execution time
             latency = time.time() - start_time
@@ -207,6 +223,24 @@ async def ask_agent(
                         model_name="Qwen2.5-1.5B"
                     )
                     logger.debug(f"Triggered logging for agent run - Latency: {latency:.2f}s")
+
+                    if request.run_id:
+                        cache_response = {
+                            "success": True,
+                            "run_id": request.run_id,
+                            "question": request.question,
+                            "final_answer": final_result.get("final_answer"),
+                            "thoughts": final_result.get("thoughts", []),
+                            "step_count": step_count,
+                            "total_cost": float(total_cost),
+                            "input_tokens": input_tokens,
+                            "output_tokens": output_tokens,
+                            "sql_queries": [sql_queries] if sql_queries else [],
+                            "retrieved_context": retrieved_docs,
+                            "degraded": degraded,
+                            "degraded_reason": degraded_reason,
+                        }
+                        cache_run_result(request.run_id, cache_response)
                 except Exception as log_error:
                     logger.error(f"Error triggering agent logging: {log_error}")
             
@@ -324,6 +358,7 @@ async def ask_agent_batch(
             "sql_queries": [result.get("last_sql")] if result.get("last_sql") else [],
             "retrieved_context": result.get("retrieval_context", ""),
             "degraded": result.get("degraded", False),
+            "degraded_reason": result.get("degraded_reason"),
         }
         if request.run_id:
             cache_run_result(request.run_id, response)

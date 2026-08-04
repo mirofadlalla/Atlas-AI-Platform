@@ -5,7 +5,7 @@ from __future__ import annotations
 
 def estimate_chars_as_tokens(text: str) -> int:
     """Rough token estimate (~4 chars per token for English)."""
-    return max(1, len(text) // 4)
+    return max(1, len(text) // 4) # 4 Characters ≈ 1 Token
 
 
 def truncate_to_char_budget(text: str, max_chars: int, suffix: str = "\n...[truncated]") -> str:

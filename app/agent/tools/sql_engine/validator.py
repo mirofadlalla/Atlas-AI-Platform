@@ -78,7 +78,7 @@ class SQLValidator:
             if isinstance(node, exp.Select):
                 tenant_cond = exp.EQ(
                     this=exp.to_identifier("tenant_id"),
-                    expression=exp.Placeholder(this="tenant_id"),
+                    expression=exp.Placeholder(this="tenant_id"), # Parameterized Query
                 )
                 existing = node.args.get("where")
                 if existing:

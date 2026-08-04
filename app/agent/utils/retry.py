@@ -20,6 +20,9 @@ T = TypeVar("T")
 
 
 def _retryable_exceptions() -> tuple[type[BaseException], ...]:
+    '''
+    Returns a tuple of exception types that are considered retryable.
+    '''
     excs: list[type[BaseException]] = [ConnectionError, TimeoutError, OSError]
     try:
         from groq import APIConnectionError, RateLimitError  # type: ignore
@@ -34,13 +37,13 @@ def with_retry(fn: Callable[..., T], *args, **kwargs) -> T:
     """Execute *fn* with bounded exponential backoff on transient errors."""
 
     @retry(
-        reraise=True,
+        reraise=True, # Reraise the last exception if all retries fail not to swallow it
         stop=stop_after_attempt(agent_settings.llm_retry_attempts),
         wait=wait_exponential(
             min=agent_settings.llm_retry_min_wait_seconds,
             max=agent_settings.llm_retry_max_wait_seconds,
         ),
-        retry=retry_if_exception_type(_retryable_exceptions()),
+        retry=retry_if_exception_type(_retryable_exceptions()), # Retry only on specified transient exceptions
         before_sleep=lambda rs: logger.warning(
             "Retrying %s after %s (attempt %s)",
             getattr(fn, "__name__", fn),
@@ -52,3 +55,26 @@ def with_retry(fn: Callable[..., T], *args, **kwargs) -> T:
         return fn(*args, **kwargs)
 
     return _wrapped()
+
+
+# before_sleep
+# before_sleep=lambda rs:
+# كل مرة قبل ما ينام
+# يشغل Lambda.
+# الـ
+# rs
+# هو Retry State.
+# فيه معلومات عن المحاولة.
+# ثم
+# logger.warning(
+# يطبع Warning.
+# Retrying %s
+# اسم الدالة.
+# after %s
+# سبب الخطأ.
+# attempt %s
+# رقم المحاولة.
+# مثلاً
+# Retrying generate_answer
+# after TimeoutError
+# attempt 2

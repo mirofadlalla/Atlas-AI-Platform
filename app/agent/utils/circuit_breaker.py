@@ -18,15 +18,16 @@ class CircuitBreaker:
         name: str,
         failure_threshold: int = 5,
         recovery_timeout_seconds: float = 60.0,
+        # means after 5 failures, the circuit breaker will open and stay open for 60 seconds before allowing a retry
     ) -> None:
         self.name = name
         self.failure_threshold = failure_threshold
         self.recovery_timeout_seconds = recovery_timeout_seconds
         self._failures = 0
-        self._opened_at: float | None = None
+        self._opened_at: float | None = None # 
         self._lock = threading.Lock()
 
-    def _is_open(self) -> bool:
+    def _is_open(self) -> bool: # هل الـ Circuit مقفول الآن؟
         if self._opened_at is None:
             return False
         if time.time() - self._opened_at >= self.recovery_timeout_seconds:

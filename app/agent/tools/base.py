@@ -15,6 +15,52 @@ class ToolObservation:
     observation: str
     has_data: bool = False
 
+# الكود ده بيمثل Tool Framework في الـ Agent. بدل ما الـ Agent يعرف ينفذ SQL أو Retrieval بنفسه، هو عنده Registry فيه كل الأدوات، وكل أداة لها Interface موحد.
+
+# الفكرة العامة كده:
+
+#                  Agent
+#                    │
+#                    ▼
+#             Tool Registry
+#           ┌────────┴────────┐
+#           │                 │
+#           ▼                 ▼
+#       SQL Tool       Retrieval Tool
+#           │                 │
+#           ▼                 ▼
+#      SQL Database      Vector DB / RAG
+
+# الميزة إن الـ Agent مش محتاج يعرف تفاصيل كل Tool، هو بس يقول:
+
+# "هاتلي Tool اسمها sql"
+
+# أولاً الـ dataclass
+# ToolObservation
+# @dataclass
+# class ToolObservation:
+#     tool: str
+#     observation: str
+#     has_data: bool = False
+
+# ده مجرد Object لتسجيل إيه اللي حصل بعد تنفيذ الأداة.
+
+# مثلاً
+
+# ToolObservation(
+#     tool="sql",
+#     observation="Returned 15 rows",
+#     has_data=True
+# )
+
+# أو
+
+# ToolObservation(
+#     tool="retrieval",
+#     observation="No relevant documents",
+#     has_data=False
+# )
+
 
 @dataclass
 class ToolResult:
@@ -29,6 +75,27 @@ class ToolResult:
             has_data=self.has_data,
         )
 
+# دي نتيجه التول الحقيقه
+# مثلاً SQL Tool
+
+# ToolResult(
+#     observation="Retrieved 8 employees",
+#     has_data=True,
+#     state_updates={
+#         "last_sql": "...",
+#         "sql_result": rows
+#     }
+# )
+
+# أو Retrieval
+
+# ToolResult(
+#     observation="Found 3 documents",
+#     has_data=True,
+#     state_updates={
+#         "retrieval_context": docs
+#     }
+# )
 
 class AgentTool(ABC):
     name: str
@@ -38,6 +105,7 @@ class AgentTool(ABC):
     @abstractmethod
     def run(self, state: AgentState) -> ToolResult:
         ...
+
 
 
 class ToolRegistry:

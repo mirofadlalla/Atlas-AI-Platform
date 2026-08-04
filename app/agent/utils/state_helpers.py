@@ -30,11 +30,11 @@ def get_current_question(state: AgentState) -> str:
     return state.get("question", "")
 
 
-def create_initial_state(question: str, tenant_id: str | int) -> AgentState:
+def create_initial_state(question: str, tenant_id: str | int, run_id: str | None = None) -> AgentState:
     return {
         "question": question,
         "tenant_id": str(tenant_id),
-        "run_id": str(uuid.uuid4()),
+        "run_id": run_id or str(uuid.uuid4()),
         "start_time": time.time(),
         "thoughts": [],
         "observation_history": [],
@@ -68,6 +68,9 @@ def create_initial_state(question: str, tenant_id: str | int) -> AgentState:
 
 
 def is_timed_out(state: AgentState) -> bool:
+    '''
+    Check if the agent has exceeded its allowed execution time.
+    '''
     start = state.get("start_time")
     if start is None:
         return False
@@ -75,6 +78,9 @@ def is_timed_out(state: AgentState) -> bool:
 
 
 def budget_exceeded(state: AgentState) -> tuple[bool, str | None]:
+    '''
+    
+    '''
     if is_timed_out(state):
         return True, "Agent execution timed out"
 

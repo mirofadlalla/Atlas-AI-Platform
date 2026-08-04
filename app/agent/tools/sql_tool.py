@@ -28,7 +28,7 @@ class SQLTool(AgentTool):
                 raw_sql,
                 state["tenant_id"],
             )
-            cost, rows = SQLValidator.explain_and_execute(safe_sql, params, execute=True)
+            cost, _ = SQLValidator.explain_and_execute(safe_sql, params, execute=False)
 
             if cost > agent_settings.sql_max_allowed_cost:
                 msg = (
@@ -42,6 +42,8 @@ class SQLTool(AgentTool):
                         "sql_has_results": False,
                     },
                 )
+
+            _, rows = SQLValidator.explain_and_execute(safe_sql, params, execute=True)
 
             rows = rows[: agent_settings.sql_max_rows]
             result_str, has_data = format_sql_results(rows)

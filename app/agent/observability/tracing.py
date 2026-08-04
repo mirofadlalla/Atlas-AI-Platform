@@ -12,10 +12,54 @@ from typing import Any, Generator
 logger = logging.getLogger(__name__)
 
 
+# الفكرة الأساسية هي إن كل خطوة في الـ Agent (Node) تتلف حوالينها بـ Span، بحيث تعرف:
+# بدأت إمتى؟
+# انتهت إمتى؟
+# استغرقت قد إيه؟
+# نجحت ولا فشلت؟
+# كانت تخص أي Run؟
+# كانت تخص أي Tenant؟
+
+# وده بيساعد جدًا في الـ Debugging والـ Monitoring.
+# الفكرة العامة
+
+# تخيل إن عندك Agent بالشكل ده:
+# User Question
+#       │
+#       ▼
+# Retrieve Documents
+#       │
+#       ▼
+# Rank Results
+#       │
+#       ▼
+# Generate SQL
+#       │
+#       ▼
+# Execute Query
+
+# كل خطوة من دول اسمها Span.
+# ولما كلهم يتجمعوا يبقى عندك Trace كامل.
+
+# مثلاً:
+# Trace
+# │
+# ├── Retrieve
+# │      130 ms
+# │
+# ├── Reranker
+# │      40 ms
+# │
+# ├── SQL Generator
+# │      180 ms
+# │
+# └── Execute
+#        20 ms
+
 @dataclass
 class Span:
-    trace_id: str
-    span_id: str
+    trace_id: str # كل الـ Spans الخاصة بنفس الطلب ليها نفس Trace ID.
+    span_id: str # كل Span ليها ID خاص.
     name: str
     start_time: float
     attributes: dict[str, Any] = field(default_factory=dict)

@@ -48,7 +48,7 @@ RULES:
 - Only generate SELECT queries.
 - NEVER use UPDATE, DELETE, INSERT, DROP, or ALTER.
 - Do not hallucinate tables or columns.
-- tenant_id filtering is added automatically; do not hard-code tenant values.
+- do not add tenant_id filtering so it's added automatically in valdiation step.;
 - Return ONLY JSON matching this schema: {{"sql": "SELECT ... FROM ... WHERE ..."}}
 
 DATABASE SCHEMA:

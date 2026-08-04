@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 tool_registry.register(SQLTool())
 tool_registry.register(RetrievalTool())
 
-
+# مسؤولة عن تحديث الـ State بعد أي Tool.
 def _apply_tool_result(state: AgentState, result, tool_name: str) -> dict:
     history = state.get("observation_history", [])
     obs_record = result.to_observation_record(tool_name)
