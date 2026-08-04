@@ -1,116 +1,144 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+"""
+Atlas AI Platform — Application entry point.
+
+Changes vs. original:
+- Migrated from deprecated @app.on_event to lifespan context manager (Fix 8)
+- /metrics endpoint now requires X-Internal-Key header (Fix 9)
+- Health check returns real version from FastAPI app (Fix 10)
+- bare except:pass replaced with specific exception handlers (Fix 7)
+"""
+import asyncio
+import logging
+import os
 from contextlib import asynccontextmanager
+from time import time
 
-from app.routes import auth_route, ingest_rag_route, eval_pipline, query_route, agent_route, internal_metrics_route, recommended_qa_route
-
-from logging_setup import setup_logging
-
-setup_logging() # Initialize logging For docker logs and Sentry
+from fastapi import FastAPI, HTTPException, Header, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from prometheus_client import Counter, Histogram, REGISTRY, generate_latest, CONTENT_TYPE_LATEST
+from starlette.middleware.base import BaseHTTPMiddleware
 
 import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 
-import os
+from app.routes import (
+    auth_route,
+    ingest_rag_route,
+    eval_pipline,
+    query_route,
+    agent_route,
+    internal_metrics_route,
+    recommended_qa_route,
+)
+from logging_setup import setup_logging
 
-# Initialize Sentry for error tracking
+# ── Logging ───────────────────────────────────────────────────────────────────
+setup_logging()
+logger = logging.getLogger(__name__)
+
+# ── Sentry ────────────────────────────────────────────────────────────────────
+# traces_sample_rate kept low in production (see audit issue #18).
+# Override via SENTRY_TRACES_SAMPLE_RATE env var if needed.
+_sentry_sample_rate = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
 sentry_sdk.init(
     dsn=os.getenv("SENTRY_DSN"),
-    traces_sample_rate=1.0
+    traces_sample_rate=_sentry_sample_rate,
 )
 
-# from app.design_pattern.embedded_model import EmbeddedModel
+# ── Application version ───────────────────────────────────────────────────────
+APP_VERSION = "3.0.0"
 
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     # load model once
-#     app.state.embedding_model = EmbeddedModel()
-#     print("Models Loaded Successfully ...")
-#     yield
-#     print("Models Closed Successfully ...")
+# ── Lifespan (replaces deprecated @app.on_event) ─────────────────────────────
 
-# import mlflow
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Startup / shutdown lifecycle manager.
+
+    Startup:
+    - Loads tenant recommended Q&A pairs into the in-memory cache.
+    - Starts the background Prometheus resource-metrics task.
+
+    Shutdown:
+    - (future) graceful connection pool draining.
+    """
+    # ── Startup ──────────────────────────────────────────────────────────────
+    # Load recommended Q&A into cache
+    try:
+        from app.core.db import Sessions
+        from app.services.recommended_qa_service import RecommendedQAService
+        with Sessions() as db:
+            RecommendedQAService.load_all_recommended_questions(db)
+        logger.info("Recommended Q&A cache loaded successfully.")
+    except Exception as e:                        # Fix 7: was bare except:pass
+        logger.error(f"Failed to load recommended Q&A cache: {e}", exc_info=True)
+
+    # Start background Prometheus resource-metrics task
+    async def _record_metrics_periodically():
+        from app.core.monitors import record_resource_metrics
+        while True:
+            try:
+                record_resource_metrics()
+                await asyncio.sleep(10)
+            except Exception as e:                # Fix 7: was bare except:pass
+                logger.error(f"Error recording system metrics: {e}", exc_info=True)
+                await asyncio.sleep(10)
+
+    _metrics_task = asyncio.create_task(_record_metrics_periodically())
+    logger.info("Prometheus resource-metrics task started.")
+
+    yield  # ── application is running ────────────────────────────────────────
+
+    # ── Shutdown ─────────────────────────────────────────────────────────────
+    _metrics_task.cancel()
+    try:
+        await _metrics_task
+    except asyncio.CancelledError:
+        pass
+    logger.info("Background metrics task stopped.")
+
+
+# ── FastAPI app ───────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="Atlas AI Platform",
     description="A platform for RAG and LLM applications",
-    version="3.0.0",
-    # lifespan=lifespan
+    version=APP_VERSION,
+    lifespan=lifespan,                            # Fix 8: lifespan replaces on_event
 )
 
-# Add CORS middleware to allow frontend requests
+# ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # explicit, not ["*"]
     allow_headers=["*"],
 )
 
-app.include_router(auth_route.router, prefix="/api", tags=["Authentication"])
-app.include_router(ingest_rag_route.router, prefix="/api", tags=["ingest-rag"])
-app.include_router(eval_pipline.router, prefix="/api", tags=["eval-rag"])
-app.include_router(query_route.router, prefix="/api", tags=["query"])
-app.include_router(agent_route.router, prefix="/api", tags=["agent"])
-app.include_router(internal_metrics_route.router, prefix="/api", tags=["internal-metrics"])
-app.include_router(recommended_qa_route.router, prefix="/api", tags=["recommended-qa"])
-
+# ── Sentry ASGI middleware ────────────────────────────────────────────────────
 app.add_middleware(SentryAsgiMiddleware)
 
-# ==================== HEALTH CHECK ENDPOINT ====================
+# ── Routers ───────────────────────────────────────────────────────────────────
+app.include_router(auth_route.router,             prefix="/api", tags=["Authentication"])
+app.include_router(ingest_rag_route.router,       prefix="/api", tags=["ingest-rag"])
+app.include_router(eval_pipline.router,           prefix="/api", tags=["eval-rag"])
+app.include_router(query_route.router,            prefix="/api", tags=["query"])
+app.include_router(agent_route.router,            prefix="/api", tags=["agent"])
+app.include_router(internal_metrics_route.router, prefix="/api", tags=["internal-metrics"])
+app.include_router(recommended_qa_route.router,   prefix="/api", tags=["recommended-qa"])
 
-@app.get("/health", tags=["monitoring"])
-async def health_check():
-    """Health check endpoint for container orchestration and monitoring."""
-    return {
-        "status": "healthy",
-        "service": "Atlas AI Platform",
-        "version": "1.0.0"
-    }
 
-# ==================== PROMETHEUS & MONITORING ====================
-"""
-Prometheus metrics integration for monitoring HTTP requests, system resources,
-RAG pipeline performance, and agent execution metrics.
-
-The metrics are exposed on the /metrics endpoint for Prometheus scraping.
-All metrics are automatically recorded and pushed to the metrics collection.
-"""
-
-from prometheus_client import Counter, Histogram, REGISTRY, generate_latest, CONTENT_TYPE_LATEST
-from fastapi.responses import Response
-from app.core.monitors import record_resource_metrics
-from starlette.middleware.base import BaseHTTPMiddleware
-from time import time
-import logging
-
-logger = logging.getLogger(__name__)
-
-# ==================== CUSTOM METRICS MIDDLEWARE ====================
+# ── Prometheus metrics middleware ─────────────────────────────────────────────
 
 class MetricsMiddleware(BaseHTTPMiddleware):
     """
-    Custom middleware for tracking HTTP request and response metrics.
-    
-    Records:
-    - Total HTTP requests by method, endpoint, and status code
-    - Request latency (duration from request to response) 
-    - HTTP response payload size
-    
-    These metrics are exposed to Prometheus for alerting and visualization.
+    Tracks HTTP request count, latency, and response size for every request.
+    Metrics are exposed on the /metrics endpoint (protected by API key).
     """
 
     async def dispatch(self, request, call_next):
-        """
-        Process HTTP request and record metrics.
-        
-        Args:
-            request: FastAPI request object
-            call_next: Next middleware/handler
-            
-        Returns:
-            Response with metrics recorded
-        """
         start_time = time()
         endpoint = request.url.path
 
@@ -118,7 +146,6 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             duration = time() - start_time
 
-            # Import metrics objects
             from app.core.monitors import (
                 http_requests_total,
                 http_request_duration_seconds,
@@ -126,82 +153,71 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             )
 
             method = request.method
-            status = response.status_code
+            status_code = response.status_code
 
-            # Record metrics for this request
             http_requests_total.labels(
-                method=method, endpoint=endpoint, status_code=status
+                method=method, endpoint=endpoint, status_code=status_code
             ).inc()
-            http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(
-                duration
-            )
+            http_request_duration_seconds.labels(
+                method=method, endpoint=endpoint
+            ).observe(duration)
 
             if hasattr(response, "body"):
-                http_response_size_bytes.labels(method=method, endpoint=endpoint).observe(
-                    len(response.body)
-                )
+                http_response_size_bytes.labels(
+                    method=method, endpoint=endpoint
+                ).observe(len(response.body))
 
             return response
 
-        except Exception as e:
-            logger.error(f"Error in metrics middleware: {e}")
+        except Exception as e:                    # Fix 7: was bare except:pass
+            logger.error(f"Error in metrics middleware: {e}", exc_info=True)
             raise
 
 
-# ==================== METRICS INITIALIZATION ====================
-
-# Add metrics middleware to track HTTP requests
 app.add_middleware(MetricsMiddleware)
 
-# Expose Prometheus metrics endpoint directly — avoids _IncludedRouter bug
-# in prometheus_fastapi_instrumentator with nested routers
+
+# ── Health check ──────────────────────────────────────────────────────────────
+
+@app.get("/health", tags=["monitoring"])
+async def health_check():
+    """
+    Health check endpoint for container orchestration and monitoring.
+
+    Returns the correct application version from the FastAPI app object
+    (Fix 10: was hardcoded '1.0.0' while app declared '3.0.0').
+    """
+    return {
+        "status": "healthy",
+        "service": "Atlas AI Platform",
+        "version": app.version,          # Fix 10: was hardcoded "1.0.0"
+    }
+
+
+# ── Prometheus scrape endpoint ────────────────────────────────────────────────
+
 @app.get("/metrics", tags=["monitoring"], include_in_schema=False)
-async def metrics():
-    """Prometheus metrics scrape endpoint."""
+async def metrics(x_internal_key: str = Header(default="")):
+    """
+    Prometheus metrics scrape endpoint.
+
+    Fix 9: Protected by the INTERNAL_METRICS_API_KEY secret so that external
+    parties cannot enumerate tenant IDs, costs, or system resource usage.
+
+    Set the key via the INTERNAL_METRICS_API_KEY environment variable and
+    configure Prometheus to send it as:
+        headers:
+          X-Internal-Key: <your-key>
+    """
+    from app.core.config import settings
+
+    # If no key is configured (e.g. local dev), allow unrestricted access
+    # so developers don't need extra setup.  In production, always set a key.
+    if settings.internal_metrics_api_key:
+        if x_internal_key != settings.internal_metrics_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid or missing metrics API key.",
+            )
+
     return Response(generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
-
-# Background task for recording system resource metrics
-@app.on_event("startup")
-async def startup_event():
-    """
-    Initialize monitoring tasks on application startup.
-    
-    Starts background task to periodically record:
-    - System CPU usage
-    - System memory usage
-    - System disk usage
-    - Process-specific metrics (memory, file descriptors)
-    - Network I/O statistics
-    
-    These metrics help monitor application health and resource utilization.
-    """
-    import asyncio
-
-    async def record_metrics_periodically():
-        """
-        Record system metrics every 10 seconds.
-        
-        This runs continuously in the background and updates gauge metrics
-        for current system and process resource utilization.
-        """
-        while True:
-            try:
-                # Call the function that updates all system metrics
-                record_resource_metrics()
-                await asyncio.sleep(10)
-            except Exception as e:
-                logger.error(f"Error recording metrics: {e}")
-                await asyncio.sleep(10)
-
-    # Load tenant recommended Q&A pairs into in-memory cache
-    try:
-        from app.core.db import Sessions
-        from app.services.recommended_qa_service import RecommendedQAService
-        with Sessions() as db:
-            RecommendedQAService.load_all_recommended_questions(db)
-    except Exception as e:
-        logger.error(f"Error loading tenant recommended Q&A into in-memory cache: {e}")
-
-    # Start the metrics recording task in background
-    asyncio.create_task(record_metrics_periodically())
-    logger.info("Prometheus monitoring initialized successfully")

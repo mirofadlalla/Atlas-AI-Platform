@@ -154,4 +154,7 @@ async def record_metrics(
         
     except Exception as e:
         logger.error(f"Error recording internal metrics: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while recording metrics. Please try again.",
+        )

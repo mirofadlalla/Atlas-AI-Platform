@@ -42,7 +42,12 @@ class AuthService:
 
         # Create admin
         hashed_password = password_hash(user_data.password)
-        new_user = self.user_repo.create(user_data.name, user_data.email, hashed_password, tenant_obj.id , role="admin")
+        new_user = self.user_repo.create(user_data.name,
+                                          user_data.email,
+                                            hashed_password,
+                                              tenant_obj.id,
+                                                role="admin"
+                                        )
         
         # Generate token
         access_token = create_access_token({

@@ -1,43 +1,55 @@
+from typing import Optional
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
+    """
+    Application settings loaded from environment variables / .env file.
 
-    postgres_user : str = "postgres"
-    postgres_pass : str = "1234"
-    postgres_host : str = "localhost"
-    postgres_port : int = 5432
-    postgres_db : str =  ""
-    hf_api : str = ""
-    api_secret_key : str = ""
+    REQUIRED secrets (no default — app refuses to start if unset):
+        POSTGRES_PASS, API_SECRET_KEY
 
-    # LLM — Groq
+    Recommended to set (app warns loudly if missing):
+        REDIS_PASSWORD, GROQ_API_KEY, JINA_API_KEY
+    """
+
+    # ── PostgreSQL ────────────────────────────────────────────────────────
+    postgres_user: str = "postgres"
+    postgres_pass: str          # REQUIRED — no default intentionally
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_db: str = ""
+
+    # ── JWT Auth ──────────────────────────────────────────────────────────
+    api_secret_key: str         # REQUIRED — no default intentionally
+
+    # ── External APIs ─────────────────────────────────────────────────────
+    hf_api: str = ""
     groq_api_key: str = ""
-
-    # Embeddings — Jina AI (primary) + ngrok vLLM (secondary fallback)
     jina_api_key: str = ""
-    remote_embed_url: str = ""  # e.g. https://xxx.ngrok-free.dev  (fine-tuned vLLM on remote device)
+    remote_embed_url: str = ""
 
-    # Internal service-to-service authentication token (used by Celery → FastAPI metrics endpoint)
+    # ── Internal service-to-service auth (Celery → FastAPI metrics) ───────
     internal_metrics_api_key: str = ""
-    
-    # Redis settings
+
+    # ── Redis ─────────────────────────────────────────────────────────────
     redis_host: str = "localhost"
     redis_port: int = 6379
-    redis_password: str = "atlas_redis_password"
+    redis_password: str = ""   # Empty = no auth; set a real password in prod
     redis_db: int = 0
 
-    # Timeout in seconds for semantic chunking step (then fallback to token-based if exceeded)
+    # ── RAG pipeline timeouts ─────────────────────────────────────────────
     semantic_chunking_timeout: int = 900
-    # Timeout in seconds for each embedding API request
     embedding_request_timeout: float = 120.0
 
-    # Qdrant & RAG settings
+    # ── Qdrant ────────────────────────────────────────────────────────────
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection_name: str = "atlas_documents1"
     sparse_embedding_model: str = "Qdrant/bm25"
     cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2"
 
-    # SMTP & Email Settings
+    # ── SMTP / Email ──────────────────────────────────────────────────────
     smtp_server: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_username: str = ""
@@ -46,31 +58,49 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
 
     class Config:
-        env_file = '.env'
+        env_file = ".env"
         extra = "ignore"
 
+    # ── Startup validation ────────────────────────────────────────────────
+    @model_validator(mode="after")
+    def _check_required_secrets(self) -> "Settings":
+        """
+        Fail fast at import time if required secrets are missing.
+        This prevents accidentally running production with empty/default credentials.
+        """
+        missing = []
+        if not self.postgres_pass:
+            missing.append("POSTGRES_PASS")
+        if not self.api_secret_key:
+            missing.append("API_SECRET_KEY")
+        if missing:
+            raise ValueError(
+                f"Required environment variable(s) not set: {', '.join(missing)}. "
+                "Set them in your .env file or system environment before starting the server."
+            )
+        return self
+
+    # ── Computed connection strings ───────────────────────────────────────
     @property
     def DATABASE_URL(self) -> str:
         return (
             f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_pass}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
-    
+
     @property
     def REDIS_URL(self) -> str:
-        """Return Redis URL with proper authentication"""
+        """Redis URL with optional authentication."""
         if self.redis_password:
             return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
-        else:
-            return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
-    
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
     @property
     def REDIS_URL_NO_DB(self) -> str:
-        """Return Redis URL without database number (for semantic cache)"""
+        """Redis URL without database number (for semantic cache)."""
         if self.redis_password:
             return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/0"
-        else:
-            return f"redis://{self.redis_host}:{self.redis_port}/0"
-    
-settings = Settings()
+        return f"redis://{self.redis_host}:{self.redis_port}/0"
 
+
+settings = Settings()

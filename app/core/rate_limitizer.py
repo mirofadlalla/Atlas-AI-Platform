@@ -36,6 +36,13 @@ RATE_LIMITS = {
     'guest': 20        # 20 requests per minute for guests/unauthenticated
 }
 
+# Stricter limits for sensitive unauthenticated endpoints (login, register).
+# Keyed by client IP to block brute-force / credential-stuffing attacks.
+AUTH_RATE_LIMITS = {
+    'login': 10,       # 10 attempts per minute per IP before lockout
+    'register': 5,     # 5 registrations per minute per IP
+}
+
 WINDOW = 60  # Time window in seconds (1 minute)
 
 
@@ -216,3 +223,58 @@ def reset_rate_limit(user_id: str, role: str = "user") -> bool:
     except Exception as e:
         logger.error(f"Error resetting rate limit: {e}")
         return False
+
+
+def ip_rate_limit(client_ip: str, endpoint: str = "unknown") -> None:
+    """
+    Enforce a per-IP rate limit for unauthenticated endpoints (login, register).
+
+    This function uses the client's IP address as the key so that a single
+    IP cannot brute-force credentials across multiple accounts.  Limits are
+    defined in AUTH_RATE_LIMITS and are deliberately stricter than the
+    per-user limits used for authenticated endpoints.
+
+    Args:
+        client_ip: Client IP address from the HTTP request.
+        endpoint:  Logical endpoint name used to look up the correct limit
+                   (e.g. ``'login'``, ``'register'``).
+
+    Raises:
+        HTTPException 429: If the IP has exceeded its allowed request count
+                           for the current time window.
+    """
+    if redis_client is None:
+        logger.warning("Redis not available — IP rate limiting disabled for %s", endpoint)
+        return
+
+    limit = AUTH_RATE_LIMITS.get(endpoint, AUTH_RATE_LIMITS.get("login", 10))
+
+    try:
+        now = int(time.time())
+        key = f"ip_rate:{client_ip}:{endpoint}:{now // WINDOW}"
+
+        current = redis_client.incr(key)
+        if current == 1:
+            redis_client.expire(key, WINDOW)
+
+        if current > limit:
+            logger.warning(
+                "IP rate limit exceeded — IP: %s, endpoint: %s, count: %s/%s",
+                client_ip, endpoint, current, limit,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Too many requests from your IP. "
+                    f"Limit: {limit} requests per {WINDOW} seconds."
+                ),
+            )
+
+    except HTTPException:
+        raise
+    except redis.ConnectionError as e:
+        logger.error("Redis connection error in IP rate limiter: %s", e)
+    except redis.TimeoutError as e:
+        logger.error("Redis timeout in IP rate limiter: %s", e)
+    except Exception as e:
+        logger.error("Unexpected error in IP rate limiter: %s", e)

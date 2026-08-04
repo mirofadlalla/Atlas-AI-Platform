@@ -124,8 +124,11 @@ async def evaluate(
         }
         
     except Exception as e:
-        logger.error(f"Error starting evaluation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error starting evaluation: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while starting the evaluation. Please try again.",
+        )
     finally:
         MLflowService.end_run(status="FINISHED")
 
@@ -166,8 +169,11 @@ async def generate_dataset(
         }
         
     except Exception as e:
-        logger.error(f"Error starting dataset generation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error starting dataset generation: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while starting dataset generation. Please try again.",
+        )
 
 
 @router.get("/status/{task_id}")
@@ -191,5 +197,8 @@ async def get_status(task_id: str):
             "result": task_result.result if task_result.status == 'SUCCESS' else None
         }
     except Exception as e:
-        logger.error(f"Error getting task status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting task status: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while retrieving task status. Please try again.",
+        )

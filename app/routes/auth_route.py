@@ -5,7 +5,7 @@ Handles user registration, login, invitation management, and admin approval work
 Also handles multi-tenant SaaS registration for new organizations.
 """
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -27,7 +27,7 @@ from app.services.auth_services.auth_admin_service import AuthService
 from app.services.invitation_service import InvitationService
 from app.repositories.user_repository import UserRepository
 from app.controllers.auth_controller import AuthController
-from app.core.rate_limitizer import rate_limit
+from app.core.rate_limitizer import rate_limit, ip_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -67,32 +67,25 @@ def register_tenant(request: TenantRegistrationRequest, db: Session = Depends(ge
 # ==================== Basic Authentication ====================
 
 @router.post("/register", response_model=Token)
-def register(user: UserCreate, db: Session = Depends(get_db)):
+def register(user: UserCreate, request: Request, db: Session = Depends(get_db)):
     """
     Register a new admin user and create tenant.
-    
-    Args:
-        user: User registration data
-        db: Database session
-        
-    Returns:
-        Access token for newly registered admin
+
+    Rate-limited per client IP (5 requests/minute) to prevent mass account creation.
     """
+    ip_rate_limit(client_ip=request.client.host, endpoint="register")
     return AuthController.register(user, db)
 
 
 @router.post("/login", response_model=Token)
-def login(user: UserLogin, db: Session = Depends(get_db)):
+def login(user: UserLogin, request: Request, db: Session = Depends(get_db)):
     """
     Login user and return access token.
-    
-    Args:
-        user: Login credentials
-        db: Database session
-        
-    Returns:
-        Access token
+
+    Rate-limited per client IP (10 requests/minute) to prevent brute-force
+    and credential-stuffing attacks.
     """
+    ip_rate_limit(client_ip=request.client.host, endpoint="login")
     return AuthController.login(user, db)
 
 

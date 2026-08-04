@@ -23,9 +23,17 @@ from app.core.db import get_db
 router = APIRouter(prefix="/agent", tags=["agent"])
 logger = logging.getLogger(__name__)
 
+from pydantic import BaseModel, Field
+
 class AgentRequest(BaseModel):
-    """Request model for agent endpoints"""
-    question: str
+    """Request model for agent endpoints."""
+    question: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        strip_whitespace=True,
+        description="The question for the agent to reason about (1–2000 characters).",
+    )
     run_id: str | None = None  # optional idempotency key for retries
 
 @router.post("/ask-agent")
