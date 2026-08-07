@@ -16,6 +16,12 @@ const AgentPage = () => {
   const [loading, setLoading] = useState(false);
   const [recommendedQA, setRecommendedQA] = useState([]);
   const messagesEndRef = useRef(null);
+  const sessionIdRef = useRef(sessionStorage.getItem('atlas-agent-session-id'));
+
+  if (!sessionIdRef.current) {
+    sessionIdRef.current = crypto.randomUUID();
+    sessionStorage.setItem('atlas-agent-session-id', sessionIdRef.current);
+  }
 
   useEffect(() => {
     const fetchRecommended = async () => {
@@ -76,7 +82,7 @@ const AgentPage = () => {
         return;
       }
 
-      const response = await apiService.askAgent(question, tenantId);
+      const response = await apiService.askAgent(question, tenantId, sessionIdRef.current);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -194,7 +200,7 @@ const AgentPage = () => {
         return;
       }
 
-      const response = await apiService.askAgentBatch(question, tenantId);
+      const response = await apiService.askAgentBatch(question, tenantId, sessionIdRef.current);
 
       if (response.success) {
         setFinalAnswer(String(response.final_answer || ''));

@@ -30,10 +30,19 @@ def get_current_question(state: AgentState) -> str:
     return state.get("question", "")
 
 
-def create_initial_state(question: str, tenant_id: str | int, run_id: str | None = None) -> AgentState:
+def create_initial_state(
+    question: str,
+    tenant_id: str | int,
+    run_id: str | None = None,
+    user_id: str | int | None = None,
+    session_id: str | None = None,
+) -> AgentState:
     return {
         "question": question,
         "tenant_id": str(tenant_id),
+        "user_id": str(user_id) if user_id is not None else "",
+        "session_id": session_id,
+        "conversation_history": [],
         "run_id": run_id or str(uuid.uuid4()),
         "start_time": time.time(),
         "thoughts": [],

@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_password: str = ""   # Empty = no auth; set a real password in prod
     redis_db: int = 0
+    stm_ttl_seconds: int = 7200
+    stm_max_turns: int = 20
 
     # ── RAG pipeline timeouts ─────────────────────────────────────────────
     semantic_chunking_timeout: int = 900

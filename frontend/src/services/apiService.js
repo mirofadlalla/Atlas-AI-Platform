@@ -166,11 +166,11 @@ class ApiService {
   }
 
   // Query endpoints
-  async askQuestion(query) {
+  async askQuestion(query, sessionId) {
     const response = await fetch(`${this.baseURL}/query/ask`, {
       method: 'POST',
       headers: this.getHeaders(),
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, session_id: sessionId }),
     });
     return {
       ok: response.ok,
@@ -348,12 +348,13 @@ class ApiService {
   }
 
   // Agent endpoints
-  async askAgent(question, tenantId) {
+  async askAgent(question, tenantId, sessionId) {
     const response = await fetch(`${this.baseURL}/agent/ask-agent`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
         question,
+        session_id: sessionId,
       }),
     });
     
@@ -364,12 +365,13 @@ class ApiService {
     };
   }
 
-  async askAgentBatch(question, tenantId) {
+  async askAgentBatch(question, tenantId, sessionId) {
     const response = await fetch(`${this.baseURL}/agent/ask-agent-batch`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
         question,
+        session_id: sessionId,
       }),
     });
     return this.handleResponse(response);

@@ -11,6 +11,12 @@ function QueryPage({ user }) {
   const [error, setError] = useState('');
   const [recommendedQA, setRecommendedQA] = useState([]);
   const answerBoxRef = useRef(null);
+  const sessionIdRef = useRef(sessionStorage.getItem('atlas-query-session-id'));
+
+  if (!sessionIdRef.current) {
+    sessionIdRef.current = crypto.randomUUID();
+    sessionStorage.setItem('atlas-query-session-id', sessionIdRef.current);
+  }
 
   useEffect(() => {
     const fetchRecommended = async () => {
@@ -45,7 +51,7 @@ function QueryPage({ user }) {
 
     try {
       // Get the streaming response
-      const streamResponse = await apiService.askQuestion(query);
+      const streamResponse = await apiService.askQuestion(query, sessionIdRef.current);
       
       if (!streamResponse.ok) {
         throw new Error(`Error: ${streamResponse.status}`);

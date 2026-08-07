@@ -11,6 +11,9 @@ class SubAnswer(TypedDict):
 class AgentState(TypedDict, total=False):
     question: str
     tenant_id: str
+    user_id: str
+    session_id: str | None
+    conversation_history: list[dict[str, str]]
     run_id: str
     start_time: float
 

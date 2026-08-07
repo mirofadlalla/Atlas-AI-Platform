@@ -35,8 +35,28 @@ from app.agent.utils.state_transitions import (
     is_single_subquestion,
     should_synthesize_final,
 )
+from app.memory.short_term_memory import ConversationTurn, ShortTermMemory
 
 logger = logging.getLogger(__name__)
+
+
+def _format_history(history: list[dict[str, str]]) -> str:
+    return "\n".join(f"{turn.get('role', 'user').title()}: {turn.get('content', '')}" for turn in history)
+
+
+async def memory_read_node(state: AgentState):
+    """Load session turns before the agent begins planning."""
+    history = ShortTermMemory().load(state.get("tenant_id", ""), state.get("user_id", ""), state.get("session_id"))
+    return {"conversation_history": history}
+
+
+async def memory_write_node(state: AgentState):
+    """Persist the completed user/assistant turn after final synthesis."""
+    memory = ShortTermMemory()
+    args = (state.get("tenant_id", ""), state.get("user_id", ""), state.get("session_id"))
+    memory.save(*args, ConversationTurn("user", state.get("question", ""), ""))
+    memory.save(*args, ConversationTurn("assistant", state.get("final_answer", ""), ""))
+    return {}
 
 tool_registry.register(SQLTool())
 tool_registry.register(RetrievalTool())
@@ -86,7 +106,7 @@ async def _run_node(name: str, state: AgentState, fn):
 async def decompose_node(state: AgentState):
     async def _inner(s: AgentState):
         question = s.get("question", "")
-        prompt = prompt_registry.decompose(question)
+        prompt = prompt_registry.decompose(question, _format_history(s.get("conversation_history", [])))
         try:
             response_dict = await asyncio.to_thread(
                 with_retry,
@@ -154,6 +174,7 @@ async def thought_node(state: AgentState):
             s.get("step_count", 0),
             actions_context,
             guidance,
+            _format_history(s.get("conversation_history", [])),
         )
         try:
             response = await asyncio.to_thread(

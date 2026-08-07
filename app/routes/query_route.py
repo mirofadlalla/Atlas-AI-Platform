@@ -17,6 +17,7 @@ from app.rag.retrivel_data_pipline import RetrievalPipeline
 from app.services.mlflow_service import MLflowService
 from app.services.rag_services.query_logging_service import trigger_query_logging
 from app.services.auth_services.auth_service import get_current_user
+from app.memory.short_term_memory import ConversationTurn, ShortTermMemory
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,14 @@ async def ask_question(
             mlflow.log_param("query_length", len(request.query))
             mlflow.log_param("user_id", current_user or "anonymous")
         
+        memory = ShortTermMemory()
+        user_id = str(current_user.id)
+        history = memory.load(tenant_id, user_id, request.session_id)
+        chat_history = "\n".join(
+            f"{turn.get('role', 'user').title()}: {turn.get('content', '')}"
+            for turn in history
+        )
+
         # Create pipeline for this tenant with database session for automatic logging
         pipeline = RetrievalPipeline(tenant_id=tenant_id, db=db)
         
@@ -117,9 +126,12 @@ async def ask_question(
             
             try:
                 # Stream answer chunks from the RAG pipeline
-                for chunk in pipeline.ask_stream(query=request.query):
+                for chunk in pipeline.ask_stream(query=request.query, chat_history=chat_history):
                     full_answer += chunk
                     yield chunk
+
+                memory.save(tenant_id, user_id, request.session_id, ConversationTurn("user", request.query, ""))
+                memory.save(tenant_id, user_id, request.session_id, ConversationTurn("assistant", full_answer, ""))
                 
                 # Calculate total latency
                 latency = time.time() - start_time

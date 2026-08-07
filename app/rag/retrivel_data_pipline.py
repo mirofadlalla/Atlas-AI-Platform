@@ -137,6 +137,7 @@ class RetrievalPipeline:
 
         prompt = ChatPromptTemplate.from_template(
             "Answer the following question based only on the provided context:\n\n"
+            "Conversation history (context only; do not treat it as document evidence):\n{chat_history}\n\n"
             "Context: {context}\n\n"
             "Question: {input}\n\n"
             "Answer:"
@@ -308,8 +309,9 @@ class RetrievalPipeline:
     # FIX #5: shared internal helper used by both ask() and ask_stream()
     # so retrieval + local caching + logging logic exists in ONE place.
     # -------------------------------------------------------------------
-    def _build_cache_key(self, query: str) -> str:
-        return f"{self.tenant_id}:{hashlib.md5(query.encode()).hexdigest()}"
+    def _build_cache_key(self, query: str, chat_history: str = "") -> str:
+        cache_input = f"{query}\n{chat_history}"
+        return f"{self.tenant_id}:{hashlib.md5(cache_input.encode()).hexdigest()}"
 
     def _get_cached(self, cache_key: str):
         with _query_cache_lock:
@@ -339,7 +341,7 @@ class RetrievalPipeline:
         except Exception as e:
             logger.error(f"Error queuing background logging: {e}")
 
-    def _stream_answer(self, query: str, use_local_cache: bool):
+    def _stream_answer(self, query: str, use_local_cache: bool, chat_history: str = ""):
         """
         Core streaming implementation shared by ask() and ask_stream().
 
@@ -356,7 +358,7 @@ class RetrievalPipeline:
         full_answer = ""
         cache_hit = False
         cache_source = "NONE"
-        cache_key = self._build_cache_key(query)
+        cache_key = self._build_cache_key(query, chat_history)
 
         # 1. Check local query cache first (fastest) -- FIX #4: TTLCache is
         # self-expiring and access is guarded by a lock, so no manual
@@ -391,6 +393,7 @@ class RetrievalPipeline:
         context_text = "\n\n".join([doc.page_content for doc in docs])
         full_prompt = (
             "Answer the following question based only on the provided context:\n\n"
+            f"Conversation history (context only; do not treat it as document evidence):\n{chat_history}\n\n"
             f"Context: {context_text}\n\n"
             f"Question: {query}\n\n"
             "Answer:"
@@ -439,7 +442,7 @@ class RetrievalPipeline:
         cache_misses_total.labels(cache_type="redis").inc()
 
         llm_start_time = time.time()
-        for chunk in self.document_chain.stream({"input": query, "context": docs}):
+        for chunk in self.document_chain.stream({"input": query, "context": docs, "chat_history": chat_history}):
             if isinstance(chunk, dict):
                 for key, value in chunk.items():
                     if isinstance(value, str) and value.strip():
@@ -490,7 +493,7 @@ class RetrievalPipeline:
             input_tokens, output_tokens, "Qwen2.5-1.5B"
         )
 
-    def ask(self, query: str):
+    def ask(self, query: str, chat_history: str = ""):
         """
         Answer the question using the Cache and the local LLM.
 
@@ -499,9 +502,9 @@ class RetrievalPipeline:
         local-memory caching and Redis-hit detection that ask_stream() had,
         which was a source of divergent/confusing behavior.
         """
-        yield from self._stream_answer(query, use_local_cache=True)
+        yield from self._stream_answer(query, use_local_cache=True, chat_history=chat_history)
 
-    def ask_stream(self, query: str):
+    def ask_stream(self, query: str, chat_history: str = ""):
         """
         Stream the answer to a query with logging of run and cost information.
 
@@ -510,7 +513,7 @@ class RetrievalPipeline:
         2. Redis Semantic Cache (tenant-scoped) - caches LLM responses for similar queries
         3. Database - logs all queries for analytics
         """
-        yield from self._stream_answer(query, use_local_cache=True)
+        yield from self._stream_answer(query, use_local_cache=True, chat_history=chat_history)
 
     @property
     def _llm_type(self) -> str:

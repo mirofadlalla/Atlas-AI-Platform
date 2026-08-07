@@ -35,6 +35,7 @@ class AgentRequest(BaseModel):
         description="The question for the agent to reason about (1–2000 characters).",
     )
     run_id: str | None = None  # optional idempotency key for retries
+    session_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 @router.post("/ask-agent")
 async def ask_agent(
@@ -94,7 +95,7 @@ async def ask_agent(
         degraded = False
         degraded_reason = None
         
-        inputs = create_initial_state(request.question, current_user.tenant_id, run_id=request.run_id)
+        inputs = create_initial_state(request.question, current_user.tenant_id, run_id=request.run_id, user_id=current_user.id, session_id=request.session_id)
         if request.run_id:
             cached = get_cached_run_result(request.run_id)
             if cached:
@@ -301,7 +302,7 @@ async def ask_agent_batch(
     """
     start_time = time.time()
     
-    inputs = create_initial_state(request.question, current_user.tenant_id)
+    inputs = create_initial_state(request.question, current_user.tenant_id, user_id=current_user.id, session_id=request.session_id)
     if request.run_id:
         inputs["run_id"] = request.run_id
         cached = get_cached_run_result(request.run_id)
