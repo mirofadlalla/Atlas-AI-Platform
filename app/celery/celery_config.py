@@ -42,6 +42,10 @@ celery_app.conf.task_routes = {
         "queue": "logging_queue",
         "routing_key": "logging",
     },
+    "app.services.semantic_memory_service.extract_semantic_memory": {
+        "queue": "logging_queue",
+        "routing_key": "logging",
+    },
 }
 
 # =========================
@@ -83,3 +87,5 @@ celery_app.conf.update(
 )
 
 celery_app.autodiscover_tasks(["app.services"])
+# This module is not named ``tasks.py``, so register it explicitly in workers.
+celery_app.conf.imports = ("app.services.semantic_memory_service",)

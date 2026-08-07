@@ -36,6 +36,8 @@ from app.agent.utils.state_transitions import (
     should_synthesize_final,
 )
 from app.memory.short_term_memory import ConversationTurn, ShortTermMemory
+from app.memory.semantic_memory import SemanticMemory
+from app.services.semantic_memory_service import trigger_semantic_memory_extraction
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +46,22 @@ def _format_history(history: list[dict[str, str]]) -> str:
     return "\n".join(f"{turn.get('role', 'user').title()}: {turn.get('content', '')}" for turn in history)
 
 
+def _format_memories(memories: list[str]) -> str:
+    return "\n".join(f"- {memory}" for memory in memories)
+
+
 async def memory_read_node(state: AgentState):
     """Load session turns before the agent begins planning."""
     history = ShortTermMemory().load(state.get("tenant_id", ""), state.get("user_id", ""), state.get("session_id"))
     return {"conversation_history": history}
+
+
+async def semantic_recall_node(state: AgentState):
+    """Recall durable user facts before planning the current response."""
+    memories = SemanticMemory().recall(
+        state.get("question", ""), state.get("user_id", ""), state.get("tenant_id", "")
+    )
+    return {"recalled_memories": memories}
 
 
 async def memory_write_node(state: AgentState):
@@ -56,6 +70,9 @@ async def memory_write_node(state: AgentState):
     args = (state.get("tenant_id", ""), state.get("user_id", ""), state.get("session_id"))
     memory.save(*args, ConversationTurn("user", state.get("question", ""), ""))
     memory.save(*args, ConversationTurn("assistant", state.get("final_answer", ""), ""))
+    trigger_semantic_memory_extraction(
+        state.get("question", ""), state.get("final_answer", ""), state.get("user_id", ""), state.get("tenant_id", "")
+    )
     return {}
 
 tool_registry.register(SQLTool())
@@ -106,7 +123,9 @@ async def _run_node(name: str, state: AgentState, fn):
 async def decompose_node(state: AgentState):
     async def _inner(s: AgentState):
         question = s.get("question", "")
-        prompt = prompt_registry.decompose(question, _format_history(s.get("conversation_history", [])))
+        prompt = prompt_registry.decompose(
+            question, _format_history(s.get("conversation_history", [])), _format_memories(s.get("recalled_memories", []))
+        )
         try:
             response_dict = await asyncio.to_thread(
                 with_retry,
@@ -175,6 +194,7 @@ async def thought_node(state: AgentState):
             actions_context,
             guidance,
             _format_history(s.get("conversation_history", [])),
+            _format_memories(s.get("recalled_memories", [])),
         )
         try:
             response = await asyncio.to_thread(

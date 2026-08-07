@@ -43,6 +43,7 @@ def create_initial_state(
         "user_id": str(user_id) if user_id is not None else "",
         "session_id": session_id,
         "conversation_history": [],
+        "recalled_memories": [],
         "run_id": run_id or str(uuid.uuid4()),
         "start_time": time.time(),
         "thoughts": [],

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # ── PostgreSQL ────────────────────────────────────────────────────────
     postgres_user: str = "postgres"
-    postgres_pass: str          # REQUIRED — no default intentionally
+    postgres_pass : str = "1234"         # REQUIRED — no default intentionally
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_db: str = ""
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # ── Redis ─────────────────────────────────────────────────────────────
     redis_host: str = "localhost"
     redis_port: int = 6379
-    redis_password: str = ""   # Empty = no auth; set a real password in prod
+    redis_password: str = "atlas_redis_password"   # Empty = no auth; set a real password in prod
     redis_db: int = 0
     stm_ttl_seconds: int = 7200
     stm_max_turns: int = 20
@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     # ── Qdrant ────────────────────────────────────────────────────────────
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection_name: str = "atlas_documents1"
+    semantic_memory_collection: str = "atlas_semantic_memory"
+    semantic_memory_top_k: int = 5
     sparse_embedding_model: str = "Qdrant/bm25"
     cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2"
 

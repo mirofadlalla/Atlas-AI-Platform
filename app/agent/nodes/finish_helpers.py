@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 def _format_history(state: AgentState) -> str:
     return "\n".join(f"{turn.get('role', 'user').title()}: {turn.get('content', '')}" for turn in state.get("conversation_history", []))
 
+
+def _format_memories(state: AgentState) -> str:
+    return "\n".join(f"- {memory}" for memory in state.get("recalled_memories", []))
+
 _DEGRADED_NOTE = (
     "IMPORTANT: Data gathering was incomplete or cut short ({reason}). "
     "Answer only from the provided data and explicitly state any limitations."
@@ -75,7 +79,7 @@ def answer_subquestion(state: AgentState) -> tuple[str, list[str], dict]:
         degraded_note = _DEGRADED_NOTE.format(reason=reason) + "\n\n"
 
     prompt = prompt_registry.answer_subquestion(
-        current_question, data_summary_text, degraded_note, _format_history(state)
+        current_question, data_summary_text, degraded_note, _format_history(state), _format_memories(state)
     )
     response_dict = with_retry(
         call_agent_llm,

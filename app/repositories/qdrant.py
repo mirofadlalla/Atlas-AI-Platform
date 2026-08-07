@@ -15,6 +15,8 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+SEMANTIC_MEMORY_COLLECTION = "atlas_semantic_memory"
+
 _global_dense_model = None
 _global_sparse_model = None
 
@@ -117,6 +119,21 @@ class QdrantRepository:
             collection_name,
             list(filterable_fields.keys()),
         )
+
+    def ensure_semantic_memory_indexes(self, collection_name: str = SEMANTIC_MEMORY_COLLECTION) -> None:
+        """Ensure indexes used to filter long-term memories by owner and type."""
+        fields = {
+            "tenant_id": PayloadSchemaType.KEYWORD,
+            "user_id": PayloadSchemaType.KEYWORD,
+            "memory_type": PayloadSchemaType.KEYWORD,
+            "importance": PayloadSchemaType.FLOAT,
+        }
+        for field_name, schema in fields.items():
+            self.client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field_name,
+                field_schema=schema,
+            )
 
     def add_hybrid_documents(self, collection_name: str, documents: list[dict]):
         """

@@ -18,6 +18,8 @@ from app.services.mlflow_service import MLflowService
 from app.services.rag_services.query_logging_service import trigger_query_logging
 from app.services.auth_services.auth_service import get_current_user
 from app.memory.short_term_memory import ConversationTurn, ShortTermMemory
+from app.memory.semantic_memory import SemanticMemory
+from app.services.semantic_memory_service import trigger_semantic_memory_extraction
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +100,9 @@ async def ask_question(
             f"{turn.get('role', 'user').title()}: {turn.get('content', '')}"
             for turn in history
         )
+        recalled_memories = SemanticMemory().recall(request.query, user_id, tenant_id)
+        semantic_context = "\n".join(f"- {memory}" for memory in recalled_memories)
+        chat_history = "\n".join(part for part in [chat_history, "Relevant long-term memories:\n" + semantic_context if semantic_context else ""] if part)
 
         # Create pipeline for this tenant with database session for automatic logging
         pipeline = RetrievalPipeline(tenant_id=tenant_id, db=db)
@@ -132,6 +137,7 @@ async def ask_question(
 
                 memory.save(tenant_id, user_id, request.session_id, ConversationTurn("user", request.query, ""))
                 memory.save(tenant_id, user_id, request.session_id, ConversationTurn("assistant", full_answer, ""))
+                trigger_semantic_memory_extraction(request.query, full_answer, user_id, tenant_id)
                 
                 # Calculate total latency
                 latency = time.time() - start_time
