@@ -1,11 +1,12 @@
-name: Backend CI
-
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
 
+  push:
+    branches:
+      - main
+      - "fix/**"
+      
 permissions:
   contents: read
 
