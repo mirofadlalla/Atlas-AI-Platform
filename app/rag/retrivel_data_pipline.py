@@ -3,9 +3,17 @@ import logging
 import hashlib
 import time
 from cachetools import TTLCache
-from langchain_classic.chains import create_retrieval_chain
-from langchain_classic.chains.combine_documents import create_stuff_documents_chain
-from langchain_classic.prompts import ChatPromptTemplate
+try:
+    from langchain.chains import create_retrieval_chain
+    from langchain.chains.combine_documents import create_stuff_documents_chain
+except (ImportError, ModuleNotFoundError):
+    try:
+        from langchain.chains.retrieval import create_retrieval_chain
+        from langchain.chains.combine_documents import create_stuff_documents_chain
+    except (ImportError, ModuleNotFoundError):
+        create_retrieval_chain = None
+        create_stuff_documents_chain = None
+from langchain.prompts import ChatPromptTemplate
 from sqlalchemy.orm import Session
 
 from app.core.config import settings

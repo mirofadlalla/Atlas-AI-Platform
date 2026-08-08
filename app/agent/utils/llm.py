@@ -62,7 +62,8 @@ def call_agent_llm(
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(
                 _call_llm_sync, prompt, tier
-            )  # llm call in a separate thread to allow timeout becauze llm call is blocking and can take a long time. We want to enforce a timeout on the call.
+            )  # llm call in a separate thread to allow timeout becauze llm call is blocking and can take a long time. We want to enforce a timeout on the call.  # noqa: E501
+
             try:
                 return future.result(timeout=agent_settings.llm_timeout_seconds)
             except FuturesTimeout as exc:
