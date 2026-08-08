@@ -6,6 +6,8 @@ import logging
 
 from celery import shared_task
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,3 +43,13 @@ def trigger_semantic_memory_extraction(question: str, answer: str, user_id: str 
         logger.info("Queued semantic memory extraction tenant=%s user=%s", tenant_id, user_id)
     except Exception as exc:
         logger.warning("Could not queue semantic memory extraction: %s", exc)
+
+
+@shared_task
+def prune_low_importance_semantic_memories() -> bool:
+    """Nightly maintenance task for low-value long-term memories."""
+    from app.memory.semantic_memory import SemanticMemory
+
+    success = SemanticMemory().prune_low_importance(settings.semantic_memory_prune_importance_below)
+    logger.info("Semantic memory prune completed success=%s", success)
+    return success

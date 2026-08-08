@@ -13,7 +13,12 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.rate_limitizer import rate_limit
 from app.schema.query_request import QueryRequest
-from app.rag.retrivel_data_pipline import RetrievalPipeline
+from app.rag.retrivel_data_pipline import (
+    RetrievalPipeline,
+    build_query_cache_key,
+    get_local_query_cache,
+)
+from app.core.monitors import cache_hits_total
 from app.services.mlflow_service import MLflowService
 from app.services.rag_services.query_logging_service import trigger_query_logging
 from app.services.auth_services.auth_service import get_current_user
@@ -95,32 +100,47 @@ async def ask_question(
             mlflow.log_param("query_length", len(request.query))
             mlflow.log_param("user_id", current_user or "anonymous")
         
-        memory = ShortTermMemory()
         user_id = str(current_user.id)
+        memory = ShortTermMemory()
         history = memory.load(tenant_id, user_id, request.session_id)
-        chat_history = "\n".join(
+        short_term_history = "\n".join(
             f"{turn.get('role', 'user').title()}: {turn.get('content', '')}"
             for turn in history
         )
-        recalled_memories = SemanticMemory().recall(request.query, user_id, tenant_id)
-        semantic_context = "\n".join(f"- {memory}" for memory in recalled_memories)
-        episode_context = "\n".join(
-            f"- {summary}"
-            for summary in EpisodicMemory().get_recent(user_id, tenant_id, exclude_session_id=request.session_id)
-        )
-        chat_history = "\n".join(
-            part for part in [
-                chat_history,
-                "Relevant long-term memories:\n" + semantic_context if semantic_context else "",
-                "Recent session summaries:\n" + episode_context if episode_context else "",
-            ] if part
-        )
-
-        # Create pipeline for this tenant with database session for automatic logging
-        pipeline = RetrievalPipeline(tenant_id=tenant_id, db=db)
-        
-        # Start timing
         start_time = time.time()
+
+        # This is deliberately before semantic/episodic recall, retriever
+        # construction, document retrieval, and LLM generation.  Short-term
+        # history is the only required input because it materially changes
+        # conversational answers and is part of the key.
+        cache_key = build_query_cache_key(
+            tenant_id, request.query, short_term_history, user_id, request.session_id
+        )
+        cached_result = get_local_query_cache(cache_key)
+        cache_hit = cached_result is not None
+        if cache_hit:
+            cache_hits_total.labels(cache_type="local_memory").inc()
+            logger.info("[CACHE HIT - LOCAL MEMORY] Returning cached result for: %s...", request.query[:50])
+            chat_history = short_term_history
+            pipeline = None
+        else:
+            logger.info("[CACHE MISS - LOCAL MEMORY] Generating new answer for: %s...", request.query[:50])
+            recalled_memories = SemanticMemory().recall(request.query, user_id, tenant_id)
+            semantic_context = "\n".join(f"- {memory}" for memory in recalled_memories)
+            episode_context = "\n".join(
+                f"- {summary}"
+                for summary in EpisodicMemory().get_recent(user_id, tenant_id, exclude_session_id=request.session_id)
+            )
+            chat_history = "\n".join(
+                part for part in [
+                    short_term_history,
+                    "Relevant long-term memories:\n" + semantic_context if semantic_context else "",
+                    "Recent session summaries:\n" + episode_context if episode_context else "",
+                ] if part
+            )
+
+            # Only construct the retriever on a cache miss.
+            pipeline = RetrievalPipeline(tenant_id=tenant_id, db=db)
         
         async def answer_generator():
             """
@@ -138,40 +158,55 @@ async def ask_question(
             cost_usd = 0.0
             input_tokens = 0
             output_tokens = 0
-            cache_hit = False
-            retrieved_docs_ids = ""
+            retrieved_docs_ids = cached_result.get("docs_ids", "") if cache_hit else ""
             
             try:
-                # Stream answer chunks from the RAG pipeline
-                for chunk in pipeline.ask_stream(query=request.query, chat_history=chat_history):
-                    full_answer += chunk
-                    yield chunk
+                if cache_hit:
+                    # A hit is a completed prior interaction.  Re-running
+                    # memory writes/extraction would duplicate long-term data.
+                    full_answer = cached_result["answer"]
+                    yield full_answer
+                else:
+                    # The pipeline receives the precomputed key so its shared
+                    # streaming helper stores the same entry checked above.
+                    for chunk in pipeline.ask_stream(
+                        query=request.query,
+                        chat_history=chat_history,
+                        user_id=user_id,
+                        session_id=request.session_id,
+                        cache_key=cache_key,
+                        cache_checked=True,
+                    ):
+                        full_answer += chunk
+                        yield chunk
 
-                memory.save(tenant_id, user_id, request.session_id, ConversationTurn("user", request.query, ""))
-                memory.save(tenant_id, user_id, request.session_id, ConversationTurn("assistant", full_answer, ""))
-                trigger_semantic_memory_extraction(request.query, full_answer, user_id, tenant_id)
-                trigger_episode_write(
-                    request.session_id,
-                    history + [
-                        {"role": "user", "content": request.query},
-                        {"role": "assistant", "content": full_answer},
-                    ],
-                    user_id,
-                    tenant_id,
-                )
+                    memory.save(tenant_id, user_id, request.session_id, ConversationTurn("user", request.query, ""))
+                    memory.save(tenant_id, user_id, request.session_id, ConversationTurn("assistant", full_answer, ""))
+                    trigger_semantic_memory_extraction(request.query, full_answer, user_id, tenant_id)
+                    trigger_episode_write(
+                        request.session_id,
+                        history + [
+                            {"role": "user", "content": request.query},
+                            {"role": "assistant", "content": full_answer},
+                        ],
+                        user_id,
+                        tenant_id,
+                    )
                 
                 # Calculate total latency
                 latency = time.time() - start_time
                 
-                # Extract token usage from LLM for cost calculation
-                try:
-                    from app.services.llm_runner import CustomLocalLLM
-                    usage = getattr(CustomLocalLLM, "last_usage", {}) or {}
-                    input_tokens = usage.get("input", 0)
-                    output_tokens = usage.get("output", 0)
-                    cost_usd = (input_tokens * 0.0000001) + (output_tokens * 0.0000002)
-                except Exception as token_error:
-                    logger.warning(f"Could not extract token usage: {token_error}")
+                # A cache hit did not invoke the LLM, so do not reuse token
+                # usage left on the singleton by an earlier request.
+                if not cache_hit:
+                    try:
+                        from app.services.llm_runner import CustomLocalLLM
+                        usage = getattr(CustomLocalLLM, "last_usage", {}) or {}
+                        input_tokens = usage.get("input", 0)
+                        output_tokens = usage.get("output", 0)
+                        cost_usd = (input_tokens * 0.0000001) + (output_tokens * 0.0000002)
+                    except Exception as token_error:
+                        logger.warning(f"Could not extract token usage: {token_error}")
                 
                 # Log metrics to MLflow
                 if mlflow_run_id:
@@ -182,6 +217,7 @@ async def ask_question(
                         mlflow.log_metric("input_tokens", input_tokens)
                         mlflow.log_metric("output_tokens", output_tokens)
                         mlflow.log_metric("answer_length", len(full_answer))
+                        mlflow.log_metric("cache_hit", int(cache_hit))
                     except Exception as mlflow_error:
                         logger.error(f"Error logging to MLflow: {mlflow_error}")
                 
@@ -200,11 +236,12 @@ async def ask_question(
                         llm_tokens_generated,
                         api_calls_cost_total
                     )
-                    llm_queries_total.labels(tenant_id=tenant_id, model_name="Qwen2.5-1.5B").inc()
                     query_pipeline_duration_seconds.labels(pipeline_stage="total").observe(latency)
-                    llm_tokens_consumed.labels(tenant_id=tenant_id, model_name="Qwen2.5-1.5B").inc(input_tokens + output_tokens)
-                    llm_tokens_generated.labels(tenant_id=tenant_id, model_name="Qwen2.5-1.5B").inc(output_tokens)
-                    api_calls_cost_total.labels(tenant_id=tenant_id, service="llm").inc(cost_usd)
+                    if not cache_hit:
+                        llm_queries_total.labels(tenant_id=tenant_id, model_name="Qwen2.5-1.5B").inc()
+                        llm_tokens_consumed.labels(tenant_id=tenant_id, model_name="Qwen2.5-1.5B").inc(input_tokens + output_tokens)
+                        llm_tokens_generated.labels(tenant_id=tenant_id, model_name="Qwen2.5-1.5B").inc(output_tokens)
+                        api_calls_cost_total.labels(tenant_id=tenant_id, service="llm").inc(cost_usd)
                     
                     trigger_query_logging(
                         tenant_id=tenant_id,

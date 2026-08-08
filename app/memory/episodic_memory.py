@@ -35,3 +35,11 @@ class EpisodicMemory:
         except Exception as exc:
             logger.warning("Episodic memory read failed: %s", exc)
             return []
+
+    def clear_user(self, user_id: str | int, tenant_id: str | int) -> int:
+        try:
+            with get_db_session() as db:
+                return EpisodeRepository(db).clear_user(str(user_id), str(tenant_id))
+        except Exception as exc:
+            logger.warning("Episodic memory clear failed: %s", exc)
+            return 0

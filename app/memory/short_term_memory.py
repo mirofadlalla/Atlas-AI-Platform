@@ -101,3 +101,13 @@ class ShortTermMemory:
             self._client().delete(self.key(tenant_id, user_id, session_id))
         except Exception as exc:
             logger.warning("Short-term memory clear failed: %s", exc)
+
+    def clear_all(self, tenant_id: str | int, user_id: str | int) -> int:
+        """Clear every active session for one user without touching other users."""
+        try:
+            client = self._client()
+            keys = list(client.scan_iter(match=f"atlas:stm:{tenant_id}:{user_id}:*", count=100))
+            return int(client.delete(*keys)) if keys else 0
+        except Exception as exc:
+            logger.warning("Short-term memory bulk clear failed: %s", exc)
+            return 0

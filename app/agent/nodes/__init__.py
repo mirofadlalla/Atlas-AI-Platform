@@ -305,11 +305,12 @@ async def retrieval_node(state: AgentState):
 async def finish_node(state: AgentState):
     async def _inner(s: AgentState):
         try:
-            sub_answer_text, data_sources, llm_result = await asyncio.to_thread(
+            sub_answer_text, data_sources, llm_result, context_tokens, context_sources = await asyncio.to_thread(
                 answer_subquestion, s
             )
             next_state = build_subquestion_answer_update(s, sub_answer_text, data_sources)
             next_state.update(llm_usage_updates(llm_result, s))
+            next_state.update({"working_memory_tokens": context_tokens, "context_sources": context_sources})
 
             if should_synthesize_final(s):
                 if is_single_subquestion(s):

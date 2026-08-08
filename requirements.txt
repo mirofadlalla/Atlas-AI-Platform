@@ -44,6 +44,7 @@ httpx==0.25.2
 pydantic-settings==2.1.0
 sqlglot==25.21.3
 tenacity==8.2.3
+tiktoken>=0.7.0
 
 # Development (optional)
 pytest==7.4.3

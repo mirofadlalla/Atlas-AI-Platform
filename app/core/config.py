@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     semantic_memory_top_k: int = 5
     episodic_memory_ttl_days: int = 90
     episodic_memory_recent_limit: int = 3
+    semantic_memory_prune_importance_below: float = 0.15
+    llm_context_window_tokens: int = 8000
     sparse_embedding_model: str = "Qdrant/bm25"
     cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2"
 

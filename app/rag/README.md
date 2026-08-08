@@ -136,9 +136,9 @@ _query_cache_ttl = 3600        # 1 hour expiration
 
 **Typical hit rate**: 5-10% (same query repeated within session)
 
-### 2. **Level 2: Redis Semantic Cache**
+### 2. **Exact Answer Cache**
 
-**Purpose**: Persistent cache across workers with semantic similarity matching
+**Purpose**: Reuse only an identical query with identical assembled context.
 
 **Technology**: exact-key in-process answer cache; semantic similarity is used
 only for document retrieval and long-term memory, never to reuse final answers.
@@ -150,16 +150,8 @@ only for document retrieval and long-term memory, never to reuse final answers.
 4. If match found above threshold → return cached result
 5. If no match → proceed to vector database search
 
-**Configuration** (in `retrivel_data_pipline.py`):
-```python
-from langchain_redis import RedisSemanticCache
-
-redis_cache = RedisSemanticCache(
-    redis_url=settings.REDIS_URL_NO_DB,
-    embedding=embedding_model,
-    score_threshold=0.2  # Cosine similarity threshold
-)
-```
+**Configuration**: cache keys include the exact query and assembled conversation
+context. Semantic similarity is intentionally not used for completed answers.
 
 **Performance**:
 - ✅ Semantic matching (not just exact strings)

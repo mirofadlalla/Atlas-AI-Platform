@@ -1,4 +1,7 @@
+import time
 from unittest.mock import MagicMock, patch
+
+from cachetools import TTLCache
 import pytest
 from app.services.recommended_qa_service import RecommendedQAService, MAX_RECOMMENDED_PER_TENANT
 from app.models.recommended_qa import RecommendedQA
@@ -58,9 +61,54 @@ def test_query_cache_keys_are_exact_and_history_aware():
     pipeline = object.__new__(RetrievalPipeline)
     pipeline.tenant_id = "tenant-123"
 
-    same_question = pipeline._build_cache_key("Who is Omar?", "")
-    different_question = pipeline._build_cache_key("Where did Segments start?", "")
-    same_question_different_history = pipeline._build_cache_key("Who is Omar?", "User: Prior question")
+    same_question = pipeline._build_cache_key("Who is Omar?", "", "user-a", "session-a")
+    different_question = pipeline._build_cache_key("Where did Segments start?", "", "user-a", "session-a")
+    same_question_different_history = pipeline._build_cache_key("Who is Omar?", "User: Prior question", "user-a", "session-a")
+    same_question_different_user = pipeline._build_cache_key("Who is Omar?", "", "user-b", "session-a")
+    same_question_different_session = pipeline._build_cache_key("Who is Omar?", "", "user-a", "session-b")
 
     assert same_question != different_question
     assert same_question != same_question_different_history
+    assert same_question != same_question_different_user
+    assert same_question != same_question_different_session
+
+    other_tenant = object.__new__(RetrievalPipeline)
+    other_tenant.tenant_id = "tenant-456"
+    assert same_question != other_tenant._build_cache_key("Who is Omar?", "", "user-a", "session-a")
+
+
+def test_stream_cache_hit_skips_retrieval_and_generation():
+    """The shared streaming helper must exit before touching RAG dependencies."""
+    from app.rag.retrivel_data_pipline import RetrievalPipeline
+
+    pipeline = object.__new__(RetrievalPipeline)
+    pipeline.tenant_id = "tenant-123"
+    pipeline.retriever = MagicMock()
+    pipeline.document_chain = MagicMock()
+    pipeline._log_run = MagicMock()
+    cache_key = pipeline._build_cache_key("What is RAG?", "", "user-a", "session-a")
+    pipeline._set_cached(cache_key, {"answer": "Cached answer", "docs_ids": "doc-1"})
+
+    with patch("app.rag.retrivel_data_pipline.cache_hits_total"):
+        chunks = list(
+            pipeline.ask_stream(
+                "What is RAG?", user_id="user-a", session_id="session-a", cache_key=cache_key
+            )
+        )
+
+    assert chunks == ["Cached answer"]
+    pipeline.retriever.invoke.assert_not_called()
+    pipeline.document_chain.stream.assert_not_called()
+    pipeline._log_run.assert_called_once()
+
+
+def test_local_query_cache_entries_expire(monkeypatch):
+    import app.rag.retrivel_data_pipline as pipeline_module
+
+    short_lived_cache = TTLCache(maxsize=10, ttl=0.01)
+    monkeypatch.setattr(pipeline_module, "_query_cache", short_lived_cache)
+    pipeline_module.set_local_query_cache("expiry-key", {"answer": "temporary"})
+
+    assert pipeline_module.get_local_query_cache("expiry-key") == {"answer": "temporary"}
+    time.sleep(0.02)
+    assert pipeline_module.get_local_query_cache("expiry-key") is None

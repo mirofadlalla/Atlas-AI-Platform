@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.rag.steps.retriever import get_retriever
 from app.services.llm_runner import CustomLocalLLM
 from app.design_pattern.embedded_model import EmbeddedModel  # Ensure it's LangChain compatible
+from app.memory.working_memory import WorkingMemory
 
 # Initialize the embedding model singleton once at module load time
 _embedding_model = EmbeddedModel()
@@ -73,6 +74,44 @@ _QUERY_CACHE_MAXSIZE = 10_000
 _QUERY_CACHE_TTL_SECONDS = 3600  # 1 hour TTL
 _query_cache = TTLCache(maxsize=_QUERY_CACHE_MAXSIZE, ttl=_QUERY_CACHE_TTL_SECONDS)
 _query_cache_lock = threading.Lock()
+
+
+def build_query_cache_key(
+    tenant_id: str | int,
+    query: str,
+    chat_history: str = "",
+    user_id: str | int | None = None,
+    session_id: str | None = None,
+) -> str:
+    """Build an exact-answer cache key for the complete request scope.
+
+    The RAG answer can depend on short-term conversation history, semantic
+    memories, and episodic memories.  Those memories are user-scoped, and
+    short-term history is session-scoped, so final answers must not be shared
+    across either boundary.
+    """
+    cache_input = "\n".join(
+        (
+            f"tenant={tenant_id}",
+            f"user={user_id or ''}",
+            f"session={session_id or ''}",
+            f"query={query.strip()}",
+            f"history={chat_history}",
+        )
+    )
+    return f"{tenant_id}:{hashlib.md5(cache_input.encode()).hexdigest()}"
+
+
+def get_local_query_cache(cache_key: str):
+    """Read the thread-safe, self-expiring local final-answer cache."""
+    with _query_cache_lock:
+        return _query_cache.get(cache_key)
+
+
+def set_local_query_cache(cache_key: str, value: dict) -> None:
+    """Write the thread-safe, self-expiring local final-answer cache."""
+    with _query_cache_lock:
+        _query_cache[cache_key] = value
 
 # Token pricing now lives in settings (see FIX #7) so it can be updated in one
 # place if the underlying model or provider pricing changes.
@@ -114,9 +153,8 @@ class RetrievalPipeline:
         self.local_llm = _cached_llm
 
         prompt = ChatPromptTemplate.from_template(
-            "Answer the following question based only on the provided context:\n\n"
-            "Conversation history (context only; do not treat it as document evidence):\n{chat_history}\n\n"
-            "Context: {context}\n\n"
+            "Answer the following question based only on the assembled context:\n\n"
+            "{context}\n\n"
             "Question: {input}\n\n"
             "Answer:"
         )
@@ -224,17 +262,20 @@ class RetrievalPipeline:
     # FIX #5: shared internal helper used by both ask() and ask_stream()
     # so retrieval + local caching + logging logic exists in ONE place.
     # -------------------------------------------------------------------
-    def _build_cache_key(self, query: str) -> str:
-        cache_input = f"{query}"
-        return f"{self.tenant_id}:{hashlib.md5(cache_input.encode()).hexdigest()}"
+    def _build_cache_key(
+        self,
+        query: str,
+        chat_history: str = "",
+        user_id: str | int | None = None,
+        session_id: str | None = None,
+    ) -> str:
+        return build_query_cache_key(self.tenant_id, query, chat_history, user_id, session_id)
 
     def _get_cached(self, cache_key: str):
-        with _query_cache_lock:
-            return _query_cache.get(cache_key)
+        return get_local_query_cache(cache_key)
 
     def _set_cached(self, cache_key: str, value: dict):
-        with _query_cache_lock:
-            _query_cache[cache_key] = value
+        set_local_query_cache(cache_key, value)
 
     def _log_run(self, query, full_answer, latency, cache_hit, retrieved_docs_ids,
                  input_tokens, output_tokens, model_name):
@@ -256,7 +297,16 @@ class RetrievalPipeline:
         except Exception as e:
             logger.error(f"Error queuing background logging: {e}")
 
-    def _stream_answer(self, query: str, use_local_cache: bool = True, chat_history: str = ""):
+    def _stream_answer(
+        self,
+        query: str,
+        use_local_cache: bool = True,
+        chat_history: str = "",
+        user_id: str | int | None = None,
+        session_id: str | None = None,
+        cache_key: str | None = None,
+        cache_checked: bool = False,
+    ):
         """
         Core streaming implementation shared by ask() and ask_stream().
 
@@ -273,12 +323,12 @@ class RetrievalPipeline:
         full_answer = ""
         cache_hit = False
         cache_source = "NONE"
-        cache_key = self._build_cache_key(query)
+        cache_key = cache_key or self._build_cache_key(query, chat_history, user_id, session_id)
 
         # 1. Check local query cache first (fastest) -- FIX #4: TTLCache is
         # self-expiring and access is guarded by a lock, so no manual
         # expired-key sweep and no race condition under concurrent requests.
-        if use_local_cache:
+        if use_local_cache and not cache_checked:
             cached_result = self._get_cached(cache_key)
             if cached_result is not None:
                 cache_hit = True
@@ -298,15 +348,30 @@ class RetrievalPipeline:
 
             logger.info(f"[🔄 CACHE MISS - LOCAL MEMORY] Generating new answer for: {query[:50]}...")
 
-        # 2. Get reranked documents if reranker is enabled
+        # 2. Retrieve documents, then assemble only the highest-priority
+        # context that fits the configured model window.
         docs = self.retrieve(query) if self.use_reranker else self.retriever.invoke(query)
 
         logger.info(f"Starting answer generation for query: {query[:50]}...")
         logger.info(f"Number of context documents: {len(docs)}")
 
-        logger.info("Generating a fresh answer for tenant %s: %s...", self.tenant_id, query[:50])
+        working_memory = WorkingMemory(settings.llm_context_window_tokens)
+        assembled_context = (
+            working_memory
+            .add("conversation context", chat_history, priority=2, max_tokens=1600)
+            .add("retrieved documents", "\n\n".join(doc.page_content for doc in docs), priority=5, max_tokens=5600)
+            .assemble()
+        )
+        logger.info(
+            "Generating fresh answer tenant=%s question=%s context_tokens=%s sources=%s",
+            self.tenant_id, query[:50], working_memory.tokens_used, working_memory.context_sources,
+        )
 
-        for chunk in self.document_chain.stream({"input": query, "context": docs, "chat_history": chat_history}):
+        from langchain_core.documents import Document
+
+        for chunk in self.document_chain.stream(
+            {"input": query, "context": [Document(page_content=assembled_context)]}
+        ):
             if isinstance(chunk, dict):
                 for key, value in chunk.items():
                     if isinstance(value, str) and value.strip():
@@ -346,22 +411,44 @@ class RetrievalPipeline:
             input_tokens, output_tokens, "Qwen2.5-1.5B"
         )
 
-    def ask(self, query: str, chat_history: str = ""):
+    def ask(
+        self,
+        query: str,
+        chat_history: str = "",
+        user_id: str | int | None = None,
+        session_id: str | None = None,
+        cache_key: str | None = None,
+        cache_checked: bool = False,
+    ):
         """
         Answer the question using the Cache and the local LLM.
 
         Shares the exact-key local caching and logging path with ask_stream().
         """
-        yield from self._stream_answer(query, use_local_cache=True, chat_history=chat_history)
+        yield from self._stream_answer(
+            query, use_local_cache=True, chat_history=chat_history,
+            user_id=user_id, session_id=session_id, cache_key=cache_key, cache_checked=cache_checked,
+        )
 
-    def ask_stream(self, query: str, chat_history: str = ""):
+    def ask_stream(
+        self,
+        query: str,
+        chat_history: str = "",
+        user_id: str | int | None = None,
+        session_id: str | None = None,
+        cache_key: str | None = None,
+        cache_checked: bool = False,
+    ):
         """
         Stream the answer to a query with logging of run and cost information.
 
         Uses exact-key in-process caching. Different questions always generate
         a fresh answer, even when their embeddings or document context overlap.
         """
-        yield from self._stream_answer(query, use_local_cache=True, chat_history=chat_history)
+        yield from self._stream_answer(
+            query, use_local_cache=True, chat_history=chat_history,
+            user_id=user_id, session_id=session_id, cache_key=cache_key, cache_checked=cache_checked,
+        )
 
     @property
     def _llm_type(self) -> str:

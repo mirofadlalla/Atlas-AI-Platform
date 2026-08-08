@@ -45,6 +45,8 @@ def create_initial_state(
         "conversation_history": [],
         "recalled_memories": [],
         "episode_context": "",
+        "working_memory_tokens": 0,
+        "context_sources": [],
         "run_id": run_id or str(uuid.uuid4()),
         "start_time": time.time(),
         "thoughts": [],

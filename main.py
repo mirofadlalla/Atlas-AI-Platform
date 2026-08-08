@@ -30,6 +30,7 @@ from app.routes import (
     agent_route,
     internal_metrics_route,
     recommended_qa_route,
+    memory_route,
 )
 from logging_setup import setup_logging
 
@@ -128,6 +129,7 @@ app.include_router(query_route.router,            prefix="/api", tags=["query"])
 app.include_router(agent_route.router,            prefix="/api", tags=["agent"])
 app.include_router(internal_metrics_route.router, prefix="/api", tags=["internal-metrics"])
 app.include_router(recommended_qa_route.router,   prefix="/api", tags=["recommended-qa"])
+app.include_router(memory_route.router,           prefix="/api", tags=["memory"])
 
 
 # ── Prometheus metrics middleware ─────────────────────────────────────────────

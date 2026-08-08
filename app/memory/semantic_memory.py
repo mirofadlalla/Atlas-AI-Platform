@@ -148,3 +148,38 @@ class SemanticMemory:
         except Exception as exc:
             logger.warning("Semantic memory forget failed: %s", exc)
             return False
+
+    def clear_user(self, user_id: str | int, tenant_id: str | int) -> bool:
+        """Remove all durable semantic memories owned by one user."""
+        try:
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[
+                            models.FieldCondition(key="tenant_id", match=models.MatchValue(value=str(tenant_id))),
+                            models.FieldCondition(key="user_id", match=models.MatchValue(value=str(user_id))),
+                        ]
+                    )
+                ),
+            )
+            return True
+        except Exception as exc:
+            logger.warning("Semantic memory clear failed: %s", exc)
+            return False
+
+    def prune_low_importance(self, threshold: float) -> bool:
+        """Remove globally low-value semantic memories in the scheduled task."""
+        try:
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[models.FieldCondition(key="importance", range=models.Range(lt=threshold))]
+                    )
+                ),
+            )
+            return True
+        except Exception as exc:
+            logger.warning("Semantic memory prune failed: %s", exc)
+            return False

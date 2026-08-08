@@ -46,6 +46,10 @@ celery_app.conf.task_routes = {
         "queue": "logging_queue",
         "routing_key": "logging",
     },
+    "app.services.semantic_memory_service.prune_low_importance_semantic_memories": {
+        "queue": "logging_queue",
+        "routing_key": "logging",
+    },
     "app.services.episodic_memory_service.write_episode": {
         "queue": "logging_queue",
         "routing_key": "logging",
@@ -96,3 +100,9 @@ celery_app.conf.imports = (
     "app.services.semantic_memory_service",
     "app.services.episodic_memory_service",
 )
+celery_app.conf.beat_schedule = {
+    "prune-low-importance-semantic-memories-nightly": {
+        "task": "app.services.semantic_memory_service.prune_low_importance_semantic_memories",
+        "schedule": 24 * 60 * 60,
+    }
+}

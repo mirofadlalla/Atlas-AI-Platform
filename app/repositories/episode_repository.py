@@ -60,3 +60,12 @@ class EpisodeRepository:
         if exclude_session_id:
             query = query.filter(MemoryEpisode.session_id != exclude_session_id)
         return query.order_by(MemoryEpisode.created_at.desc()).limit(limit or settings.episodic_memory_recent_limit).all()
+
+    def clear_user(self, user_id: str, tenant_id: str) -> int:
+        deleted = (
+            self.db.query(MemoryEpisode)
+            .filter(MemoryEpisode.user_id == user_id, MemoryEpisode.tenant_id == tenant_id)
+            .delete(synchronize_session=False)
+        )
+        self.db.commit()
+        return deleted

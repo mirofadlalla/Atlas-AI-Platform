@@ -13,6 +13,7 @@ from app.agent.utils.guardrails import sanitize_untrusted_block, validate_answer
 from app.agent.utils.llm import call_agent_llm
 from app.agent.utils.retry import with_retry
 from app.agent.utils.state_helpers import get_current_question
+from app.memory.working_memory import WorkingMemory
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ def build_data_summary(state: AgentState, current_question: str) -> tuple[str, l
     return text, data_sources
 
 
-def answer_subquestion(state: AgentState) -> tuple[str, list[str], dict]:
+def answer_subquestion(state: AgentState) -> tuple[str, list[str], dict, int, list[str]]:
     current_question = get_current_question(state)
     data_summary_text, data_sources = build_data_summary(state, current_question)
 
@@ -78,9 +79,16 @@ def answer_subquestion(state: AgentState) -> tuple[str, list[str], dict]:
         reason = state.get("degraded_reason") or "unknown"
         degraded_note = _DEGRADED_NOTE.format(reason=reason) + "\n\n"
 
-    prompt = prompt_registry.answer_subquestion(
-        current_question, data_summary_text, degraded_note, _format_history(state), _format_memories(state), state.get("episode_context", "")
+    working_memory = WorkingMemory(agent_settings.prompt_max_tokens)
+    assembled_context = (
+        working_memory
+        .add("conversation history", _format_history(state), priority=2, max_tokens=1600)
+        .add("episodic memory", state.get("episode_context", ""), priority=3, max_tokens=800)
+        .add("semantic memory", _format_memories(state), priority=4, max_tokens=1200)
+        .add("retrieved data", data_summary_text, priority=5, max_tokens=agent_settings.prompt_max_tokens // 2)
+        .assemble()
     )
+    prompt = prompt_registry.answer_subquestion(current_question, assembled_context, degraded_note)
     response_dict = with_retry(
         call_agent_llm,
         prompt,
@@ -91,7 +99,7 @@ def answer_subquestion(state: AgentState) -> tuple[str, list[str], dict]:
         response_dict["content"].strip(),
         data_summary_text,
     )
-    return answer, data_sources, response_dict
+    return answer, data_sources, response_dict, working_memory.tokens_used, working_memory.context_sources
 
 
 def synthesize_final_answer(
