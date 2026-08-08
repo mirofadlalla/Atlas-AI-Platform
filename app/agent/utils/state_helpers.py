@@ -44,6 +44,7 @@ def create_initial_state(
         "session_id": session_id,
         "conversation_history": [],
         "recalled_memories": [],
+        "episode_context": "",
         "run_id": run_id or str(uuid.uuid4()),
         "start_time": time.time(),
         "thoughts": [],

@@ -140,7 +140,8 @@ _query_cache_ttl = 3600        # 1 hour expiration
 
 **Purpose**: Persistent cache across workers with semantic similarity matching
 
-**Technology**: `langchain-redis` RedisSemanticCache with vector similarity
+**Technology**: exact-key in-process answer cache; semantic similarity is used
+only for document retrieval and long-term memory, never to reuse final answers.
 
 **How It Works**:
 1. Generate embedding vector for query (384-dimensional)

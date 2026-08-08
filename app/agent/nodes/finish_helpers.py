@@ -79,7 +79,7 @@ def answer_subquestion(state: AgentState) -> tuple[str, list[str], dict]:
         degraded_note = _DEGRADED_NOTE.format(reason=reason) + "\n\n"
 
     prompt = prompt_registry.answer_subquestion(
-        current_question, data_summary_text, degraded_note, _format_history(state), _format_memories(state)
+        current_question, data_summary_text, degraded_note, _format_history(state), _format_memories(state), state.get("episode_context", "")
     )
     response_dict = with_retry(
         call_agent_llm,

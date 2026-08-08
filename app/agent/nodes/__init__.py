@@ -38,6 +38,8 @@ from app.agent.utils.state_transitions import (
 from app.memory.short_term_memory import ConversationTurn, ShortTermMemory
 from app.memory.semantic_memory import SemanticMemory
 from app.services.semantic_memory_service import trigger_semantic_memory_extraction
+from app.memory.episodic_memory import EpisodicMemory
+from app.services.episodic_memory_service import trigger_episode_write
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,14 @@ async def semantic_recall_node(state: AgentState):
     return {"recalled_memories": memories}
 
 
+async def episodic_recall_node(state: AgentState):
+    """Load compact summaries from recent sessions before agent planning."""
+    summaries = EpisodicMemory().get_recent(
+        state.get("user_id", ""), state.get("tenant_id", ""), exclude_session_id=state.get("session_id")
+    )
+    return {"episode_context": "\n".join(f"- {summary}" for summary in summaries)}
+
+
 async def memory_write_node(state: AgentState):
     """Persist the completed user/assistant turn after final synthesis."""
     memory = ShortTermMemory()
@@ -72,6 +82,16 @@ async def memory_write_node(state: AgentState):
     memory.save(*args, ConversationTurn("assistant", state.get("final_answer", ""), ""))
     trigger_semantic_memory_extraction(
         state.get("question", ""), state.get("final_answer", ""), state.get("user_id", ""), state.get("tenant_id", "")
+    )
+    trigger_episode_write(
+        state.get("session_id"),
+        state.get("conversation_history", [])
+        + [
+            {"role": "user", "content": state.get("question", "")},
+            {"role": "assistant", "content": state.get("final_answer", "")},
+        ],
+        state.get("user_id", ""),
+        state.get("tenant_id", ""),
     )
     return {}
 
@@ -124,7 +144,7 @@ async def decompose_node(state: AgentState):
     async def _inner(s: AgentState):
         question = s.get("question", "")
         prompt = prompt_registry.decompose(
-            question, _format_history(s.get("conversation_history", [])), _format_memories(s.get("recalled_memories", []))
+            question, _format_history(s.get("conversation_history", [])), _format_memories(s.get("recalled_memories", [])), s.get("episode_context", "")
         )
         try:
             response_dict = await asyncio.to_thread(
@@ -195,6 +215,7 @@ async def thought_node(state: AgentState):
             guidance,
             _format_history(s.get("conversation_history", [])),
             _format_memories(s.get("recalled_memories", [])),
+            s.get("episode_context", ""),
         )
         try:
             response = await asyncio.to_thread(

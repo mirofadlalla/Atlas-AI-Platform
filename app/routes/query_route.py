@@ -20,6 +20,8 @@ from app.services.auth_services.auth_service import get_current_user
 from app.memory.short_term_memory import ConversationTurn, ShortTermMemory
 from app.memory.semantic_memory import SemanticMemory
 from app.services.semantic_memory_service import trigger_semantic_memory_extraction
+from app.memory.episodic_memory import EpisodicMemory
+from app.services.episodic_memory_service import trigger_episode_write
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +104,17 @@ async def ask_question(
         )
         recalled_memories = SemanticMemory().recall(request.query, user_id, tenant_id)
         semantic_context = "\n".join(f"- {memory}" for memory in recalled_memories)
-        chat_history = "\n".join(part for part in [chat_history, "Relevant long-term memories:\n" + semantic_context if semantic_context else ""] if part)
+        episode_context = "\n".join(
+            f"- {summary}"
+            for summary in EpisodicMemory().get_recent(user_id, tenant_id, exclude_session_id=request.session_id)
+        )
+        chat_history = "\n".join(
+            part for part in [
+                chat_history,
+                "Relevant long-term memories:\n" + semantic_context if semantic_context else "",
+                "Recent session summaries:\n" + episode_context if episode_context else "",
+            ] if part
+        )
 
         # Create pipeline for this tenant with database session for automatic logging
         pipeline = RetrievalPipeline(tenant_id=tenant_id, db=db)
@@ -138,6 +150,15 @@ async def ask_question(
                 memory.save(tenant_id, user_id, request.session_id, ConversationTurn("user", request.query, ""))
                 memory.save(tenant_id, user_id, request.session_id, ConversationTurn("assistant", full_answer, ""))
                 trigger_semantic_memory_extraction(request.query, full_answer, user_id, tenant_id)
+                trigger_episode_write(
+                    request.session_id,
+                    history + [
+                        {"role": "user", "content": request.query},
+                        {"role": "assistant", "content": full_answer},
+                    ],
+                    user_id,
+                    tenant_id,
+                )
                 
                 # Calculate total latency
                 latency = time.time() - start_time
@@ -145,7 +166,7 @@ async def ask_question(
                 # Extract token usage from LLM for cost calculation
                 try:
                     from app.services.llm_runner import CustomLocalLLM
-                    usage = CustomLocalLLM.last_usage or {}
+                    usage = getattr(CustomLocalLLM, "last_usage", {}) or {}
                     input_tokens = usage.get("input", 0)
                     output_tokens = usage.get("output", 0)
                     cost_usd = (input_tokens * 0.0000001) + (output_tokens * 0.0000002)

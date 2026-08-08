@@ -52,32 +52,15 @@ def test_recommended_qa_tenant_isolation_and_limit():
             db=db
         )
 
-def test_redis_semantic_cache_inference_lookup():
+def test_query_cache_keys_are_exact_and_history_aware():
     from app.rag.retrivel_data_pipline import RetrievalPipeline
-    from langchain_core.documents import Document
-    from langchain_core.outputs import Generation
 
-    mock_db = MagicMock()
+    pipeline = object.__new__(RetrievalPipeline)
+    pipeline.tenant_id = "tenant-123"
 
-    with patch("app.rag.retrivel_data_pipline.get_retriever") as mock_get_retriever, \
-         patch("app.rag.retrivel_data_pipline._embedding_model") as mock_embed, \
-         patch("app.rag.retrivel_data_pipline.set_llm_cache"):
+    same_question = pipeline._build_cache_key("Who is Omar?", "")
+    different_question = pipeline._build_cache_key("Where did Segments start?", "")
+    same_question_different_history = pipeline._build_cache_key("Who is Omar?", "User: Prior question")
 
-        mock_retriever = MagicMock()
-        mock_retriever.invoke.return_value = [Document(page_content="Sample document content", metadata={"_id": "doc1"})]
-        mock_get_retriever.return_value = mock_retriever
-
-        pipeline = RetrievalPipeline(tenant_id="tenant-123", db=mock_db)
-
-        # Mock Redis cache object
-        mock_redis = MagicMock()
-        mock_redis.lookup.return_value = [Generation(text="Cached Redis Response text")]
-        pipeline.llm_cache = mock_redis
-
-        # Call ask_stream
-        generator = pipeline.ask_stream("What is sample content?")
-        chunks = list(generator)
-
-        # Verify cache hit returns cached response directly
-        assert "".join(chunks) == "Cached Redis Response text"
-        mock_redis.lookup.assert_called_once()
+    assert same_question != different_question
+    assert same_question != same_question_different_history

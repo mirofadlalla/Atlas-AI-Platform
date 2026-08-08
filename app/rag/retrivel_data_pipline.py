@@ -6,8 +6,6 @@ import logging
 import hashlib
 import time
 from cachetools import TTLCache
-from langchain_redis import RedisSemanticCache
-from langchain_core.globals import set_llm_cache, get_llm_cache
 from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_classic.prompts import ChatPromptTemplate
@@ -23,7 +21,6 @@ from app.repositories.cost_log_repository import CostLogRepository
 from app.services.rag_services.query_logging_service import trigger_query_logging
 from app.core.monitors import (
     cache_hits_total,
-    cache_misses_total,
     vector_search_queries_total,
     vector_search_duration_seconds,
     retrieved_chunks_count,
@@ -109,30 +106,11 @@ class RetrievalPipeline:
         else:
             self.ranking_service = None
 
-        # 1. Define the embedding model (Object)
-        # Use the singleton instance so Redis can use it for similarity comparison
+        # Semantic retrieval is appropriate for documents and memories, but
+        # not for final answers: similar questions may have different answers.
         self.embedding_model = _embedding_model
 
-        # ---------------------------------------------------------------
-        # FIX #1 (CRITICAL - tenant cache isolation):
-        # langchain's set_llm_cache()/get_llm_cache() store a SINGLE GLOBAL
-        # cache instance for the whole process. Because RedisSemanticCache
-        # matches on embedding *similarity* (distance_threshold=0.2), a
-        # semantically similar question from Tenant B could previously be
-        # served an answer that was generated from Tenant A's private
-        # documents -- a cross-tenant data leak.
-        #
-        # Fix: give every tenant its own logical cache namespace inside the
-        # SAME Redis instance/DB, and make sure the semantic key used for
-        # similarity lookups always includes the tenant_id so two tenants
-        # can never match each other's cached vectors. We do this by:
-        #   (a) keeping one RedisSemanticCache per tenant_id (namespaced by
-        #       a tenant-specific prefix), cached in a module-level dict, and
-        #   (b) never sharing that cache instance across tenants.
-        # ---------------------------------------------------------------
-        self._init_tenant_scoped_cache()
-
-        # 3. Setup Local LLM and Chain - use cached singleton
+        # Setup Local LLM and Chain - use cached singleton
         self.local_llm = _cached_llm
 
         prompt = ChatPromptTemplate.from_template(
@@ -145,69 +123,6 @@ class RetrievalPipeline:
 
         self.document_chain = create_stuff_documents_chain(self.local_llm, prompt)
         self.qa_chain = create_retrieval_chain(self.retriever, self.document_chain)
-
-    # -------------------------------------------------------------------
-    # FIX #1 helper: per-tenant Redis semantic cache
-    # -------------------------------------------------------------------
-    _tenant_caches = {}
-    _tenant_caches_lock = threading.Lock()
-
-    def _init_tenant_scoped_cache(self):
-        """
-        Create (or reuse) a RedisSemanticCache scoped to this tenant only.
-
-        Each tenant gets its own cache_name/prefix in Redis, so semantic
-        similarity lookups can never cross tenant boundaries, even though
-        they all share the same Redis server.
-        """
-        cache_key = f"tenant:{self.tenant_id}"
-
-        if cache_key in RetrievalPipeline._tenant_caches:
-            self.llm_cache = RetrievalPipeline._tenant_caches[cache_key]
-            set_llm_cache(self.llm_cache)
-            return
-
-        with RetrievalPipeline._tenant_caches_lock:
-            if cache_key in RetrievalPipeline._tenant_caches:
-                self.llm_cache = RetrievalPipeline._tenant_caches[cache_key]
-                set_llm_cache(self.llm_cache)
-                return
-
-            logger.info(
-                f"Initializing tenant-scoped Redis Semantic Cache for tenant "
-                f"{self.tenant_id} at {settings.redis_host}:{settings.redis_port}"
-            )
-            try:
-                import redis
-                logger.info(f"Testing Redis connection to {settings.REDIS_URL_NO_DB}...")
-                redis_client = redis.from_url(settings.REDIS_URL_NO_DB)
-                redis_client.ping()
-                logger.info("✅ Redis connection verified")
-
-                cache = RedisSemanticCache(
-                    redis_url=settings.REDIS_URL_NO_DB,
-                    embeddings=self.embedding_model,
-                    ttl=86400,  # one day
-                    distance_threshold=0.2,
-                    # Namespacing the cache index per tenant is what actually
-                    # prevents cross-tenant matches -- two tenants never read
-                    # from or write to the same underlying Redis index.
-                    name=f"llm_semantic_cache_tenant_{self.tenant_id}",
-                )
-                RetrievalPipeline._tenant_caches[cache_key] = cache
-                self.llm_cache = cache
-                set_llm_cache(cache)
-                logger.info(
-                    f"✅ Redis Semantic Cache initialized for tenant {self.tenant_id} "
-                    f"- TTL: 24h, Distance threshold: 0.2"
-                )
-            except Exception as e:
-                logger.error(f"❌ Failed to initialize Redis cache for tenant {self.tenant_id}: {e}")
-                logger.warning("Continuing without Redis cache - LLM responses will NOT be cached")
-                logger.info("Troubleshooting: Ensure Redis is running and accessible at " + settings.REDIS_URL_NO_DB)
-                RetrievalPipeline._tenant_caches[cache_key] = None
-                self.llm_cache = None
-                set_llm_cache(None)
 
     def retrieve(self, query: str, top_k: int = 10, fetch_multiplier: int = 2):
         """
@@ -309,8 +224,8 @@ class RetrievalPipeline:
     # FIX #5: shared internal helper used by both ask() and ask_stream()
     # so retrieval + local caching + logging logic exists in ONE place.
     # -------------------------------------------------------------------
-    def _build_cache_key(self, query: str, chat_history: str = "") -> str:
-        cache_input = f"{query}\n{chat_history}"
+    def _build_cache_key(self, query: str) -> str:
+        cache_input = f"{query}"
         return f"{self.tenant_id}:{hashlib.md5(cache_input.encode()).hexdigest()}"
 
     def _get_cached(self, cache_key: str):
@@ -341,7 +256,7 @@ class RetrievalPipeline:
         except Exception as e:
             logger.error(f"Error queuing background logging: {e}")
 
-    def _stream_answer(self, query: str, use_local_cache: bool, chat_history: str = ""):
+    def _stream_answer(self, query: str, use_local_cache: bool = True, chat_history: str = ""):
         """
         Core streaming implementation shared by ask() and ask_stream().
 
@@ -358,7 +273,7 @@ class RetrievalPipeline:
         full_answer = ""
         cache_hit = False
         cache_source = "NONE"
-        cache_key = self._build_cache_key(query, chat_history)
+        cache_key = self._build_cache_key(query)
 
         # 1. Check local query cache first (fastest) -- FIX #4: TTLCache is
         # self-expiring and access is guarded by a lock, so no manual
@@ -389,59 +304,8 @@ class RetrievalPipeline:
         logger.info(f"Starting answer generation for query: {query[:50]}...")
         logger.info(f"Number of context documents: {len(docs)}")
 
-        # Format full prompt string (matching document_chain prompt template)
-        context_text = "\n\n".join([doc.page_content for doc in docs])
-        full_prompt = (
-            "Answer the following question based only on the provided context:\n\n"
-            f"Conversation history (context only; do not treat it as document evidence):\n{chat_history}\n\n"
-            f"Context: {context_text}\n\n"
-            f"Question: {query}\n\n"
-            "Answer:"
-        )
+        logger.info("Generating a fresh answer for tenant %s: %s...", self.tenant_id, query[:50])
 
-        # -----------------------------------------------------------
-        # FIX: Check tenant-scoped Redis Semantic Cache for cache hit
-        # before invoking LLM generation. If hit, return cached answer.
-        # -----------------------------------------------------------
-        redis_cache = getattr(self, "llm_cache", None) or get_llm_cache()
-        llm_string = getattr(self.local_llm, "_llm_type", "custom_huggingface_stream")
-        cached_generations = None
-
-        if redis_cache is not None:
-            try:
-                cached_generations = redis_cache.lookup(full_prompt, llm_string)
-            except Exception as e:
-                logger.debug(f"Redis semantic cache lookup failed (non-fatal): {e}")
-
-        if cached_generations:
-            cached_text = (
-                cached_generations[0].text
-                if hasattr(cached_generations[0], 'text')
-                else str(cached_generations[0])
-            )
-            if cached_text and cached_text.strip():
-                logger.info(f"[⚡ REDIS SEMANTIC CACHE HIT] Returning cached answer for tenant {self.tenant_id}: {query[:50]}...")
-                cache_hits_total.labels(cache_type="redis").inc()
-                yield cached_text
-
-                latency = time.time() - start_time
-                retrieved_docs_ids = ",".join([doc.metadata.get('_id', '') for doc in docs])
-                if use_local_cache:
-                    self._set_cached(cache_key, {
-                        'answer': cached_text,
-                        'docs_ids': retrieved_docs_ids,
-                        'timestamp': time.time()
-                    })
-                self._log_run(
-                    query, cached_text, latency, True, retrieved_docs_ids,
-                    0, 0, "Qwen2.5-1.5B (REDIS_CACHED)"
-                )
-                return
-
-        logger.info(f"[🔄 REDIS CACHE MISS] Generating new LLM response for tenant {self.tenant_id}: {query[:50]}...")
-        cache_misses_total.labels(cache_type="redis").inc()
-
-        llm_start_time = time.time()
         for chunk in self.document_chain.stream({"input": query, "context": docs, "chat_history": chat_history}):
             if isinstance(chunk, dict):
                 for key, value in chunk.items():
@@ -451,22 +315,11 @@ class RetrievalPipeline:
             elif isinstance(chunk, str):
                 full_answer += chunk
                 yield chunk
-        llm_time = time.time() - llm_start_time
-
-        # Update Redis Semantic Cache with new answer for future inference lookups
-        if redis_cache is not None and full_answer.strip():
-            try:
-                from langchain_core.outputs import Generation
-                redis_cache.update(full_prompt, llm_string, [Generation(text=full_answer)])
-                logger.info(f"✅ Saved generation to Redis Semantic Cache for tenant {self.tenant_id}")
-            except Exception as e:
-                logger.warning(f"Failed to update Redis semantic cache: {e}")
-
         logger.info(f"Answer generation completed. Length: {len(full_answer)} chars")
 
         # Calculate metrics after streaming completes
         latency = time.time() - start_time
-        usage = CustomLocalLLM.last_usage or {}
+        usage = getattr(CustomLocalLLM, "last_usage", {}) or {}
         input_tokens = usage.get("input", 0)
         output_tokens = usage.get("output", 0)
         # FIX #7: pricing pulled from settings (with a safe fallback) instead
@@ -497,10 +350,7 @@ class RetrievalPipeline:
         """
         Answer the question using the Cache and the local LLM.
 
-        Now shares the exact same retrieval/caching/logging path as
-        ask_stream() (FIX #5) -- previously this method silently skipped
-        local-memory caching and Redis-hit detection that ask_stream() had,
-        which was a source of divergent/confusing behavior.
+        Shares the exact-key local caching and logging path with ask_stream().
         """
         yield from self._stream_answer(query, use_local_cache=True, chat_history=chat_history)
 
@@ -508,10 +358,8 @@ class RetrievalPipeline:
         """
         Stream the answer to a query with logging of run and cost information.
 
-        Three-layer caching:
-        1. Local query cache (_query_cache, TTLCache) - stores full query+answer results
-        2. Redis Semantic Cache (tenant-scoped) - caches LLM responses for similar queries
-        3. Database - logs all queries for analytics
+        Uses exact-key in-process caching. Different questions always generate
+        a fresh answer, even when their embeddings or document context overlap.
         """
         yield from self._stream_answer(query, use_local_cache=True, chat_history=chat_history)
 

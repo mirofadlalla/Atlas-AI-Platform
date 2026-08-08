@@ -8,25 +8,38 @@
     ],
     "paraphrases": [
       "What is the number of compounds stored in the FAISS-IVF vector store?",
-      "How many compounds were stored in the FAISS-IVF index?"
+      "How many compounds are indexed for similarity retrieval in the FAISS-IVF store?"
     ],
     "_source_chunk": "Live Demo \n• Engineered scalable REST APIs with async processing and production-ready architecture. KEY PROJECTS \nComputational Drug Discovery & Repurposing Platform  ★ Graduation Project — Lead AI & Backend Engineer  ·  Team of 9 \nFlask · FAISS-IVF · RDKit · Chemprop · PyTorch Lightning · DeepPurpo"
   },
   {
     "id": "q_002",
-    "question": "When did the Computer Science faculty period start at Mansoura University?",
+    "question": "When did the Computer Science program start at the Faculty of Computers and Information, Mansoura University?",
     "answer": "Oct 2022",
     "relevant_ids": [
       "078e9d85-78cb-aa31-4f71-3180b608922a"
     ],
     "paraphrases": [
-      "What is the start date of the Computer Science period at Mansoura University?",
-      "At what date did the Computer Science period begin at Mansoura University?"
+      "What is the start date of the Computer Science program at Mansoura University's Faculty of Computers and Information?",
+      "At what date did the Computer Science program begin at the Faculty of Computers and Information, Mansoura University?"
     ],
     "_source_chunk": "Computer Science  ·  Faculty of Computers and Information, Mansoura University Oct 2022 – Jun 2026"
   },
   {
     "id": "q_003",
+    "question": "ما معنى الـ Zero Flag في العمليات الحسابية؟",
+    "answer": "معناه إن الناتج قيمته طلعت بصفر ولا لا، لو الناتج بصفر قيمة الـ flag هتبقى بواحد",
+    "relevant_ids": [
+      "0868f9a5-8654-ad5c-219e-0016e3aa2599"
+    ],
+    "paraphrases": [
+      "ما وظیفة الزیرو فلاگ في عملیات الحاسوب؟",
+      "什么是零标志在计算操作中的含义؟"
+    ],
+    "_source_chunk": "• TF (Trap Flag) بيبقى بواحد لو عايز أنفذ الكود خطوة بخطوةsingle step) وده بيساعد في الـdebugging \n• SF (Sign Flag) بيبقىبصفر لو الناتج موجب وبواحد لو سا لب \n• ZF (Zero Flag) معناه إن الناتجقيمته طلعت بصفر ولا لا، لو الناتج بصفر قيمة الـ flag هتبقى بواحد \n• AF (Auxiliary Flag) معناه هل حصلcarry من ا"
+  },
+  {
+    "id": "q_004",
     "question": "How many approved drugs are screened in the Drug Repurposing Pipeline?",
     "answer": "5,000+",
     "relevant_ids": [
@@ -34,25 +47,51 @@
     ],
     "paraphrases": [
       "What is the number of approved drugs tested in the Drug Repurposing Pipeline?",
-      "How many drugs are involved in the high-throughput screening of the Drug Repurposing Pipeline?"
+      "How many drugs are evaluated in the Drug Repurposing Pipeline?"
     ],
     "_source_chunk": "• Drug Repurposing Pipeline: High-throughput screening of 5,000+ approved drugs against protein targets using binding-affinity \nmodels, with automated external API enrichment. • Molecular Dynamics: Productized a multi-step simulation protocol into a single autonomous API with real-time job status up"
   },
   {
-    "id": "q_004",
-    "question": "What is OMAR FADLALLAH's profession?",
-    "answer": "AI Engineer",
+    "id": "q_005",
+    "question": "What is the size of a segment in bytes?",
+    "answer": "64KB",
+    "relevant_ids": [
+      "1f5c5e55-8221-5734-3a37-6606d0033459"
+    ],
+    "paraphrases": [
+      "What is the size of each segment measured in bytes?",
+      "How many bytes are in a segment?"
+    ],
+    "_source_chunk": "Segments \n• الـ segment بيبدأ عند paragraph boundary يعني عنوان بيقبل القسمة على16 أو10H وده معناه إن آخر رقم في العنوان\nهيبقى دائمًا 0 فمافيش داعي إني أخزن الصفر ده، فبالتالي038E0H ممكن أكتبها038EH أو038E[0]H \n• كل العناوين جوا الـsegment  بتبقى نسبية لبدايته، يعني لو الـ segment  بدأ عند038EH هلاق"
+  },
+  {
+    "id": "q_006",
+    "question": "What is OMAR FADLALLAH's phone number?",
+    "answer": "+20 127 745 7703",
     "relevant_ids": [
       "23746e25-76e3-131b-b945-909c3015bbed"
     ],
     "paraphrases": [
-      "What does OMAR FADLALLAH work as?",
-      "What is OMAR FADLALLAH's job title?"
+      "What phone number is listed for OMAR FADLALLAH?",
+      "What is the contact phone number of OMAR FADLALLAH?"
     ],
     "_source_chunk": "OMAR FADLALLAH \nAI Engineer | LLM Systems | RAG Architectures | NLP \nMansoura, Egypt  •  +20 127 745 7703  •  omaryaser311@gmail.com  •  LinkedIn  • GitHub  •  Portfolio \nPROFESSIONAL SUMMARY \nAI Engineer who started in Data Analysis and BI before moving deliberately into ML and production GenAI — m"
   },
   {
-    "id": "q_005",
+    "id": "q_007",
+    "question": "What is the size of the program segment prefix that the program loader reserves?",
+    "answer": "256 byte",
+    "relevant_ids": [
+      "3f8f37e2-de0c-0656-e88e-e389075d726b"
+    ],
+    "paraphrases": [
+      "How many bytes are allocated for the program segment prefix by the program loader?",
+      "What is the amount of memory reserved for the program segment prefix?"
+    ],
+    "_source_chunk": "Program Loader \nعشان الـCPU يقدر يرن البرنامج فلازم الأول يتعمل لهload من الـdisk للميموري واللي بيعمل كده اسمه الـ:program loader \n• أول حاجة بيحجز256 byte للـprogram segment prefix وده بيتخزن فيه حالة البرنامج ولو هعملpassing لداتا من\nخلال الـ command line بتتخزن فيه كذلك \n• وبعد كده بيلود أول add"
+  },
+  {
+    "id": "q_008",
     "question": "What was the initial Character Error Rate before fine-tuning Gemma-3-4b-it?",
     "answer": "0.74",
     "relevant_ids": [
@@ -60,8 +99,34 @@
     ],
     "paraphrases": [
       "What Character Error Rate did Gemma-3-4b-it have before fine-tuning?",
-      "What was the starting Character Error Rate for Gemma-3-4b-it before fine-tuning?"
+      "What was the starting Character Error Rate for Gemma-3-4b-it before improvement?"
     ],
     "_source_chunk": "• Added per-request cost and token tracking with real-time observability via Prometheus and Grafana (latency, token usage, drift \nalerts). • Built a LangGraph-based agentic reasoning layer supporting multi-step query decomposition and tool use for complex questions. Arabic Legal OCR — Fine-tuning Vi"
+  },
+  {
+    "id": "q_009",
+    "question": "What technologies were used to develop the end-to-end Hybrid RAG Course Advisor Agent?",
+    "answer": "FastAPI, PydanticAI, LlamaIndex, MongoDB, and Groq",
+    "relevant_ids": [
+      "4bed2e79-f010-56ab-7446-2b0b272bb262"
+    ],
+    "paraphrases": [
+      "What tools were utilized to build the Hybrid RAG Course Advisor Agent?",
+      "Which technologies were employed in the development of the Hybrid RAG Course Advisor Agent?"
+    ],
+    "_source_chunk": "quality and retrieval accuracy. • Developed and optimized prompt engineering techniques for 2 enterprise AI proof-of-concepts (PoCs), improving answer \ngroundedness and response alignment against client-defined evaluation rubrics. Analytics & Agentic AI Intern  ·  Kayfa  May 2025 – Jun 2025 \n• Built"
+  },
+  {
+    "id": "q_010",
+    "question": "What type of caching architecture was implemented to achieve sub-50ms P50 API latency under load?",
+    "answer": "a 3-tier caching architecture (in-memory → Redis semantic cache → database)",
+    "relevant_ids": [
+      "7af6d5d0-a41e-f01a-6a15-12e665b6286d"
+    ],
+    "paraphrases": [
+      "What caching architecture was used to reduce API latency?",
+      "How was the caching architecture designed to improve API performance?"
+    ],
+    "_source_chunk": "• Designed a multi-tenant SaaS RAG platform with JWT authentication and strict per-tenant data isolation, enabling secure \ndocument Q&A for multiple organizations on a shared infrastructure. • Built hybrid retrieval pipeline combining dense vector search (Qdrant), BM25 keyword matching, and cross-en"
   }
 ]

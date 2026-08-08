@@ -17,7 +17,12 @@ def extract_semantic_memory(self, question: str, answer: str, user_id: str, tena
         # module load time creates a route → task → agent → task cycle.
         from app.memory.memory_extractor import MemoryExtractor
 
-        return MemoryExtractor().extract_and_store(question, answer, user_id, tenant_id)
+        memory_ids = MemoryExtractor().extract_and_store(question, answer, user_id, tenant_id)
+        logger.info(
+            "Semantic memory extraction completed tenant=%s user=%s stored=%s",
+            tenant_id, user_id, len(memory_ids),
+        )
+        return memory_ids
     except Exception as exc:
         logger.warning("Semantic memory task failed: %s", exc)
         raise self.retry(exc=exc)
@@ -33,5 +38,6 @@ def trigger_semantic_memory_extraction(question: str, answer: str, user_id: str 
             queue="logging_queue",
             routing_key="logging",
         )
+        logger.info("Queued semantic memory extraction tenant=%s user=%s", tenant_id, user_id)
     except Exception as exc:
         logger.warning("Could not queue semantic memory extraction: %s", exc)

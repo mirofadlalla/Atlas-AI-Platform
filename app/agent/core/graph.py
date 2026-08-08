@@ -10,6 +10,7 @@ from app.agent.nodes import (
     memory_read_node,
     memory_write_node,
     semantic_recall_node,
+    episodic_recall_node,
 )
 from app.agent.core.router import route_action, route_after_finish
 
@@ -18,6 +19,7 @@ builder = StateGraph(AgentState)
 builder.add_node("decompose", decompose_node)
 builder.add_node("memory_read", memory_read_node)
 builder.add_node("semantic_recall", semantic_recall_node)
+builder.add_node("episodic_recall", episodic_recall_node)
 builder.add_node("memory_write", memory_write_node)
 builder.add_node("think", thought_node)
 builder.add_node("sql_tool", sql_node)
@@ -25,7 +27,8 @@ builder.add_node("retrieval_tool", retrieval_node)
 builder.add_node("finish", finish_node)
 
 builder.set_entry_point("memory_read")
-builder.add_edge("memory_read", "semantic_recall")
+builder.add_edge("memory_read", "episodic_recall")
+builder.add_edge("episodic_recall", "semantic_recall")
 builder.add_edge("semantic_recall", "decompose")
 builder.add_edge("decompose", "think")
 

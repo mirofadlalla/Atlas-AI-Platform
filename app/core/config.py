@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     qdrant_collection_name: str = "atlas_documents1"
     semantic_memory_collection: str = "atlas_semantic_memory"
     semantic_memory_top_k: int = 5
+    episodic_memory_ttl_days: int = 90
+    episodic_memory_recent_limit: int = 3
     sparse_embedding_model: str = "Qdrant/bm25"
     cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2"
 

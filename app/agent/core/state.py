@@ -15,6 +15,7 @@ class AgentState(TypedDict, total=False):
     session_id: str | None
     conversation_history: list[dict[str, str]]
     recalled_memories: list[str]
+    episode_context: str
     run_id: str
     start_time: float
 

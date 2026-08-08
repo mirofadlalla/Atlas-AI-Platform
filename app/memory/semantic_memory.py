@@ -79,6 +79,14 @@ class SemanticMemory:
                 )
             ],
         )
+        logger.info(
+            "Stored semantic memory id=%s tenant=%s user=%s type=%s importance=%.2f",
+            memory_id,
+            tenant_id,
+            user_id,
+            memory_type,
+            max(0.0, min(float(importance), 1.0)),
+        )
         return memory_id
 
     def recall(self, query: str, user_id: str | int, tenant_id: str | int, top_k: int | None = None) -> list[str]:
@@ -108,7 +116,12 @@ class SemanticMemory:
                 * (0.5 + 0.5 * float(point.payload.get("importance", 0.5))),
                 reverse=True,
             )
-            return [point.payload["content"] for point in ranked]
+            memories = [point.payload["content"] for point in ranked]
+            logger.info(
+                "Recalled %s semantic memories for tenant=%s user=%s",
+                len(memories), tenant_id, user_id,
+            )
+            return memories
         except Exception as exc:
             logger.warning("Semantic memory recall failed; continuing without it: %s", exc)
             return []
