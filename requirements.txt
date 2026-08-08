@@ -1,9 +1,7 @@
 # Core Framework
-# fastapi 0.115.x ships starlette 0.41.x which fixes CVEs present in 0.27.0
 fastapi==0.115.12
 uvicorn[standard]==0.34.3
-# python-multipart >=0.0.22 fixes path-traversal and DoS CVEs in 0.0.6
-python-multipart==0.0.22
+python-multipart==0.0.31
 
 # Database
 sqlalchemy==2.0.23
@@ -14,12 +12,10 @@ alembic==1.13.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 pydantic==2.7.4
-# email-validator is required by Pydantic EmailStr (used in app/schema/auth_admin.py)
 email-validator>=2.0.0
-python-dotenv==1.0.0
+python-dotenv==1.0.1
 
 # Vector Database & RAG
-# qdrant-client >=1.18.0 avoids protobuf EnumTypeWrapper | None PEP604 type hint issue in 1.17.0
 qdrant-client>=1.18.0,<2.0.0
 langchain==0.1.20
 langchain-community==0.0.38
@@ -27,7 +23,6 @@ langchain-core==0.1.53
 langchain-qdrant==0.1.4
 langgraph==0.0.21
 sentence-transformers==2.2.2
-# fastembed >=0.7.4 supports pillow >=11.0.0 (fastembed 0.3.6 constrained pillow to <11.0.0)
 fastembed>=0.7.4,<0.9.0
 
 # Task Queue & Caching
@@ -38,7 +33,6 @@ cachetools>=5.3.0
 # LLM Integration
 openai==1.30.5
 langchain-openai==0.1.7
-# Groq cloud LLM provider — used by LLMService (llm_singlton.py) and retry.py
 groq>=0.9.0,<2.0
 
 # Monitoring & Metrics
@@ -46,20 +40,15 @@ prometheus-client==0.19.0
 prometheus-fastapi-instrumentator==6.1.0
 
 # Logging & Observability
-# sentry-sdk >=2.0 is compatible; SentryAsgiMiddleware still works unchanged
 sentry-sdk>=2.0.0,<3.0.0
 
 # MLflow for Experiment Tracking
-# setuptools provides pkg_resources required by mlflow.utils.requirements_utils
 setuptools>=68.0.0
 mlflow==2.10.1
 
 # Utilities
-# requests >=2.32.2 fixes URL-parsing credential-leak CVE in 2.31.0
 requests>=2.32.2
-# aiohttp >=3.11.0 fixes header-injection and other CVEs present in 3.9.1
 aiohttp>=3.11.0
-# httpx — keep in sync with openai/langchain requirements
 httpx==0.28.1
 pydantic-settings==2.1.0
 sqlglot==25.21.3
@@ -67,13 +56,11 @@ tenacity==8.2.3
 tiktoken>=0.7.0,<1.0.0
 
 # Explicit transitive-dep pins to resolve security CVEs
-# Pillow >=11.0.0 fixes heap-corruption and out-of-bounds CVEs in 10.4.0
 pillow>=11.0.0
-# psutil is used by app.core.monitors (resource-metrics) but was not declared.
 psutil>=5.9.0
 
 # Development & Testing
-pytest==7.4.3
+pytest>=8.0.0
 pytest-asyncio>=0.23.0
-black==23.12.0
+black>=24.3.0
 flake8==6.1.0
