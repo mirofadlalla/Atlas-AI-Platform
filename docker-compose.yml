@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   # ==================== PostgreSQL Database ====================
   postgres:
@@ -28,15 +26,13 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     container_name: atlas-qdrant
-    environment:
-      QDRANT_API_KEY: ${QDRANT_API_KEY:-atlas_qdrant_key}
     ports:
       - "${QDRANT_PORT:-6333}:6333"
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:6333/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -72,8 +68,10 @@ services:
     container_name: atlas-api
     environment:
       PYTHONUNBUFFERED: "1"
+      RUN_MIGRATIONS: "true"
       POSTGRES_USER: ${POSTGRES_USER:-atlas_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlas_secure_password}
+      POSTGRES_PASS: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-atlas_db}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -83,6 +81,11 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-atlas_redis_password}
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/0
       CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/1
+      API_SECRET_KEY: ${API_SECRET_KEY:?Set API_SECRET_KEY in .env}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      JINA_API_KEY: ${JINA_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      REMOTE_EMBED_URL: ${REMOTE_EMBED_URL:-}
       DEBUG: "${DEBUG:-False}"
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -97,9 +100,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./app:/app/app
-      - ./logs:/app/logs
-      - ./uploads:/app/uploads
+      - uploads_data:/app/uploads
+      - logs_data:/app/logs
+      - mlruns_data:/app/mlruns
     networks:
       - atlas-network
     restart: unless-stopped
@@ -121,6 +124,7 @@ services:
       PYTHONUNBUFFERED: "1"
       POSTGRES_USER: ${POSTGRES_USER:-atlas_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlas_secure_password}
+      POSTGRES_PASS: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-atlas_db}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -130,18 +134,27 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-atlas_redis_password}
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/0
       CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/1
+      API_SECRET_KEY: ${API_SECRET_KEY:?Set API_SECRET_KEY in .env}
+      API_HOST: http://api:8000
+      JINA_API_KEY: ${JINA_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      REMOTE_EMBED_URL: ${REMOTE_EMBED_URL:-}
       DEBUG: "${DEBUG:-False}"
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
-      - postgres
-      - qdrant
-      - redis
-      - api
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
     volumes:
-      - ./app:/app/app
-      - ./logs:/app/logs
-      - ./uploads:/app/uploads
+      - uploads_data:/app/uploads
+      - logs_data:/app/logs
+      - mlruns_data:/app/mlruns
     networks:
       - atlas-network
     restart: unless-stopped
@@ -152,11 +165,12 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: atlas-celery-beat
-    command: celery -A app.celery.celery_config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    command: celery -A app.celery.celery_config beat --loglevel=info
     environment:
       PYTHONUNBUFFERED: "1"
       POSTGRES_USER: ${POSTGRES_USER:-atlas_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlas_secure_password}
+      POSTGRES_PASS: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-atlas_db}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -166,17 +180,25 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-atlas_redis_password}
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/0
       CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/1
+      API_SECRET_KEY: ${API_SECRET_KEY:?Set API_SECRET_KEY in .env}
+      JINA_API_KEY: ${JINA_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      REMOTE_EMBED_URL: ${REMOTE_EMBED_URL:-}
       DEBUG: "${DEBUG:-False}"
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
-      - postgres
-      - qdrant
-      - redis
-      - api
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
     volumes:
-      - ./app:/app/app
-      - ./logs:/app/logs
+      - logs_data:/app/logs
+      - mlruns_data:/app/mlruns
     networks:
       - atlas-network
     restart: unless-stopped
@@ -284,4 +306,10 @@ volumes:
   grafana_data:
     driver: local
   pgadmin_data:
+    driver: local
+  uploads_data:
+    driver: local
+  logs_data:
+    driver: local
+  mlruns_data:
     driver: local

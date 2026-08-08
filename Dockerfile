@@ -24,6 +24,7 @@ WORKDIR /app
 # Install runtime dependencies and create non-root user
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    libgomp1 \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1000 atlas
@@ -34,6 +35,9 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
 COPY --chown=atlas:atlas . .
+
+COPY --chown=atlas:atlas scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint
+RUN chmod +x /usr/local/bin/docker-entrypoint
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/logs /app/data /app/uploads && \
@@ -61,6 +65,8 @@ EXPOSE 8000
 # in all 4 processes simultaneously (audit finding #28). Use a process
 # manager or Gunicorn with multiple workers + shared state if horizontal
 # scaling is needed.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint"]
+
 CMD ["uvicorn", "main:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
