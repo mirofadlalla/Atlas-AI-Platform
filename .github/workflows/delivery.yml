@@ -63,7 +63,7 @@ jobs:
       # has not been pushed yet.  Using the registry path here would cause Trivy
       # to attempt a remote pull which fails before push.
       - name: Scan image for vulnerabilities (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ steps.local_tag.outputs.local_tag }}
           format: table
