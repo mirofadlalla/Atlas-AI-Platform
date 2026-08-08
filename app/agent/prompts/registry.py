@@ -9,7 +9,12 @@ class PromptRegistry:
     VERSION = "1.0.0"
 
     @staticmethod
-    def decompose(question: str, chat_history: str = "", recalled_memories: str = "", episode_context: str = "") -> str:
+    def decompose(
+        question: str,
+        chat_history: str = "",
+        recalled_memories: str = "",
+        episode_context: str = "",
+    ) -> str:
         return f"""You are an AI planner for an Enterprise RAG and Database system.
 Analyze whether the question is compound and must be split into sub-questions.
 

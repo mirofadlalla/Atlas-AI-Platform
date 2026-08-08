@@ -17,7 +17,11 @@ class MemoryEpisode(Base):
     session_id = Column(String, nullable=False, index=True)
     summary = Column(Text, nullable=False)
     raw_turns = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
     expires_at = Column(
         DateTime(timezone=True),
         nullable=False,

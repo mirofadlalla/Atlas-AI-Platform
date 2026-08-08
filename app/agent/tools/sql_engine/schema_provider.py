@@ -36,12 +36,17 @@ def get_schema_description(force_refresh: bool = False) -> str:
         schema_text += f"\nTable: {table}\n"
         for col in columns:
             col_name = col["name"]
-            if agent_settings.allowed_columns and col_name not in agent_settings.allowed_columns:
+            if (
+                agent_settings.allowed_columns
+                and col_name not in agent_settings.allowed_columns
+            ):
                 continue
             schema_text += f" - {col_name} ({col['type']})\n"
 
     if not schema_text.strip():
-        logger.warning("Schema description is empty; check AGENT_SQL_NAMESPACE / DB connectivity")
+        logger.warning(
+            "Schema description is empty; check AGENT_SQL_NAMESPACE / DB connectivity"
+        )
 
     _cache[cache_key] = (now, schema_text)
     return schema_text

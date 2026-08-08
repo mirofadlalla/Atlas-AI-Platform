@@ -19,8 +19,7 @@ class RecommendedQACreate(BaseModel):
 
 @router.get("")
 async def get_recommended_questions(
-    current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user=Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """
     Get recommended questions and answers for current user's tenant from in-memory cache.
@@ -28,18 +27,14 @@ async def get_recommended_questions(
     """
     tenant_id = str(current_user.tenant_id)
     items = RecommendedQAService.get_recommended_questions(tenant_id, db)
-    return {
-        "tenant_id": tenant_id,
-        "count": len(items),
-        "recommended_qa": items
-    }
+    return {"tenant_id": tenant_id, "count": len(items), "recommended_qa": items}
 
 
 @router.post("")
 async def add_recommended_question(
     request: RecommendedQACreate,
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Add a recommended question and answer pair for current tenant (Admin only).
@@ -48,40 +43,32 @@ async def add_recommended_question(
     if getattr(current_user, "role", None) != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only tenant admins can manage recommended questions."
+            detail="Only tenant admins can manage recommended questions.",
         )
 
     tenant_id = str(current_user.tenant_id)
     try:
         item = RecommendedQAService.add_recommended_question(
-            tenant_id=tenant_id,
-            question=request.question,
-            answer=request.answer,
-            db=db
+            tenant_id=tenant_id, question=request.question, answer=request.answer, db=db
         )
         return {
             "success": True,
             "message": "Recommended question added successfully",
-            "item": item
+            "item": item,
         }
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception as exc:
         logger.error(f"Error adding recommended QA: {exc}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to add recommended question"
+            detail="Failed to add recommended question",
         )
 
 
 @router.delete("/{qa_id}")
 async def delete_recommended_question(
-    qa_id: str,
-    current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    qa_id: str, current_user=Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """
     Delete a recommended question and answer pair for current tenant (Admin only).
@@ -89,22 +76,17 @@ async def delete_recommended_question(
     if getattr(current_user, "role", None) != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only tenant admins can manage recommended questions."
+            detail="Only tenant admins can manage recommended questions.",
         )
 
     tenant_id = str(current_user.tenant_id)
     deleted = RecommendedQAService.delete_recommended_question(
-        tenant_id=tenant_id,
-        qa_id=qa_id,
-        db=db
+        tenant_id=tenant_id, qa_id=qa_id, db=db
     )
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Recommended question not found for this tenant."
+            detail="Recommended question not found for this tenant.",
         )
 
-    return {
-        "success": True,
-        "message": "Recommended question deleted successfully"
-    }
+    return {"success": True, "message": "Recommended question deleted successfully"}

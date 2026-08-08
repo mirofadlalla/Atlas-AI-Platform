@@ -31,7 +31,7 @@ Business Analytics
 
 """
 
-from prometheus_client import Counter, Histogram, Gauge, Summary
+from prometheus_client import Counter, Histogram, Gauge
 from typing import Optional
 import time
 import psutil
@@ -450,6 +450,7 @@ evaluation_duration_seconds = Histogram(
 
 # ==================== HELPER FUNCTIONS ====================
 
+
 def record_resource_metrics():
     """Record current system resource utilization metrics."""
     try:
@@ -469,12 +470,9 @@ def record_resource_metrics():
         process = psutil.Process()
         process_cpu_usage_percent.set(process.cpu_percent(interval=0.1))
         process_memory_usage_mb.set(process.memory_info().rss / (1024 * 1024))
-        process_open_file_descriptors.set(process.num_fds() if hasattr(process, "num_fds") else 0)
-
-        # Network metrics
-        net_io = psutil.net_io_counters()
-        network_io_bytes_sent._value.get()  # Get current value
-        network_io_bytes_received._value.get()
+        process_open_file_descriptors.set(
+            process.num_fds() if hasattr(process, "num_fds") else 0
+        )
 
     except Exception as e:
         logger.error(f"Error recording resource metrics: {e}")

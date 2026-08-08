@@ -15,6 +15,7 @@ class ToolObservation:
     observation: str
     has_data: bool = False
 
+
 # الكود ده بيمثل Tool Framework في الـ Agent. بدل ما الـ Agent يعرف ينفذ SQL أو Retrieval بنفسه، هو عنده Registry فيه كل الأدوات، وكل أداة لها Interface موحد.
 
 # الفكرة العامة كده:
@@ -75,6 +76,7 @@ class ToolResult:
             has_data=self.has_data,
         )
 
+
 # دي نتيجه التول الحقيقه
 # مثلاً SQL Tool
 
@@ -97,15 +99,14 @@ class ToolResult:
 #     }
 # )
 
+
 class AgentTool(ABC):
     name: str
     attempted_key: str
     has_data_key: str
 
     @abstractmethod
-    def run(self, state: AgentState) -> ToolResult:
-        ...
-
+    def run(self, state: AgentState) -> ToolResult: ...
 
 
 class ToolRegistry:

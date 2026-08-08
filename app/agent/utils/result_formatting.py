@@ -7,7 +7,9 @@ from typing import Any
 from app.agent.core.config import agent_settings
 
 
-def format_sql_results(rows: list[Any], max_rows: int | None = None) -> tuple[str, bool]:
+def format_sql_results(
+    rows: list[Any], max_rows: int | None = None
+) -> tuple[str, bool]:
     max_rows = max_rows or agent_settings.sql_max_result_rows_in_prompt
     if not rows:
         return "No results found", False

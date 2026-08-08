@@ -12,7 +12,9 @@ def test_exact_query_embedding_is_reused():
         model._query_embedding_cache.clear()
 
     try:
-        with patch.object(model, "_embed_batch", return_value=[[0.1, 0.2]]) as embed_batch:
+        with patch.object(
+            model, "_embed_batch", return_value=[[0.1, 0.2]]
+        ) as embed_batch:
             first = model.embed_query("What is RAG?")
             second = model.embed_query("What is RAG?")
 

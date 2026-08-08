@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
 
+
 class UploadRequest(BaseModel):
     file_path: str
     tenant_id: str

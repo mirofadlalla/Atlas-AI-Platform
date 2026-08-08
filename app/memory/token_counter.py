@@ -19,7 +19,9 @@ class TokenCounter:
             return len(self._encoding.encode(text))
         return max(1, (len(text) + 3) // 4)
 
-    def truncate(self, text: str, max_tokens: int, suffix: str = "\n...[truncated]") -> str:
+    def truncate(
+        self, text: str, max_tokens: int, suffix: str = "\n...[truncated]"
+    ) -> str:
         if max_tokens <= 0:
             return ""
         if self.count(text) <= max_tokens:

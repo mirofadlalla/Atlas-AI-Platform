@@ -7,6 +7,7 @@ Changes vs. original:
 - Health check returns real version from FastAPI app (Fix 10)
 - bare except:pass replaced with specific exception handlers (Fix 7)
 """
+
 import asyncio
 import logging
 import os
@@ -16,7 +17,7 @@ from time import time
 from fastapi import FastAPI, HTTPException, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from prometheus_client import Counter, Histogram, REGISTRY, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import REGISTRY, generate_latest, CONTENT_TYPE_LATEST
 from starlette.middleware.base import BaseHTTPMiddleware
 
 import sentry_sdk
@@ -52,6 +53,7 @@ APP_VERSION = "3.0.0"
 
 # ── Lifespan (replaces deprecated @app.on_event) ─────────────────────────────
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -69,20 +71,22 @@ async def lifespan(app: FastAPI):
     try:
         from app.core.db import Sessions
         from app.services.recommended_qa_service import RecommendedQAService
+
         with Sessions() as db:
             RecommendedQAService.load_all_recommended_questions(db)
         logger.info("Recommended Q&A cache loaded successfully.")
-    except Exception as e:                        # Fix 7: was bare except:pass
+    except Exception as e:  # Fix 7: was bare except:pass
         logger.error(f"Failed to load recommended Q&A cache: {e}", exc_info=True)
 
     # Start background Prometheus resource-metrics task
     async def _record_metrics_periodically():
         from app.core.monitors import record_resource_metrics
+
         while True:
             try:
                 record_resource_metrics()
                 await asyncio.sleep(10)
-            except Exception as e:                # Fix 7: was bare except:pass
+            except Exception as e:  # Fix 7: was bare except:pass
                 logger.error(f"Error recording system metrics: {e}", exc_info=True)
                 await asyncio.sleep(10)
 
@@ -106,7 +110,7 @@ app = FastAPI(
     title="Atlas AI Platform",
     description="A platform for RAG and LLM applications",
     version=APP_VERSION,
-    lifespan=lifespan,                            # Fix 8: lifespan replaces on_event
+    lifespan=lifespan,  # Fix 8: lifespan replaces on_event
 )
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
@@ -122,17 +126,20 @@ app.add_middleware(
 app.add_middleware(SentryAsgiMiddleware)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(auth_route.router,             prefix="/api", tags=["Authentication"])
-app.include_router(ingest_rag_route.router,       prefix="/api", tags=["ingest-rag"])
-app.include_router(eval_pipline.router,           prefix="/api", tags=["eval-rag"])
-app.include_router(query_route.router,            prefix="/api", tags=["query"])
-app.include_router(agent_route.router,            prefix="/api", tags=["agent"])
-app.include_router(internal_metrics_route.router, prefix="/api", tags=["internal-metrics"])
-app.include_router(recommended_qa_route.router,   prefix="/api", tags=["recommended-qa"])
-app.include_router(memory_route.router,           prefix="/api", tags=["memory"])
+app.include_router(auth_route.router, prefix="/api", tags=["Authentication"])
+app.include_router(ingest_rag_route.router, prefix="/api", tags=["ingest-rag"])
+app.include_router(eval_pipline.router, prefix="/api", tags=["eval-rag"])
+app.include_router(query_route.router, prefix="/api", tags=["query"])
+app.include_router(agent_route.router, prefix="/api", tags=["agent"])
+app.include_router(
+    internal_metrics_route.router, prefix="/api", tags=["internal-metrics"]
+)
+app.include_router(recommended_qa_route.router, prefix="/api", tags=["recommended-qa"])
+app.include_router(memory_route.router, prefix="/api", tags=["memory"])
 
 
 # ── Prometheus metrics middleware ─────────────────────────────────────────────
+
 
 class MetricsMiddleware(BaseHTTPMiddleware):
     """
@@ -171,7 +178,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
             return response
 
-        except Exception as e:                    # Fix 7: was bare except:pass
+        except Exception as e:  # Fix 7: was bare except:pass
             logger.error(f"Error in metrics middleware: {e}", exc_info=True)
             raise
 
@@ -180,6 +187,7 @@ app.add_middleware(MetricsMiddleware)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────
+
 
 @app.get("/health", tags=["monitoring"])
 async def health_check():
@@ -192,11 +200,12 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "Atlas AI Platform",
-        "version": app.version,          # Fix 10: was hardcoded "1.0.0"
+        "version": app.version,  # Fix 10: was hardcoded "1.0.0"
     }
 
 
 # ── Prometheus scrape endpoint ────────────────────────────────────────────────
+
 
 @app.get("/metrics", tags=["monitoring"], include_in_schema=False)
 async def metrics(x_internal_key: str = Header(default="")):

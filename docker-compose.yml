@@ -62,6 +62,7 @@ services:
 
   # ==================== FastAPI Application ====================
   api:
+    image: ${ATLAS_IMAGE:-atlas-ai-api:local}
     build:
       context: .
       dockerfile: Dockerfile
@@ -115,6 +116,7 @@ services:
 
   # ==================== Celery Worker ====================
   celery_worker:
+    image: ${ATLAS_IMAGE:-atlas-ai-api:local}
     build:
       context: .
       dockerfile: Dockerfile
@@ -161,6 +163,7 @@ services:
 
   # ==================== Celery Beat (Scheduled Tasks) ====================
   celery_beat:
+    image: ${ATLAS_IMAGE:-atlas-ai-api:local}
     build:
       context: .
       dockerfile: Dockerfile

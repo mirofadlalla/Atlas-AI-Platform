@@ -33,7 +33,9 @@ class FakeQdrant:
 
     def query_points(self, **kwargs):
         self.filters.append(kwargs["query_filter"])
-        return SimpleNamespace(points=[SimpleNamespace(payload={"content": "Prefers Arabic"})])
+        return SimpleNamespace(
+            points=[SimpleNamespace(payload={"content": "Prefers Arabic"})]
+        )
 
 
 def test_store_creates_named_dense_vector_collection():

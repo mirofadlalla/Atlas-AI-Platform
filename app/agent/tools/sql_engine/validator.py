@@ -46,7 +46,9 @@ class SQLValidator:
             raise ValueError("Empty SQL query")
 
         if ";" in cleaned:
-            raise ValueError("Security violation: multiple SQL statements are not allowed")
+            raise ValueError(
+                "Security violation: multiple SQL statements are not allowed"
+            )
 
         try:
             parsed = sqlglot.parse_one(cleaned, read="postgres")
@@ -61,28 +63,46 @@ class SQLValidator:
                 raise ValueError("Security violation: only SELECT queries are allowed")
 
         tables = {t.name for t in parsed.find_all(exp.Table) if t.name}
-        allow_tables = allowed_tables if allowed_tables is not None else agent_settings.allowed_tables
+        allow_tables = (
+            allowed_tables
+            if allowed_tables is not None
+            else agent_settings.allowed_tables
+        )
         if allow_tables is not None:
             disallowed = tables - allow_tables
             if disallowed:
-                raise ValueError(f"Security violation: table(s) not allowed: {', '.join(sorted(disallowed))}")
+                raise ValueError(
+                    f"Security violation: table(s) not allowed: {', '.join(sorted(disallowed))}"
+                )
 
         if allowed_columns is not None or agent_settings.allowed_columns is not None:
-            allow_cols = allowed_columns if allowed_columns is not None else agent_settings.allowed_columns
+            allow_cols = (
+                allowed_columns
+                if allowed_columns is not None
+                else agent_settings.allowed_columns
+            )
             if allow_cols is not None:
                 for col in parsed.find_all(exp.Column):
-                    if col.name and col.name not in allow_cols and col.name != "tenant_id":
-                        raise ValueError(f"Security violation: column not allowed: {col.name}")
+                    if (
+                        col.name
+                        and col.name not in allow_cols
+                        and col.name != "tenant_id"
+                    ):
+                        raise ValueError(
+                            f"Security violation: column not allowed: {col.name}"
+                        )
 
         def _inject_tenant(node: exp.Expression) -> exp.Expression:
             if isinstance(node, exp.Select):
                 tenant_cond = exp.EQ(
                     this=exp.to_identifier("tenant_id"),
-                    expression=exp.Placeholder(this="tenant_id"), # Parameterized Query
+                    expression=exp.Placeholder(this="tenant_id"),  # Parameterized Query
                 )
                 existing = node.args.get("where")
                 if existing:
-                    node.set("where", exp.Where(this=exp.and_(existing.this, tenant_cond)))
+                    node.set(
+                        "where", exp.Where(this=exp.and_(existing.this, tenant_cond))
+                    )
                 else:
                     node.set("where", exp.Where(this=tenant_cond))
             return node

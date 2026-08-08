@@ -11,7 +11,14 @@ logger = logging.getLogger(__name__)
 
 
 class EpisodicMemory:
-    def save_episode(self, session_id: str | None, summary: str, user_id: str | int, tenant_id: str | int, raw_turns: int) -> str | None:
+    def save_episode(
+        self,
+        session_id: str | None,
+        summary: str,
+        user_id: str | int,
+        tenant_id: str | int,
+        raw_turns: int,
+    ) -> str | None:
         if not session_id or not summary.strip():
             return None
         try:
@@ -19,18 +26,29 @@ class EpisodicMemory:
                 episode = EpisodeRepository(db).save_episode(
                     session_id, summary, str(user_id), str(tenant_id), raw_turns
                 )
-            logger.info("Saved episodic memory id=%s tenant=%s user=%s", episode.episode_id, tenant_id, user_id)
+            logger.info(
+                "Saved episodic memory id=%s tenant=%s user=%s",
+                episode.episode_id,
+                tenant_id,
+                user_id,
+            )
             return episode.episode_id
         except Exception as exc:
             logger.warning("Episodic memory write failed: %s", exc)
             return None
 
     def get_recent(
-        self, user_id: str | int, tenant_id: str | int, limit: int | None = None, exclude_session_id: str | None = None
+        self,
+        user_id: str | int,
+        tenant_id: str | int,
+        limit: int | None = None,
+        exclude_session_id: str | None = None,
     ) -> list[str]:
         try:
             with get_db_session() as db:
-                episodes = EpisodeRepository(db).get_recent(str(user_id), str(tenant_id), limit, exclude_session_id)
+                episodes = EpisodeRepository(db).get_recent(
+                    str(user_id), str(tenant_id), limit, exclude_session_id
+                )
                 return [episode.summary for episode in episodes]
         except Exception as exc:
             logger.warning("Episodic memory read failed: %s", exc)

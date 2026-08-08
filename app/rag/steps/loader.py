@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -18,22 +17,21 @@ from langchain_core.documents import Document
 # Maps file extension → (loader class, human-readable file_type label)
 # file_type is stored as a Qdrant payload field and indexed for fast filtering.
 _EXTENSION_MAP: dict[str, tuple] = {
-    ".txt":  (TextLoader,                       "text"),
-    ".pdf":  (PyPDFLoader,                      "pdf"),
-    ".docx": (UnstructuredWordDocumentLoader,   "word"),
-    ".doc":  (UnstructuredWordDocumentLoader,   "word"),
-    ".html": (UnstructuredHTMLLoader,           "html"),
-    ".csv":  (CSVLoader,                        "csv"),
-    ".md":   (UnstructuredMarkdownLoader,       "markdown"),
-    ".pptx": (UnstructuredPowerPointLoader,     "powerpoint"),
-    ".ppt":  (UnstructuredPowerPointLoader,     "powerpoint"),
-    ".xlsx": (UnstructuredExcelLoader,          "excel"),
-    ".xls":  (UnstructuredExcelLoader,          "excel"),
+    ".txt": (TextLoader, "text"),
+    ".pdf": (PyPDFLoader, "pdf"),
+    ".docx": (UnstructuredWordDocumentLoader, "word"),
+    ".doc": (UnstructuredWordDocumentLoader, "word"),
+    ".html": (UnstructuredHTMLLoader, "html"),
+    ".csv": (CSVLoader, "csv"),
+    ".md": (UnstructuredMarkdownLoader, "markdown"),
+    ".pptx": (UnstructuredPowerPointLoader, "powerpoint"),
+    ".ppt": (UnstructuredPowerPointLoader, "powerpoint"),
+    ".xlsx": (UnstructuredExcelLoader, "excel"),
+    ".xls": (UnstructuredExcelLoader, "excel"),
 }
 
 
 class DocumentLoader:
-
     @staticmethod
     def load_file(
         file_path: str,
@@ -96,9 +94,9 @@ class DocumentLoader:
         # 5. Build base metadata that will be injected into every chunk.
         #    These are the fields that have Qdrant payload indexes.
         base_metadata: Dict[str, Any] = {
-            "file_type": file_type_label,   # indexed KEYWORD field
-            "file_name": path.name,         # useful for source attribution
-            "language":  "unknown",         # caller can override via custom_metadata
+            "file_type": file_type_label,  # indexed KEYWORD field
+            "file_name": path.name,  # useful for source attribution
+            "language": "unknown",  # caller can override via custom_metadata
         }
 
         # 6. Merge: base_metadata first, then custom_metadata overrides.

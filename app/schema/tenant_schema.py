@@ -1,7 +1,9 @@
 from pydantic import BaseModel
 
+
 class TenantRegistrationRequest(BaseModel):
     """Request model for SaaS tenant registration"""
+
     organization_name: str
     admin_email: str
     admin_password: str
@@ -11,6 +13,7 @@ class TenantRegistrationRequest(BaseModel):
 
 class TenantRegistrationResponse(BaseModel):
     """Response model for SaaS tenant registration"""
+
     tenant_id: str
     admin_id: str
     organization_name: str

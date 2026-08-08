@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.agent.core.state import AgentState, SubAnswer
-from app.agent.utils.state_helpers import append_sub_answer, get_current_question, per_subquestion_reset
+from app.agent.core.state import AgentState
+from app.agent.utils.state_helpers import (
+    append_sub_answer,
+    get_current_question,
+    per_subquestion_reset,
+)
 
 
 def build_subquestion_answer_update(

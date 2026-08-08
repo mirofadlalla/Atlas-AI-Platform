@@ -13,7 +13,9 @@ from app.agent.tools.sql_engine.validator import SQLValidator
 )
 def test_validator_rejects_non_select(sql):
     with pytest.raises(ValueError):
-        SQLValidator.validate_and_enforce_tenant(sql, "00000000-0000-0000-0000-000000000001")
+        SQLValidator.validate_and_enforce_tenant(
+            sql, "00000000-0000-0000-0000-000000000001"
+        )
 
 
 def test_validator_injects_parameterized_tenant_predicate():

@@ -5,9 +5,9 @@ Handles asynchronous logging of agent runs and costs to avoid blocking agent res
 Records both database logs and Prometheus metrics for monitoring and analytics.
 Similar to query_logging_service but for agent-based interactions.
 """
+
 import logging
 from celery import shared_task
-from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.repositories.runs_repository import RunsRepository
@@ -34,11 +34,11 @@ def log_agent_run_and_cost(
 ):
     """
     Background task to log agent runs and costs to the database.
-    
+
     Also records Prometheus metrics via internal API webhook for monitoring.
     Runs asynchronously to avoid blocking the response stream.
     Retries up to 3 times on failure.
-    
+
     Args:
         tenant_id: Tenant identifier
         question: Original user question
@@ -55,31 +55,22 @@ def log_agent_run_and_cost(
     try:
         # Get a fresh database session for this task
         db = next(get_db())
-        
+
         runs_repo = RunsRepository(db)
         cost_repo = CostLogRepository(db)
-        
-        # Save run record - include agent-specific metadata in the answer field
-        run_metadata = {
-            "agent_run": True,
-            "step_count": step_count,
-            "sql_queries": sql_queries,
-            "retrieved_docs": retrieved_docs,
-            "answer": final_answer
-        }
-        
+
         run = runs_repo.create(
             tenant_id=tenant_id,
             query=question,
             answer=final_answer,
             latency=latency,
             cache_hit=False,  # Agent runs are not cached
-            retrieved_docs_ids=retrieved_docs
+            retrieved_docs_ids=retrieved_docs,
         )
-        
+
         # Calculate total cost from tokens
         cost_usd = (input_tokens * 0.0000001) + (output_tokens * 0.0000002)
-        
+
         # Save cost log if tokens were used
         if input_tokens > 0 or output_tokens > 0:
             cost_repo.create(
@@ -87,25 +78,28 @@ def log_agent_run_and_cost(
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 model_name=model_name,
-                cost_usd=cost_usd
+                cost_usd=cost_usd,
             )
             logger.info(
                 f"Logged agent run {run.run_id} - Tenant: {tenant_id}, "
                 f"Steps: {step_count}, Tokens: {input_tokens + output_tokens}, Cost: ${cost_usd:.6f}"
             )
         else:
-            logger.info(f"Logged agent run {run.run_id} - Tenant: {tenant_id} (no token usage)")
-        
+            logger.info(
+                f"Logged agent run {run.run_id} - Tenant: {tenant_id} (no token usage)"
+            )
+
         # Record Prometheus metrics via internal webhook so they register on the API server
         try:
             import os
             from app.core.config import settings
+
             api_host = os.environ.get("API_HOST", "http://localhost:8000")
             if not api_host.startswith("http"):
                 api_host = f"http://{api_host}"
-                
+
             webhook_url = f"{api_host}/api/internal/metrics/record"
-            
+
             payload = {
                 "metric_type": "agent_run",
                 "tenant_id": str(tenant_id),
@@ -114,31 +108,39 @@ def log_agent_run_and_cost(
                 "output_tokens": int(output_tokens),
                 "cost_usd": float(cost_usd),
                 "latency": float(latency),
-                "step_count": int(step_count)
+                "step_count": int(step_count),
             }
-            
+
             headers = {}
             if settings.internal_metrics_api_key:
                 headers["X-Internal-Token"] = settings.internal_metrics_api_key
 
             # Fire and forget with short timeout
-            response = requests.post(webhook_url, json=payload, headers=headers, timeout=2.0)
+            response = requests.post(
+                webhook_url, json=payload, headers=headers, timeout=2.0
+            )
             if response.status_code == 200:
-                logger.debug(f"Successfully sent agent metrics to API webhook for run {run.run_id}")
+                logger.debug(
+                    f"Successfully sent agent metrics to API webhook for run {run.run_id}"
+                )
             else:
-                logger.warning(f"API webhook returned status {response.status_code}: {response.text}")
-                
+                logger.warning(
+                    f"API webhook returned status {response.status_code}: {response.text}"
+                )
+
         except Exception as metric_error:
-            logger.error(f"Error recording Prometheus agent metrics via webhook: {metric_error}")
+            logger.error(
+                f"Error recording Prometheus agent metrics via webhook: {metric_error}"
+            )
             # Don't fail the entire task if metrics recording fails
-        
+
         # Clean up database session
         db.close()
-        
+
     except Exception as exc:
         logger.error(f"Error logging agent run and cost: {exc}")
         # Retry with exponential backoff
-        raise self.retry(exc=exc, countdown=min(60 * (2 ** self.request.retries), 600))
+        raise self.retry(exc=exc, countdown=min(60 * (2**self.request.retries), 600))
 
 
 def trigger_agent_logging(
@@ -156,10 +158,10 @@ def trigger_agent_logging(
 ) -> None:
     """
     Trigger background logging task for agent without blocking.
-    
+
     This function returns immediately, allowing the response to stream
     while logging happens in the background.
-    
+
     Args:
         tenant_id: Tenant identifier
         question: Original user question

@@ -1,9 +1,9 @@
 import json
-from unittest.mock import AsyncMock, patch, MagicMock
-import pytest
+from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
 from app.agent.utils.state_helpers import create_initial_state
+
 
 def test_create_initial_state_accepts_run_id():
     custom_run_id = "test-run-id-12345"
@@ -13,7 +13,7 @@ def test_create_initial_state_accepts_run_id():
 
 def test_ask_agent_passes_run_id_and_emits_degraded_fields():
     from app.routes.agent_route import router
-    from fastapi import FastAPI, Depends
+    from fastapi import FastAPI
     from app.services.auth_services.auth_service import get_current_user
     from app.core.db import get_db
 
@@ -41,12 +41,16 @@ def test_ask_agent_passes_run_id_and_emits_degraded_fields():
                     "degraded_reason": "Test degradation reason",
                     "step_count": 2,
                 }
-            }
+            },
         }
 
-    with patch("app.routes.agent_route.agent_app.astream_events", side_effect=mock_astream_events), \
-         patch("app.routes.agent_route.trigger_agent_logging"):
-
+    with (
+        patch(
+            "app.routes.agent_route.agent_app.astream_events",
+            side_effect=mock_astream_events,
+        ),
+        patch("app.routes.agent_route.trigger_agent_logging"),
+    ):
         response = client.post(
             "/agent/ask-agent",
             json={"question": "What is x?", "run_id": "my-custom-run-id"},
@@ -54,9 +58,11 @@ def test_ask_agent_passes_run_id_and_emits_degraded_fields():
 
         assert response.status_code == 200
         events_text = response.text
-        
+
         # Parse SSE events from output
-        lines = [line for line in events_text.split("\n\n") if line.startswith("data: ")]
+        lines = [
+            line for line in events_text.split("\n\n") if line.startswith("data: ")
+        ]
         parsed_events = [json.loads(line.replace("data: ", "")) for line in lines]
 
         complete_event = next(e for e in parsed_events if e.get("type") == "complete")
@@ -91,7 +97,9 @@ def test_ask_agent_returns_cached_run():
         "degraded_reason": "Cached degraded reason",
     }
 
-    with patch("app.routes.agent_route.get_cached_run_result", return_value=cached_data):
+    with patch(
+        "app.routes.agent_route.get_cached_run_result", return_value=cached_data
+    ):
         response = client.post(
             "/agent/ask-agent",
             json={"question": "What is x?", "run_id": "cached-run-id"},
@@ -99,7 +107,9 @@ def test_ask_agent_returns_cached_run():
 
         assert response.status_code == 200
         events_text = response.text
-        lines = [line for line in events_text.split("\n\n") if line.startswith("data: ")]
+        lines = [
+            line for line in events_text.split("\n\n") if line.startswith("data: ")
+        ]
         parsed_events = [json.loads(line.replace("data: ", "")) for line in lines]
 
         complete_event = next(e for e in parsed_events if e.get("type") == "complete")

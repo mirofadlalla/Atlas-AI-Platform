@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 
 class QueryRequest(BaseModel):
     """Request body for RAG query endpoints."""
+
     query: str = Field(
         ...,
         min_length=1,

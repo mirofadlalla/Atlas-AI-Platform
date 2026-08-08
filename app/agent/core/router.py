@@ -79,7 +79,10 @@ def route_action(state: AgentState) -> str:
     if last_action not in tool_registry.list_tools() + ["finish"]:
         return "finish"
 
-    if len(observation_history) >= 2 and observation_history[-1] == observation_history[-2]:
+    if (
+        len(observation_history) >= 2
+        and observation_history[-1] == observation_history[-2]
+    ):
         logger.info("Repeated observation → finish")
         return "finish"
 
@@ -99,7 +102,11 @@ def route_action(state: AgentState) -> str:
             return "retrieval"
         return "finish"
 
-    if last_action == "retrieval" and _tool_attempted(state, "retrieval") and not has_retrieval_data:
+    if (
+        last_action == "retrieval"
+        and _tool_attempted(state, "retrieval")
+        and not has_retrieval_data
+    ):
         return "finish"
 
     if last_action == "finish":

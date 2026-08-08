@@ -19,7 +19,9 @@ _ALLOWED_TYPES = {"fact", "preference", "tool_hint"}
 class SemanticMemory:
     """Stores durable, relevant memories with strict tenant and user filters."""
 
-    def __init__(self, client=None, embedding_model=None, collection_name: str | None = None) -> None:
+    def __init__(
+        self, client=None, embedding_model=None, collection_name: str | None = None
+    ) -> None:
         self.client = client or QdrantClient(url=settings.qdrant_url)
         self.embedding_model = embedding_model or EmbeddedModel()
         self.collection_name = collection_name or settings.semantic_memory_collection
@@ -28,7 +30,11 @@ class SemanticMemory:
         if not self.client.collection_exists(self.collection_name):
             self.client.create_collection(
                 collection_name=self.collection_name,
-                vectors_config={"dense": models.VectorParams(size=vector_size, distance=models.Distance.COSINE)},
+                vectors_config={
+                    "dense": models.VectorParams(
+                        size=vector_size, distance=models.Distance.COSINE
+                    )
+                },
             )
         for field_name, schema in {
             "tenant_id": models.PayloadSchemaType.KEYWORD,
@@ -89,7 +95,13 @@ class SemanticMemory:
         )
         return memory_id
 
-    def recall(self, query: str, user_id: str | int, tenant_id: str | int, top_k: int | None = None) -> list[str]:
+    def recall(
+        self,
+        query: str,
+        user_id: str | int,
+        tenant_id: str | int,
+        top_k: int | None = None,
+    ) -> list[str]:
         """Recall relevant memories only from the requesting user's tenant scope."""
         if not query.strip():
             return []
@@ -102,8 +114,13 @@ class SemanticMemory:
                 using="dense",
                 query_filter=models.Filter(
                     must=[
-                        models.FieldCondition(key="tenant_id", match=models.MatchValue(value=str(tenant_id))),
-                        models.FieldCondition(key="user_id", match=models.MatchValue(value=str(user_id))),
+                        models.FieldCondition(
+                            key="tenant_id",
+                            match=models.MatchValue(value=str(tenant_id)),
+                        ),
+                        models.FieldCondition(
+                            key="user_id", match=models.MatchValue(value=str(user_id))
+                        ),
                     ]
                 ),
                 limit=top_k or settings.semantic_memory_top_k,
@@ -111,7 +128,11 @@ class SemanticMemory:
             )
             points = getattr(response, "points", response)
             ranked = sorted(
-                (point for point in points if point.payload and point.payload.get("content")),
+                (
+                    point
+                    for point in points
+                    if point.payload and point.payload.get("content")
+                ),
                 key=lambda point: float(getattr(point, "score", 0.0))
                 * (0.5 + 0.5 * float(point.payload.get("importance", 0.5))),
                 reverse=True,
@@ -119,11 +140,15 @@ class SemanticMemory:
             memories = [point.payload["content"] for point in ranked]
             logger.info(
                 "Recalled %s semantic memories for tenant=%s user=%s",
-                len(memories), tenant_id, user_id,
+                len(memories),
+                tenant_id,
+                user_id,
             )
             return memories
         except Exception as exc:
-            logger.warning("Semantic memory recall failed; continuing without it: %s", exc)
+            logger.warning(
+                "Semantic memory recall failed; continuing without it: %s", exc
+            )
             return []
 
     def forget(self, memory_id: str, user_id: str | int, tenant_id: str | int) -> bool:
@@ -138,7 +163,9 @@ class SemanticMemory:
             if not existing:
                 return False
             payload = existing[0].payload or {}
-            if payload.get("tenant_id") != str(tenant_id) or payload.get("user_id") != str(user_id):
+            if payload.get("tenant_id") != str(tenant_id) or payload.get(
+                "user_id"
+            ) != str(user_id):
                 return False
             self.client.delete(
                 collection_name=self.collection_name,
@@ -157,8 +184,14 @@ class SemanticMemory:
                 points_selector=models.FilterSelector(
                     filter=models.Filter(
                         must=[
-                            models.FieldCondition(key="tenant_id", match=models.MatchValue(value=str(tenant_id))),
-                            models.FieldCondition(key="user_id", match=models.MatchValue(value=str(user_id))),
+                            models.FieldCondition(
+                                key="tenant_id",
+                                match=models.MatchValue(value=str(tenant_id)),
+                            ),
+                            models.FieldCondition(
+                                key="user_id",
+                                match=models.MatchValue(value=str(user_id)),
+                            ),
                         ]
                     )
                 ),
@@ -175,7 +208,11 @@ class SemanticMemory:
                 collection_name=self.collection_name,
                 points_selector=models.FilterSelector(
                     filter=models.Filter(
-                        must=[models.FieldCondition(key="importance", range=models.Range(lt=threshold))]
+                        must=[
+                            models.FieldCondition(
+                                key="importance", range=models.Range(lt=threshold)
+                            )
+                        ]
                     )
                 ),
             )

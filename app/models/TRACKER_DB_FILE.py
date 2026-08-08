@@ -11,6 +11,7 @@ class TRACKER_DB_FILE(Base):
     Used to prevent duplicate processing of the same file (via SHA-256 hash comparison).
     Statuses: 'processing' -> 'completed' | 'failed'
     """
+
     __tablename__ = "tracker_db_file"
 
     id = uuid_pk()
@@ -18,7 +19,9 @@ class TRACKER_DB_FILE(Base):
     file_name = Column(String(512), nullable=False)
     file_hash = Column(String(64), index=True, nullable=False)
 
-    status = Column(String(20), default='completed')  # 'processing', 'completed', 'failed'
+    status = Column(
+        String(20), default="completed"
+    )  # 'processing', 'completed', 'failed'
 
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)

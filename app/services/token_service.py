@@ -1,4 +1,4 @@
-from jose import JWTError, jwt
+from jose import jwt
 from datetime import datetime, timedelta
 
 from app.core.config import settings

@@ -9,7 +9,9 @@ from typing import Any
 from app.agent.utils.classification import classify_question_type
 from app.agent.utils.parsing import extract_first_json_block
 
-_GOLDEN_PATH = Path(__file__).resolve().parents[3] / "tests" / "eval" / "golden_questions.json"
+_GOLDEN_PATH = (
+    Path(__file__).resolve().parents[3] / "tests" / "eval" / "golden_questions.json"
+)
 
 
 def load_golden_questions(path: Path | None = None) -> list[dict[str, Any]]:

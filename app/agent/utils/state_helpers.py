@@ -81,9 +81,9 @@ def create_initial_state(
 
 
 def is_timed_out(state: AgentState) -> bool:
-    '''
+    """
     Check if the agent has exceeded its allowed execution time.
-    '''
+    """
     start = state.get("start_time")
     if start is None:
         return False
@@ -91,9 +91,7 @@ def is_timed_out(state: AgentState) -> bool:
 
 
 def budget_exceeded(state: AgentState) -> tuple[bool, str | None]:
-    '''
-    
-    '''
+    """ """
     if is_timed_out(state):
         return True, "Agent execution timed out"
 
@@ -123,7 +121,9 @@ def per_subquestion_reset() -> dict[str, Any]:
     return dict(PER_SUBQUESTION_RESET)
 
 
-def append_sub_answer(sub_answers: list[SubAnswer], question: str, answer: str) -> list[SubAnswer]:
+def append_sub_answer(
+    sub_answers: list[SubAnswer], question: str, answer: str
+) -> list[SubAnswer]:
     updated = list(sub_answers)
     updated.append(SubAnswer(question=question, answer=answer))
     return updated

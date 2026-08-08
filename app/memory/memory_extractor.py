@@ -13,20 +13,24 @@ logger = logging.getLogger(__name__)
 
 
 class MemoryExtractor:
-    def extract_and_store(self, question: str, answer: str, user_id: str, tenant_id: str) -> list[str]:
+    def extract_and_store(
+        self, question: str, answer: str, user_id: str, tenant_id: str
+    ) -> list[str]:
         if not question.strip() or not answer.strip():
             return []
-        prompt = f'''Extract durable memory from this completed interaction. Keep only user preferences,
+        prompt = f"""Extract durable memory from this completed interaction. Keep only user preferences,
 stable facts, or reusable database/tool hints. Never store secrets, credentials, transient requests,
 unsupported claims, or chain-of-thought. Return ONLY JSON:
 {{"memories":[{{"content":"...","memory_type":"fact|preference|tool_hint","importance":0.0}}]}}
 Use an empty list if nothing is worth retaining.
 
 USER QUESTION: {question}
-ASSISTANT ANSWER: {answer}'''
+ASSISTANT ANSWER: {answer}"""
         try:
             response = call_agent_llm(prompt, tier="generation", tenant_id=tenant_id)
-            extracted = json.loads(extract_first_json_block(response.get("content", ""))).get("memories", [])
+            extracted = json.loads(
+                extract_first_json_block(response.get("content", ""))
+            ).get("memories", [])
         except Exception as exc:
             logger.warning("Semantic memory extraction failed: %s", exc)
             return []

@@ -9,7 +9,10 @@ from app.agent.core.state import AgentState, SubAnswer
 from app.agent.prompts.registry import prompt_registry
 from app.agent.utils.classification import asks_for_db_data
 from app.agent.utils.context_budget import truncate_to_token_budget
-from app.agent.utils.guardrails import sanitize_untrusted_block, validate_answer_grounding
+from app.agent.utils.guardrails import (
+    sanitize_untrusted_block,
+    validate_answer_grounding,
+)
 from app.agent.utils.llm import call_agent_llm
 from app.agent.utils.retry import with_retry
 from app.agent.utils.state_helpers import get_current_question
@@ -19,11 +22,15 @@ logger = logging.getLogger(__name__)
 
 
 def _format_history(state: AgentState) -> str:
-    return "\n".join(f"{turn.get('role', 'user').title()}: {turn.get('content', '')}" for turn in state.get("conversation_history", []))
+    return "\n".join(
+        f"{turn.get('role', 'user').title()}: {turn.get('content', '')}"
+        for turn in state.get("conversation_history", [])
+    )
 
 
 def _format_memories(state: AgentState) -> str:
     return "\n".join(f"- {memory}" for memory in state.get("recalled_memories", []))
+
 
 _DEGRADED_NOTE = (
     "IMPORTANT: Data gathering was incomplete or cut short ({reason}). "
@@ -31,7 +38,9 @@ _DEGRADED_NOTE = (
 )
 
 
-def build_data_summary(state: AgentState, current_question: str) -> tuple[str, list[str]]:
+def build_data_summary(
+    state: AgentState, current_question: str
+) -> tuple[str, list[str]]:
     data_summary: list[str] = []
     data_sources: list[str] = []
 
@@ -70,7 +79,9 @@ def build_data_summary(state: AgentState, current_question: str) -> tuple[str, l
     return text, data_sources
 
 
-def answer_subquestion(state: AgentState) -> tuple[str, list[str], dict, int, list[str]]:
+def answer_subquestion(
+    state: AgentState,
+) -> tuple[str, list[str], dict, int, list[str]]:
     current_question = get_current_question(state)
     data_summary_text, data_sources = build_data_summary(state, current_question)
 
@@ -81,14 +92,27 @@ def answer_subquestion(state: AgentState) -> tuple[str, list[str], dict, int, li
 
     working_memory = WorkingMemory(agent_settings.prompt_max_tokens)
     assembled_context = (
-        working_memory
-        .add("conversation history", _format_history(state), priority=2, max_tokens=1600)
-        .add("episodic memory", state.get("episode_context", ""), priority=3, max_tokens=800)
+        working_memory.add(
+            "conversation history", _format_history(state), priority=2, max_tokens=1600
+        )
+        .add(
+            "episodic memory",
+            state.get("episode_context", ""),
+            priority=3,
+            max_tokens=800,
+        )
         .add("semantic memory", _format_memories(state), priority=4, max_tokens=1200)
-        .add("retrieved data", data_summary_text, priority=5, max_tokens=agent_settings.prompt_max_tokens // 2)
+        .add(
+            "retrieved data",
+            data_summary_text,
+            priority=5,
+            max_tokens=agent_settings.prompt_max_tokens // 2,
+        )
         .assemble()
     )
-    prompt = prompt_registry.answer_subquestion(current_question, assembled_context, degraded_note)
+    prompt = prompt_registry.answer_subquestion(
+        current_question, assembled_context, degraded_note
+    )
     response_dict = with_retry(
         call_agent_llm,
         prompt,
@@ -99,7 +123,13 @@ def answer_subquestion(state: AgentState) -> tuple[str, list[str], dict, int, li
         response_dict["content"].strip(),
         data_summary_text,
     )
-    return answer, data_sources, response_dict, working_memory.tokens_used, working_memory.context_sources
+    return (
+        answer,
+        data_sources,
+        response_dict,
+        working_memory.tokens_used,
+        working_memory.context_sources,
+    )
 
 
 def synthesize_final_answer(

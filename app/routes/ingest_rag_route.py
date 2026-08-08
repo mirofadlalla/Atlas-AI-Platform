@@ -3,6 +3,7 @@ Routes for RAG data ingestion endpoints.
 
 Implements admin-only access, rate limiting, and cost tracking for file ingestion.
 """
+
 import logging
 import uuid
 from pathlib import Path
@@ -25,8 +26,18 @@ router = APIRouter(
 
 # Only these extensions are accepted for RAG ingestion.
 ALLOWED_EXTENSIONS: set[str] = {
-    ".pdf", ".txt", ".md", ".csv", ".docx", ".doc",
-    ".pptx", ".ppt", ".xlsx", ".xls", ".html", ".json",
+    ".pdf",
+    ".txt",
+    ".md",
+    ".csv",
+    ".docx",
+    ".doc",
+    ".pptx",
+    ".ppt",
+    ".xlsx",
+    ".xls",
+    ".html",
+    ".json",
 }
 
 # Maximum permitted upload size: 50 MB
@@ -64,7 +75,7 @@ async def upload_file(
     recursive: bool = Form(False),
     file_extensions: str = Form(None),
     current_admin=Depends(require_admin),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Upload and ingest a file into the RAG system (admin only).
@@ -99,9 +110,7 @@ async def upload_file(
 
     # Apply role-aware rate limiting
     rate_limit(
-        user_id=str(current_admin.id),
-        role="admin",
-        endpoint="/ingest-rag/upload_file"
+        user_id=str(current_admin.id), role="admin", endpoint="/ingest-rag/upload_file"
     )
 
     # ── Fix 3a: sanitise filename ─────────────────────────────────────────────
@@ -121,6 +130,7 @@ async def upload_file(
     # Always end any stale MLflow run from a previous request
     try:
         import mlflow
+
         mlflow.end_run()
     except Exception:
         pass
@@ -174,16 +184,12 @@ async def upload_file(
 
         if mlflow_run_id:
             import mlflow
+
             mlflow.log_param("tenant_id", tenant_id)
             mlflow.log_param("uploaded_file", safe_name)
             mlflow.log_param("source", source)
             mlflow.log_param("author", author)
             mlflow.log_metric("file_size_bytes", total_bytes)
-
-        # Parse additional file extensions if provided
-        file_ext_list = None
-        if file_extensions:
-            file_ext_list = [ext.strip() for ext in file_extensions.split(",")]
 
         # Queue the ingestion task to Celery
         logger.info(f"Queuing ingest task: tenant={tenant_id} file={unique_name}")
@@ -220,7 +226,9 @@ async def upload_file(
         raise
     except PermissionError as e:
         logger.error(f"Permission error during ingestion: {e}")
-        raise HTTPException(status_code=403, detail="Server lacks permission to write the upload file.")
+        raise HTTPException(
+            status_code=403, detail="Server lacks permission to write the upload file."
+        )
     except ValueError as e:
         logger.error(f"Validation error during ingestion: {e}")
         raise HTTPException(status_code=400, detail=str(e))

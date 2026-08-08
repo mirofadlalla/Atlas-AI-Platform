@@ -1,4 +1,7 @@
-from app.agent.utils.guardrails import sanitize_untrusted_block, validate_answer_grounding
+from app.agent.utils.guardrails import (
+    sanitize_untrusted_block,
+    validate_answer_grounding,
+)
 
 
 def test_sanitize_injection_phrase():

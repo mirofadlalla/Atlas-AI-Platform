@@ -18,7 +18,9 @@ def _cache_key(tenant_id: str | int, question: str) -> str:
     return f"agent:retrieval:{tenant_id}:{digest}"
 
 
-def get_cached_retrieval(tenant_id: str | int, question: str) -> list[dict[str, Any]] | None:
+def get_cached_retrieval(
+    tenant_id: str | int, question: str
+) -> list[dict[str, Any]] | None:
     try:
         import redis
 

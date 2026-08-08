@@ -1,33 +1,37 @@
 # app/services/llm_runner.py
 import logging
+from typing import Iterator
+
+from langchain_core.language_models.llms import LLM
+from langchain_core.outputs import GenerationChunk
+
 from app.design_pattern.llm_singlton import LLMService
 
 logger = logging.getLogger(__name__)
+
 
 def call_llama(
     prompt: str,
     model_name: str = "llama-3.3-70b-versatile",
     system_prompt: str = "You are a helpful assistant.",
-    temperature: float = 1.0
+    temperature: float = 1.0,
 ):
     """
     Call the Local LLM to generate a response.
-    
+
     Args:
         prompt: The user prompt to send to the model
         model_name: The model to use (note: currently singleton uses a fixed model)
         system_prompt: Optional system prompt for context
         temperature: Temperature for generation (0-1)
-    
+
     Returns:
         dict: Dictionary with keys: 'content' (str), 'input_tokens' (int), 'output_tokens' (int), 'total_tokens' (int)
     """
     try:
         llm = LLMService()
         output = llm.generate(
-            prompt,
-            system_prompt=system_prompt,
-            temperature=temperature
+            prompt, system_prompt=system_prompt, temperature=temperature
         )
         # generate() now returns a plain str; token counts are not available via the API
         logger.info("LLM call successful.")
@@ -38,19 +42,13 @@ def call_llama(
         raise
 
 
-
-from typing import Any, List, Optional
-from langchain_core.language_models.llms import LLM
-from langchain_core.callbacks.manager import CallbackManagerForLLMRun
-
-from langchain_core.outputs import GenerationChunk
-from typing import Iterator
-
 # transform the call_llama function into a custom LLM class that can be used with LangChain
 class CustomLocalLLM(LLM):
-    last_usage: dict = {} # مخزن مؤقت لآخر عملية
+    last_usage: dict = {}  # مخزن مؤقت لآخر عملية
 
-    def _stream(self, prompt: str, run_manager=None, **kwargs) -> Iterator[GenerationChunk]:
+    def _stream(
+        self, prompt: str, run_manager=None, **kwargs
+    ) -> Iterator[GenerationChunk]:
         llm = LLMService()
         for content, usage in llm.generate_stream(prompt):
             if content:
@@ -65,14 +63,16 @@ class CustomLocalLLM(LLM):
     def _call(self, prompt: str, **kwargs) -> str:
         # Normal Method using invoke
         llm = LLMService()
-        res = llm.generate(prompt)  # Removed system_prompt as it's not accepted by generate
-        
+        res = llm.generate(
+            prompt
+        )  # Removed system_prompt as it's not accepted by generate
+
         # Save usage for pipeline metrics
         CustomLocalLLM.last_usage = {
             "input": res.get("input_tokens", 0),
-            "output": res.get("output_tokens", 0)
+            "output": res.get("output_tokens", 0),
         }
-        
+
         return res["content"]
 
     @property

@@ -17,6 +17,7 @@ class RecommendedQAService:
     Max 10 Q&A pairs per tenant.
     Loaded into memory on server startup and updated via admin API.
     """
+
     _tenant_cache: Dict[str, List[Dict[str, Any]]] = {}
     _lock = threading.Lock()
 
@@ -28,7 +29,9 @@ class RecommendedQAService:
             engine = db.get_bind()
             Base.metadata.create_all(bind=engine, tables=[RecommendedQA.__table__])
 
-            records = db.query(RecommendedQA).order_by(RecommendedQA.created_at.asc()).all()
+            records = (
+                db.query(RecommendedQA).order_by(RecommendedQA.created_at.asc()).all()
+            )
 
             new_cache: Dict[str, List[Dict[str, Any]]] = {}
             for rec in records:
@@ -36,12 +39,16 @@ class RecommendedQAService:
                 if t_id not in new_cache:
                     new_cache[t_id] = []
                 if len(new_cache[t_id]) < MAX_RECOMMENDED_PER_TENANT:
-                    new_cache[t_id].append({
-                        "id": str(rec.id),
-                        "question": rec.question,
-                        "answer": rec.answer,
-                        "created_at": rec.created_at.isoformat() if rec.created_at else None
-                    })
+                    new_cache[t_id].append(
+                        {
+                            "id": str(rec.id),
+                            "question": rec.question,
+                            "answer": rec.answer,
+                            "created_at": rec.created_at.isoformat()
+                            if rec.created_at
+                            else None,
+                        }
+                    )
 
             with cls._lock:
                 cls._tenant_cache = new_cache
@@ -50,7 +57,9 @@ class RecommendedQAService:
                 f"✅ Successfully loaded recommended Q&A in-memory cache for {len(new_cache)} tenants"
             )
         except Exception as exc:
-            logger.error(f"❌ Error loading recommended Q&A into in-memory cache: {exc}")
+            logger.error(
+                f"❌ Error loading recommended Q&A into in-memory cache: {exc}"
+            )
 
     @classmethod
     def _load_tenant(cls, tenant_id: str, db: Session) -> List[Dict[str, Any]]:
@@ -71,7 +80,9 @@ class RecommendedQAService:
                     "id": str(rec.id),
                     "question": rec.question,
                     "answer": rec.answer,
-                    "created_at": rec.created_at.isoformat() if rec.created_at else None
+                    "created_at": rec.created_at.isoformat()
+                    if rec.created_at
+                    else None,
                 }
                 for rec in records
             ]
@@ -83,7 +94,9 @@ class RecommendedQAService:
             return []
 
     @classmethod
-    def get_recommended_questions(cls, tenant_id: str, db: Optional[Session] = None) -> List[Dict[str, Any]]:
+    def get_recommended_questions(
+        cls, tenant_id: str, db: Optional[Session] = None
+    ) -> List[Dict[str, Any]]:
         """Retrieve tenant's recommended Q&A pairs from in-memory cache."""
         t_id = str(tenant_id)
         with cls._lock:
@@ -109,9 +122,7 @@ class RecommendedQAService:
             )
 
         new_qa = RecommendedQA(
-            tenant_id=t_id,
-            question=question.strip(),
-            answer=answer.strip()
+            tenant_id=t_id, question=question.strip(), answer=answer.strip()
         )
         db.add(new_qa)
         db.commit()
@@ -121,7 +132,7 @@ class RecommendedQAService:
             "id": str(new_qa.id),
             "question": new_qa.question,
             "answer": new_qa.answer,
-            "created_at": new_qa.created_at.isoformat() if new_qa.created_at else None
+            "created_at": new_qa.created_at.isoformat() if new_qa.created_at else None,
         }
 
         with cls._lock:
@@ -129,11 +140,15 @@ class RecommendedQAService:
                 cls._tenant_cache[t_id] = []
             cls._tenant_cache[t_id].append(item)
 
-        logger.info(f"Added recommended Q&A '{question[:30]}...' to tenant {t_id} in-memory cache")
+        logger.info(
+            f"Added recommended Q&A '{question[:30]}...' to tenant {t_id} in-memory cache"
+        )
         return item
 
     @classmethod
-    def delete_recommended_question(cls, tenant_id: str, qa_id: str, db: Session) -> bool:
+    def delete_recommended_question(
+        cls, tenant_id: str, qa_id: str, db: Session
+    ) -> bool:
         """Delete recommended Q&A pair for a tenant."""
         t_id = str(tenant_id)
         record = (
@@ -154,5 +169,7 @@ class RecommendedQAService:
                     item for item in cls._tenant_cache[t_id] if item["id"] != str(qa_id)
                 ]
 
-        logger.info(f"Deleted recommended Q&A {qa_id} for tenant {t_id} from in-memory cache")
+        logger.info(
+            f"Deleted recommended Q&A {qa_id} for tenant {t_id} from in-memory cache"
+        )
         return True

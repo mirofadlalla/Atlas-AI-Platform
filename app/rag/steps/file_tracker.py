@@ -1,5 +1,3 @@
-import os
-import json
 import hashlib
 from pathlib import Path
 
@@ -10,8 +8,8 @@ from sqlalchemy.orm import Session
 
 # TRACKER_DB_FILE = "processed_files_db.json"
 
+
 class FileTracker:
-    
     @staticmethod
     def calculate_file_hash(file_path: str) -> str:
         """
@@ -21,33 +19,38 @@ class FileTracker:
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"Cannot hash missing file: {file_path}")
-            
+
         hasher = hashlib.sha256()
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 hasher.update(chunk)
         return hasher.hexdigest()
 
     @staticmethod
-    def is_file_processed(tenant_id: int, file_hash: str , db: Session) -> bool:
+    def is_file_processed(tenant_id: int, file_hash: str, db: Session) -> bool:
         """
         Checks if a file with the given hash has already been processed for the specified tenant.
         Returns True if the file is already processed, False otherwise.
         """
-        tenant_id = str(tenant_id)  # Ensure tenant_id is a string for consistent database queries
+        tenant_id = str(
+            tenant_id
+        )  # Ensure tenant_id is a string for consistent database queries
         tracker_repo = TrackerDBFileRepository(db)
 
         return tracker_repo.is_file_processed(tenant_id, file_hash)
-    
 
     @staticmethod
-    def mark_file_as_processed(tenant_id: int, file_name: str, file_hash: str , db: Session):
+    def mark_file_as_processed(
+        tenant_id: int, file_name: str, file_hash: str, db: Session
+    ):
         """
         Marks a file as processed in the database for the given tenant.
         This function adds a new record to the tracker database with the tenant ID, file name, and file hash.
         """
         tracker_repo = TrackerDBFileRepository(db)
-        tenant_id = str(tenant_id)  # Ensure tenant_id is a string for consistent database queries
+        tenant_id = str(
+            tenant_id
+        )  # Ensure tenant_id is a string for consistent database queries
         tracker_repo.add_processed_file(tenant_id, file_name, file_hash)
 
         print(f"File tracker updated with new hash: {file_hash}")

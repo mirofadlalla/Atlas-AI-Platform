@@ -10,7 +10,7 @@ from app.core.db import get_db_session
     retry_backoff=True,
     retry_kwargs={"max_retries": 5},
     time_limit=600,
-    soft_time_limit=550
+    soft_time_limit=550,
 )
 def ingest_file_task(self, file_path: str, tenant_id: str, source: str, author: str):
     """
@@ -38,6 +38,10 @@ def ingest_file_task(self, file_path: str, tenant_id: str, source: str, author: 
                 db=db,
             )
     except MemoryError:
-        self.retry(countdown=60, exc=MemoryError("Not enough memory to process file"), max_retries=3)
+        self.retry(
+            countdown=60,
+            exc=MemoryError("Not enough memory to process file"),
+            max_retries=3,
+        )
     except Exception as exc:
         self.retry(countdown=10, exc=exc)

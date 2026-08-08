@@ -3,28 +3,28 @@ from kombu import Exchange, Queue
 import os
 
 celery_app = Celery(
-    "atlas_ai", 
+    "atlas_ai",
     broker=os.getenv("CELERY_BROKER_URL", "amqp://guest:guest@localhost:5672//"),
     backend=os.getenv("CELERY_RESULT_BACKEND", "rpc://"),  # RabbitMQ backend
 )
 
-# Prodcer -> Exchange -> Queue -> Worker 
+# Prodcer -> Exchange -> Queue -> Worker
 
-default_exchange = Exchange("atlas_ai_exchange" , type="direct")
+default_exchange = Exchange("atlas_ai_exchange", type="direct")
 
 # define queus
 celery_app.conf.task_queues = (
-    Queue("ingest_data_queue" , default_exchange , routing_key="ingest"),
-    Queue("eval_data_queue" , default_exchange , routing_key="eval"),
-    Queue("logging_queue" , default_exchange , routing_key="logging"),
-    Queue("queue_dead" , default_exchange , routing_key="dead"),
+    Queue("ingest_data_queue", default_exchange, routing_key="ingest"),
+    Queue("eval_data_queue", default_exchange, routing_key="eval"),
+    Queue("logging_queue", default_exchange, routing_key="logging"),
+    Queue("queue_dead", default_exchange, routing_key="dead"),
 )
 
 celery_app.conf.task_default_queue = "logging_queue"
 celery_app.conf.task_default_exchange = "atlas_ai_exchange"
 celery_app.conf.task_default_routing_key = "logging"
 
-# define when task cames which queue and routes should go 
+# define when task cames which queue and routes should go
 celery_app.conf.task_routes = {
     "app.services.rag_services.ingest_rag_service.ingest_file_task": {
         "queue": "ingest_data_queue",
@@ -63,7 +63,6 @@ celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
-    
     # =========================
     # WORKER POOL SETTINGS
     # =========================
@@ -71,13 +70,11 @@ celery_app.conf.update(
     worker_max_tasks_per_child=10,  # Restart worker after 10 tasks to free memory
     worker_prefetch_multiplier=1,  # Process one task at a time
     worker_disable_rate_limits=False,
-
     # =========================
     # TIME LIMITS
     # =========================
     task_soft_time_limit=550,  # 9 min 10 sec
-    task_time_limit=600,       # 10 min
-
+    task_time_limit=600,  # 10 min
     # =========================
     # RETRIES & ACKS
     # =========================
@@ -85,7 +82,6 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,
     task_default_retry_delay=30,
     task_max_retries=3,
-
     # =========================
     # TRACKING
     # =========================

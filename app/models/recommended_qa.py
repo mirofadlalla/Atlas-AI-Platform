@@ -4,6 +4,7 @@ from sqlalchemy import Column, String, Text, DateTime, ForeignKey
 from .base import Base
 from .uuid import uuid_pk
 
+
 class RecommendedQA(Base):
     __tablename__ = "recommended_qa"
 

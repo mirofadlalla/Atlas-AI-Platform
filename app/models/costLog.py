@@ -1,6 +1,6 @@
 from app.models.uuid import uuid_pk
 
-from sqlalchemy import Column, String, Integer, Numeric, ForeignKey, Text, Boolean, DateTime, Index
+from sqlalchemy import Column, String, Integer, Numeric, ForeignKey, DateTime
 
 from sqlalchemy.orm import relationship
 
@@ -17,6 +17,7 @@ class CostLog(Base):
     generation model), so the relationship is One run → Many cost entries.
     The previous UNIQUE constraint on run_id has been removed to allow this.
     """
+
     __tablename__ = "cost_log"
 
     log_id = uuid_pk()
@@ -29,6 +30,8 @@ class CostLog(Base):
     model_name = Column(String)
     cost_usd = Column(Numeric(10, 6))
 
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
     run = relationship("Runs", back_populates="cost_details")

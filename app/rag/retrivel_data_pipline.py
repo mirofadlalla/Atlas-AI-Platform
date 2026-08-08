@@ -1,7 +1,4 @@
-import os
-import sys
 import threading
-from pathlib import Path
 import logging
 import hashlib
 import time
@@ -11,31 +8,25 @@ from langchain_classic.chains.combine_documents import create_stuff_documents_ch
 from langchain_classic.prompts import ChatPromptTemplate
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
-
-from app.models.runs import Runs
-from app.models.costLog import CostLog
-from app.rag.rerankers import RankingService
-from app.repositories.runs_repository import RunsRepository
-from app.repositories.cost_log_repository import CostLogRepository
-from app.services.rag_services.query_logging_service import trigger_query_logging
+from app.core.config import settings
 from app.core.monitors import (
     cache_hits_total,
-    vector_search_queries_total,
-    vector_search_duration_seconds,
-    retrieved_chunks_count,
+    reranking_duration_seconds,
     reranking_queries_total,
-    reranking_duration_seconds
+    retrieved_chunks_count,
+    vector_search_duration_seconds,
+    vector_search_queries_total,
 )
-from app.core.config import settings  # Import settings for Redis config
-
-# Setup paths
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+from app.design_pattern.embedded_model import EmbeddedModel
+from app.memory.working_memory import WorkingMemory
+from app.rag.rerankers import RankingService
+from app.repositories.cost_log_repository import CostLogRepository
+from app.repositories.runs_repository import RunsRepository
 from app.rag.steps.retriever import get_retriever
 from app.services.llm_runner import CustomLocalLLM
-from app.design_pattern.embedded_model import EmbeddedModel  # Ensure it's LangChain compatible
-from app.memory.working_memory import WorkingMemory
+from app.services.rag_services.query_logging_service import trigger_query_logging
+
+logger = logging.getLogger(__name__)
 
 # Initialize the embedding model singleton once at module load time
 _embedding_model = EmbeddedModel()
@@ -45,6 +36,7 @@ _ranking_services = {}
 _ranking_services_lock = threading.Lock()
 
 # "BM25" : boj
+
 
 def _get_ranking_service(strategy: str = "hybrid"):
     """Get or create a RankingService singleton for the given strategy (thread-safe)."""
@@ -126,16 +118,27 @@ def serialize_retrieved_documents(documents) -> list[dict]:
         for document in documents
     ]
 
+
 # Token pricing now lives in settings (see FIX #7) so it can be updated in one
 # place if the underlying model or provider pricing changes.
 _DEFAULT_INPUT_TOKEN_COST = 0.0000001
 _DEFAULT_OUTPUT_TOKEN_COST = 0.0000002
-_INPUT_TOKEN_COST = getattr(settings, "QWEN_INPUT_TOKEN_COST", _DEFAULT_INPUT_TOKEN_COST)
-_OUTPUT_TOKEN_COST = getattr(settings, "QWEN_OUTPUT_TOKEN_COST", _DEFAULT_OUTPUT_TOKEN_COST)
+_INPUT_TOKEN_COST = getattr(
+    settings, "QWEN_INPUT_TOKEN_COST", _DEFAULT_INPUT_TOKEN_COST
+)
+_OUTPUT_TOKEN_COST = getattr(
+    settings, "QWEN_OUTPUT_TOKEN_COST", _DEFAULT_OUTPUT_TOKEN_COST
+)
 
 
 class RetrievalPipeline:
-    def __init__(self, tenant_id: int, use_reranker: bool = False, reranker_strategy: str = None, db: Session = None):
+    def __init__(
+        self,
+        tenant_id: int,
+        use_reranker: bool = False,
+        reranker_strategy: str = None,
+        db: Session = None,
+    ):
         """
         Initialize the retrieval pipeline with optional reranking.
 
@@ -193,7 +196,9 @@ class RetrievalPipeline:
         start_time = time.time()
 
         # Fetch more docs initially for better reranking (if enabled)
-        fetch_count = max(top_k * fetch_multiplier, top_k) if self.use_reranker else top_k
+        fetch_count = (
+            max(top_k * fetch_multiplier, top_k) if self.use_reranker else top_k
+        )
 
         # -----------------------------------------------------------
         # FIX #2: fetch_count was computed but never actually passed to
@@ -219,7 +224,9 @@ class RetrievalPipeline:
             ).invoke(query)
 
         retrieval_time = time.time() - start_time
-        logger.debug(f"Document retrieval took {retrieval_time:.3f}s, got {len(docs)} documents")
+        logger.debug(
+            f"Document retrieval took {retrieval_time:.3f}s, got {len(docs)} documents"
+        )
 
         # Track retrieval metrics
         vector_search_queries_total.labels(tenant_id=str(self.tenant_id)).inc()
@@ -227,7 +234,7 @@ class RetrievalPipeline:
         retrieved_chunks_count.observe(len(docs))
 
         # Sort by ID to ensure deterministic ordering for caching
-        docs = sorted(docs, key=lambda d: d.metadata.get('_id', ''))
+        docs = sorted(docs, key=lambda d: d.metadata.get("_id", ""))
 
         # Apply reranking if enabled
         if self.use_reranker and self.ranking_service and docs:
@@ -236,9 +243,9 @@ class RetrievalPipeline:
             # Convert LangChain documents to format acceptable by ranking service
             doc_dicts = [
                 {
-                    'content': doc.page_content,
-                    'metadata': doc.metadata,
-                    'score': 1.0  # Initial retrieval score
+                    "content": doc.page_content,
+                    "metadata": doc.metadata,
+                    "score": 1.0,  # Initial retrieval score
                 }
                 for doc in docs
             ]
@@ -250,21 +257,25 @@ class RetrievalPipeline:
             logger.debug(f"Reranking took {rerank_time:.3f}s")
 
             # Track reranking metrics
-            reranking_queries_total.labels(reranker_type=self.ranking_service.strategy).inc()
-            reranking_duration_seconds.labels(reranker_type=self.ranking_service.strategy).observe(rerank_time)
+            reranking_queries_total.labels(
+                reranker_type=self.ranking_service.strategy
+            ).inc()
+            reranking_duration_seconds.labels(
+                reranker_type=self.ranking_service.strategy
+            ).observe(rerank_time)
 
             # Convert back to LangChain Document objects with updated metadata
             from langchain_core.documents import Document
 
             docs = [
                 Document(
-                    page_content=doc['content'],
+                    page_content=doc["content"],
                     metadata={
-                        **doc['metadata'],
-                        'original_score': doc['original_score'],
-                        'rerank_score': doc['rerank_score'],
-                        'combined_score': doc['combined_score']
-                    }
+                        **doc["metadata"],
+                        "original_score": doc["original_score"],
+                        "rerank_score": doc["rerank_score"],
+                        "combined_score": doc["combined_score"],
+                    },
                 )
                 for doc in reranked
             ]
@@ -282,7 +293,9 @@ class RetrievalPipeline:
         user_id: str | int | None = None,
         session_id: str | None = None,
     ) -> str:
-        return build_query_cache_key(self.tenant_id, query, chat_history, user_id, session_id)
+        return build_query_cache_key(
+            self.tenant_id, query, chat_history, user_id, session_id
+        )
 
     def _get_cached(self, cache_key: str):
         return get_local_query_cache(cache_key)
@@ -290,8 +303,17 @@ class RetrievalPipeline:
     def _set_cached(self, cache_key: str, value: dict):
         set_local_query_cache(cache_key, value)
 
-    def _log_run(self, query, full_answer, latency, cache_hit, retrieved_docs_ids,
-                 input_tokens, output_tokens, model_name):
+    def _log_run(
+        self,
+        query,
+        full_answer,
+        latency,
+        cache_hit,
+        retrieved_docs_ids,
+        input_tokens,
+        output_tokens,
+        model_name,
+    ):
         if not self.db:
             return
         try:
@@ -304,7 +326,7 @@ class RetrievalPipeline:
                 retrieved_docs_ids=retrieved_docs_ids,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
-                model_name=model_name
+                model_name=model_name,
             )
             logger.debug(f"Queued background logging for query: {query[:50]}...")
         except Exception as e:
@@ -337,7 +359,9 @@ class RetrievalPipeline:
         full_answer = ""
         cache_hit = False
         cache_source = "NONE"
-        cache_key = cache_key or self._build_cache_key(query, chat_history, user_id, session_id)
+        cache_key = cache_key or self._build_cache_key(
+            query, chat_history, user_id, session_id
+        )
 
         # 1. Check local query cache first (fastest) -- FIX #4: TTLCache is
         # self-expiring and access is guarded by a lock, so no manual
@@ -348,19 +372,29 @@ class RetrievalPipeline:
                 cache_hit = True
                 cache_source = "LOCAL_MEMORY"
                 cache_hits_total.labels(cache_type="local_memory").inc()
-                logger.info(f"[⚡ CACHE HIT - LOCAL MEMORY] Returning cached result for: {query[:50]}...")
-                full_answer = cached_result['answer']
+                logger.info(
+                    f"[⚡ CACHE HIT - LOCAL MEMORY] Returning cached result for: {query[:50]}..."
+                )
+                full_answer = cached_result["answer"]
                 yield full_answer
 
                 latency = time.time() - start_time
-                retrieved_docs_ids = cached_result.get('docs_ids', '')
+                retrieved_docs_ids = cached_result.get("docs_ids", "")
                 self._log_run(
-                    query, full_answer, latency, True, retrieved_docs_ids,
-                    0, 0, "Qwen2.5-1.5B (CACHED)"
+                    query,
+                    full_answer,
+                    latency,
+                    True,
+                    retrieved_docs_ids,
+                    0,
+                    0,
+                    "Qwen2.5-1.5B (CACHED)",
                 )
                 return
 
-            logger.info(f"[🔄 CACHE MISS - LOCAL MEMORY] Generating new answer for: {query[:50]}...")
+            logger.info(
+                f"[🔄 CACHE MISS - LOCAL MEMORY] Generating new answer for: {query[:50]}..."
+            )
 
         # 2. Retrieve documents, then assemble only the highest-priority
         # context that fits the configured model window.
@@ -371,14 +405,23 @@ class RetrievalPipeline:
 
         working_memory = WorkingMemory(settings.llm_context_window_tokens)
         assembled_context = (
-            working_memory
-            .add("conversation context", chat_history, priority=2, max_tokens=1600)
-            .add("retrieved documents", "\n\n".join(doc.page_content for doc in docs), priority=5, max_tokens=5600)
+            working_memory.add(
+                "conversation context", chat_history, priority=2, max_tokens=1600
+            )
+            .add(
+                "retrieved documents",
+                "\n\n".join(doc.page_content for doc in docs),
+                priority=5,
+                max_tokens=5600,
+            )
             .assemble()
         )
         logger.info(
             "Generating fresh answer tenant=%s question=%s context_tokens=%s sources=%s",
-            self.tenant_id, query[:50], working_memory.tokens_used, working_memory.context_sources,
+            self.tenant_id,
+            query[:50],
+            working_memory.tokens_used,
+            working_memory.context_sources,
         )
 
         from langchain_core.documents import Document
@@ -405,15 +448,18 @@ class RetrievalPipeline:
         # of being hardcoded inline, so a model/pricing change only needs to
         # be updated in one place (app.core.config.settings).
         cost = (input_tokens * _INPUT_TOKEN_COST) + (output_tokens * _OUTPUT_TOKEN_COST)
-        retrieved_docs_ids = ",".join([doc.metadata.get('_id', '') for doc in docs])
+        retrieved_docs_ids = ",".join([doc.metadata.get("_id", "") for doc in docs])
 
         if use_local_cache:
-            self._set_cached(cache_key, {
-                'answer': full_answer,
-                'docs_ids': retrieved_docs_ids,
-                'documents': serialize_retrieved_documents(docs),
-                'timestamp': time.time()
-            })
+            self._set_cached(
+                cache_key,
+                {
+                    "answer": full_answer,
+                    "docs_ids": retrieved_docs_ids,
+                    "documents": serialize_retrieved_documents(docs),
+                    "timestamp": time.time(),
+                },
+            )
             logger.info("✅ Query result cached in local memory")
 
         logger.info(
@@ -422,8 +468,14 @@ class RetrievalPipeline:
         )
 
         self._log_run(
-            query, full_answer, latency, cache_hit, retrieved_docs_ids,
-            input_tokens, output_tokens, "Qwen2.5-1.5B"
+            query,
+            full_answer,
+            latency,
+            cache_hit,
+            retrieved_docs_ids,
+            input_tokens,
+            output_tokens,
+            "Qwen2.5-1.5B",
         )
 
     def ask(
@@ -442,8 +494,13 @@ class RetrievalPipeline:
         Shares the exact-key local caching and logging path with ask_stream().
         """
         yield from self._stream_answer(
-            query, use_local_cache=True, chat_history=chat_history,
-            user_id=user_id, session_id=session_id, cache_key=cache_key, cache_checked=cache_checked,
+            query,
+            use_local_cache=True,
+            chat_history=chat_history,
+            user_id=user_id,
+            session_id=session_id,
+            cache_key=cache_key,
+            cache_checked=cache_checked,
             documents=documents,
         )
 
@@ -464,8 +521,13 @@ class RetrievalPipeline:
         a fresh answer, even when their embeddings or document context overlap.
         """
         yield from self._stream_answer(
-            query, use_local_cache=True, chat_history=chat_history,
-            user_id=user_id, session_id=session_id, cache_key=cache_key, cache_checked=cache_checked,
+            query,
+            use_local_cache=True,
+            chat_history=chat_history,
+            user_id=user_id,
+            session_id=session_id,
+            cache_key=cache_key,
+            cache_checked=cache_checked,
             documents=documents,
         )
 

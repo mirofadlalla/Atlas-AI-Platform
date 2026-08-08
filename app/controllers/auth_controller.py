@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from app.services.auth_services.auth_admin_service import AuthService
 from app.schema.auth_admin import UserCreate, UserLogin
 
+
 class AuthController:
     @staticmethod
     def register(user_data: UserCreate, db: Session):

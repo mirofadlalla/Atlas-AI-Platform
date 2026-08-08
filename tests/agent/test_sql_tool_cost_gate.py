@@ -1,6 +1,7 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from app.agent.tools.sql_tool import SQLTool
 from app.agent.core.config import agent_settings
+
 
 def test_sql_tool_pre_execute_cost_gate_blocks_high_cost():
     sql_tool = SQLTool()
@@ -9,12 +10,26 @@ def test_sql_tool_pre_execute_cost_gate_blocks_high_cost():
         "tenant_id": "00000000-0000-0000-0000-000000000001",
     }
 
-    with patch("app.agent.tools.sql_tool.generate_sql", return_value="SELECT * FROM users"), \
-         patch("app.agent.tools.sql_tool.SQLValidator.validate_and_enforce_tenant", return_value=("SELECT * FROM users WHERE tenant_id = :tenant_id", {"tenant_id": "00000000-0000-0000-0000-000000000001"})), \
-         patch("app.agent.tools.sql_tool.SQLValidator.explain_and_execute") as mock_explain_exec:
-        
+    with (
+        patch(
+            "app.agent.tools.sql_tool.generate_sql", return_value="SELECT * FROM users"
+        ),
+        patch(
+            "app.agent.tools.sql_tool.SQLValidator.validate_and_enforce_tenant",
+            return_value=(
+                "SELECT * FROM users WHERE tenant_id = :tenant_id",
+                {"tenant_id": "00000000-0000-0000-0000-000000000001"},
+            ),
+        ),
+        patch(
+            "app.agent.tools.sql_tool.SQLValidator.explain_and_execute"
+        ) as mock_explain_exec,
+    ):
         # Explain call returns high cost
-        mock_explain_exec.return_value = (agent_settings.sql_max_allowed_cost + 100.0, [])
+        mock_explain_exec.return_value = (
+            agent_settings.sql_max_allowed_cost + 100.0,
+            [],
+        )
 
         result = sql_tool.run(state)
 
@@ -32,10 +47,21 @@ def test_sql_tool_pre_execute_cost_gate_allows_low_cost():
         "tenant_id": "00000000-0000-0000-0000-000000000001",
     }
 
-    with patch("app.agent.tools.sql_tool.generate_sql", return_value="SELECT * FROM users"), \
-         patch("app.agent.tools.sql_tool.SQLValidator.validate_and_enforce_tenant", return_value=("SELECT * FROM users WHERE tenant_id = :tenant_id", {"tenant_id": "00000000-0000-0000-0000-000000000001"})), \
-         patch("app.agent.tools.sql_tool.SQLValidator.explain_and_execute") as mock_explain_exec:
-        
+    with (
+        patch(
+            "app.agent.tools.sql_tool.generate_sql", return_value="SELECT * FROM users"
+        ),
+        patch(
+            "app.agent.tools.sql_tool.SQLValidator.validate_and_enforce_tenant",
+            return_value=(
+                "SELECT * FROM users WHERE tenant_id = :tenant_id",
+                {"tenant_id": "00000000-0000-0000-0000-000000000001"},
+            ),
+        ),
+        patch(
+            "app.agent.tools.sql_tool.SQLValidator.explain_and_execute"
+        ) as mock_explain_exec,
+    ):
         # First call (execute=False) returns cost 10.0, second call (execute=True) returns cost 10.0, rows
         mock_explain_exec.side_effect = [
             (10.0, []),

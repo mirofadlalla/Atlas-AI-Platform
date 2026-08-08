@@ -33,9 +33,11 @@ def validate_answer_grounding(answer: str, source_text: str) -> tuple[str, bool]
         return answer, True
 
     source_numbers = set(re.findall(r"\b\d[\d,]*\.?\d*\b", source_text))
-    ungrounded = [n for n in cited_numbers if n.replace(",", "") not in {
-        s.replace(",", "") for s in source_numbers
-    }]
+    ungrounded = [
+        n
+        for n in cited_numbers
+        if n.replace(",", "") not in {s.replace(",", "") for s in source_numbers}
+    ]
     if not ungrounded:
         return answer, True
 

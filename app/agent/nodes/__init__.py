@@ -45,7 +45,10 @@ logger = logging.getLogger(__name__)
 
 
 def _format_history(history: list[dict[str, str]]) -> str:
-    return "\n".join(f"{turn.get('role', 'user').title()}: {turn.get('content', '')}" for turn in history)
+    return "\n".join(
+        f"{turn.get('role', 'user').title()}: {turn.get('content', '')}"
+        for turn in history
+    )
 
 
 def _format_memories(memories: list[str]) -> str:
@@ -54,7 +57,9 @@ def _format_memories(memories: list[str]) -> str:
 
 async def memory_read_node(state: AgentState):
     """Load session turns before the agent begins planning."""
-    history = ShortTermMemory().load(state.get("tenant_id", ""), state.get("user_id", ""), state.get("session_id"))
+    history = ShortTermMemory().load(
+        state.get("tenant_id", ""), state.get("user_id", ""), state.get("session_id")
+    )
     return {"conversation_history": history}
 
 
@@ -69,7 +74,9 @@ async def semantic_recall_node(state: AgentState):
 async def episodic_recall_node(state: AgentState):
     """Load compact summaries from recent sessions before agent planning."""
     summaries = EpisodicMemory().get_recent(
-        state.get("user_id", ""), state.get("tenant_id", ""), exclude_session_id=state.get("session_id")
+        state.get("user_id", ""),
+        state.get("tenant_id", ""),
+        exclude_session_id=state.get("session_id"),
     )
     return {"episode_context": "\n".join(f"- {summary}" for summary in summaries)}
 
@@ -77,11 +84,18 @@ async def episodic_recall_node(state: AgentState):
 async def memory_write_node(state: AgentState):
     """Persist the completed user/assistant turn after final synthesis."""
     memory = ShortTermMemory()
-    args = (state.get("tenant_id", ""), state.get("user_id", ""), state.get("session_id"))
+    args = (
+        state.get("tenant_id", ""),
+        state.get("user_id", ""),
+        state.get("session_id"),
+    )
     memory.save(*args, ConversationTurn("user", state.get("question", ""), ""))
     memory.save(*args, ConversationTurn("assistant", state.get("final_answer", ""), ""))
     trigger_semantic_memory_extraction(
-        state.get("question", ""), state.get("final_answer", ""), state.get("user_id", ""), state.get("tenant_id", "")
+        state.get("question", ""),
+        state.get("final_answer", ""),
+        state.get("user_id", ""),
+        state.get("tenant_id", ""),
     )
     trigger_episode_write(
         state.get("session_id"),
@@ -95,8 +109,10 @@ async def memory_write_node(state: AgentState):
     )
     return {}
 
+
 tool_registry.register(SQLTool())
 tool_registry.register(RetrievalTool())
+
 
 # مسؤولة عن تحديث الـ State بعد أي Tool.
 def _apply_tool_result(state: AgentState, result, tool_name: str) -> dict:
@@ -144,7 +160,10 @@ async def decompose_node(state: AgentState):
     async def _inner(s: AgentState):
         question = s.get("question", "")
         prompt = prompt_registry.decompose(
-            question, _format_history(s.get("conversation_history", [])), _format_memories(s.get("recalled_memories", [])), s.get("episode_context", "")
+            question,
+            _format_history(s.get("conversation_history", [])),
+            _format_memories(s.get("recalled_memories", [])),
+            s.get("episode_context", ""),
         )
         try:
             response_dict = await asyncio.to_thread(
@@ -169,7 +188,9 @@ async def decompose_node(state: AgentState):
         if len(sub_questions) > agent_settings.max_subquestions:
             sub_questions = sub_questions[: agent_settings.max_subquestions]
             degraded = True
-            degraded_reason = f"Trimmed to {agent_settings.max_subquestions} sub-questions"
+            degraded_reason = (
+                f"Trimmed to {agent_settings.max_subquestions} sub-questions"
+            )
 
         update = {
             "original_question": question,
@@ -296,7 +317,9 @@ async def retrieval_node(state: AgentState):
         assert tool is not None
         result = await asyncio.to_thread(tool.run, s)
         update = _apply_tool_result(s, result, "retrieval")
-        log_node_event(logger, s, "retrieval_tool", "completed", has_data=result.has_data)
+        log_node_event(
+            logger, s, "retrieval_tool", "completed", has_data=result.has_data
+        )
         return update
 
     return await _run_node("retrieval_tool", state, _inner)
@@ -305,12 +328,23 @@ async def retrieval_node(state: AgentState):
 async def finish_node(state: AgentState):
     async def _inner(s: AgentState):
         try:
-            sub_answer_text, data_sources, llm_result, context_tokens, context_sources = await asyncio.to_thread(
-                answer_subquestion, s
+            (
+                sub_answer_text,
+                data_sources,
+                llm_result,
+                context_tokens,
+                context_sources,
+            ) = await asyncio.to_thread(answer_subquestion, s)
+            next_state = build_subquestion_answer_update(
+                s, sub_answer_text, data_sources
             )
-            next_state = build_subquestion_answer_update(s, sub_answer_text, data_sources)
             next_state.update(llm_usage_updates(llm_result, s))
-            next_state.update({"working_memory_tokens": context_tokens, "context_sources": context_sources})
+            next_state.update(
+                {
+                    "working_memory_tokens": context_tokens,
+                    "context_sources": context_sources,
+                }
+            )
 
             if should_synthesize_final(s):
                 if is_single_subquestion(s):
@@ -324,7 +358,9 @@ async def finish_node(state: AgentState):
                         s.get("tenant_id"),
                     )
                     next_state["final_answer"] = final
-                    next_state.update(llm_usage_updates(synth_result, {**s, **next_state}))
+                    next_state.update(
+                        llm_usage_updates(synth_result, {**s, **next_state})
+                    )
 
             log_node_event(
                 logger,

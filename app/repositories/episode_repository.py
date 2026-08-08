@@ -13,7 +13,13 @@ class EpisodeRepository:
         self.db = db
 
     def save_episode(
-        self, session_id: str, summary: str, user_id: str, tenant_id: str, raw_turns: int, ttl_days: int | None = None
+        self,
+        session_id: str,
+        summary: str,
+        user_id: str,
+        tenant_id: str,
+        raw_turns: int,
+        ttl_days: int | None = None,
     ) -> MemoryEpisode:
         now = datetime.now(timezone.utc)
         ttl_days = ttl_days or settings.episodic_memory_ttl_days
@@ -46,25 +52,32 @@ class EpisodeRepository:
         return episode
 
     def get_recent(
-        self, user_id: str, tenant_id: str, limit: int | None = None, exclude_session_id: str | None = None
+        self,
+        user_id: str,
+        tenant_id: str,
+        limit: int | None = None,
+        exclude_session_id: str | None = None,
     ) -> list[MemoryEpisode]:
         now = datetime.now(timezone.utc)
-        query = (
-            self.db.query(MemoryEpisode)
-            .filter(
-                MemoryEpisode.user_id == user_id,
-                MemoryEpisode.tenant_id == tenant_id,
-                MemoryEpisode.expires_at > now,
-            )
+        query = self.db.query(MemoryEpisode).filter(
+            MemoryEpisode.user_id == user_id,
+            MemoryEpisode.tenant_id == tenant_id,
+            MemoryEpisode.expires_at > now,
         )
         if exclude_session_id:
             query = query.filter(MemoryEpisode.session_id != exclude_session_id)
-        return query.order_by(MemoryEpisode.created_at.desc()).limit(limit or settings.episodic_memory_recent_limit).all()
+        return (
+            query.order_by(MemoryEpisode.created_at.desc())
+            .limit(limit or settings.episodic_memory_recent_limit)
+            .all()
+        )
 
     def clear_user(self, user_id: str, tenant_id: str) -> int:
         deleted = (
             self.db.query(MemoryEpisode)
-            .filter(MemoryEpisode.user_id == user_id, MemoryEpisode.tenant_id == tenant_id)
+            .filter(
+                MemoryEpisode.user_id == user_id, MemoryEpisode.tenant_id == tenant_id
+            )
             .delete(synchronize_session=False)
         )
         self.db.commit()

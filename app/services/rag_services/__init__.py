@@ -16,4 +16,3 @@ __all__ = [
     "log_agent_run_and_cost",
     "trigger_agent_logging",
 ]
-

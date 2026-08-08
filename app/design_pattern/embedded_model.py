@@ -6,6 +6,7 @@ Embedding Model — priority chain:
 
 All configuration is read from settings / .env.
 """
+
 import os
 import threading
 import logging
@@ -83,7 +84,9 @@ class EmbeddedModel(Embeddings):
     #  Tier 1 — Jina AI                                                     #
     # ------------------------------------------------------------------ #
 
-    def _call_jina(self, texts: List[str], task: str = "retrieval.passage") -> List[List[float]]:
+    def _call_jina(
+        self, texts: List[str], task: str = "retrieval.passage"
+    ) -> List[List[float]]:
         """Call Jina AI embeddings API."""
         headers = {
             "Content-Type": "application/json",
@@ -95,7 +98,9 @@ class EmbeddedModel(Embeddings):
             "normalized": True,
             "input": texts,
         }
-        resp = requests.post(_JINA_URL, headers=headers, json=payload, timeout=self.timeout)
+        resp = requests.post(
+            _JINA_URL, headers=headers, json=payload, timeout=self.timeout
+        )
         resp.raise_for_status()
         data = resp.json()
         # Jina returns: {"data": [{"embedding": [...], "index": 0}, ...]}
@@ -121,6 +126,7 @@ class EmbeddedModel(Embeddings):
         if self.local_model is None:
             from sentence_transformers import SentenceTransformer
             import torch
+
             try:
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 self.local_model = SentenceTransformer("BAAI/bge-m3", device=device)
@@ -131,14 +137,18 @@ class EmbeddedModel(Embeddings):
 
     def _call_local(self, texts: List[str]) -> List[List[float]]:
         self._load_local_model()
-        emb = self.local_model.encode(texts, normalize_embeddings=True, batch_size=self.batch_size)
+        emb = self.local_model.encode(
+            texts, normalize_embeddings=True, batch_size=self.batch_size
+        )
         return _to_list(emb)
 
     # ------------------------------------------------------------------ #
     #  Core batch embedding with fallback chain                             #
     # ------------------------------------------------------------------ #
 
-    def _embed_batch(self, texts: List[str], task: str = "retrieval.passage") -> List[List[float]]:
+    def _embed_batch(
+        self, texts: List[str], task: str = "retrieval.passage"
+    ) -> List[List[float]]:
         """Try Jina → ngrok → local, in order."""
         # --- Tier 1: Jina ---
         if self.jina_enabled:
@@ -146,14 +156,18 @@ class EmbeddedModel(Embeddings):
                 return self._call_jina(texts, task=task)
             except Exception:
                 logger.exception("Jina AI embedding failed, trying ngrok vLLM...")
-                self.jina_enabled = False  # disable for this session to avoid repeated failures
+                self.jina_enabled = (
+                    False  # disable for this session to avoid repeated failures
+                )
 
         # --- Tier 2: ngrok vLLM ---
         if self.remote_enabled:
             try:
                 return self._call_remote_embed(texts)
             except Exception:
-                logger.exception("ngrok vLLM embedding failed, falling back to local model...")
+                logger.exception(
+                    "ngrok vLLM embedding failed, falling back to local model..."
+                )
                 self.remote_enabled = False
 
         # --- Tier 3: Local model ---
@@ -169,7 +183,7 @@ class EmbeddedModel(Embeddings):
             return []
         results: List[List[float]] = []
         for i in range(0, len(texts), self.batch_size):
-            batch = texts[i: i + self.batch_size]
+            batch = texts[i : i + self.batch_size]
             results.extend(self._embed_batch(batch, task="retrieval.passage"))
         return results
 

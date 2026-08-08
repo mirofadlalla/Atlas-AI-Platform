@@ -1,4 +1,5 @@
-from typing import Dict, List, Optional
+from typing import Dict, List
+
 
 class Document:
     def __init__(self, content: str, metadata: Dict = None, score: float = 0.0):
@@ -10,9 +11,6 @@ class Document:
 
 class BaseReranker:
     def rerank(
-        self,
-        query: str,
-        documents: List[Document],
-        top_k: int = 10
+        self, query: str, documents: List[Document], top_k: int = 10
     ) -> List[Document]:
         raise NotImplementedError

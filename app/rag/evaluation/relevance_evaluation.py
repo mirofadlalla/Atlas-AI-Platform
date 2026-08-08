@@ -1,4 +1,3 @@
-
 class relevance_evaluation_:
     def __init__(self, retrieved_docs, relevant_docs):
         self.retrieved_docs = retrieved_docs

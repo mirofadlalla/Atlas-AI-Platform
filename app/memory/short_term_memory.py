@@ -44,7 +44,9 @@ class ShortTermMemory:
 
         return redis.from_url(settings.REDIS_URL, decode_responses=True)
 
-    def load(self, tenant_id: str | int, user_id: str | int, session_id: str | None) -> list[dict[str, str]]:
+    def load(
+        self, tenant_id: str | int, user_id: str | int, session_id: str | None
+    ) -> list[dict[str, str]]:
         if not session_id:
             return []
         try:
@@ -54,18 +56,33 @@ class ShortTermMemory:
             parsed = json.loads(raw)
             if not isinstance(parsed, list):
                 return []
-            return [turn for turn in parsed if isinstance(turn, dict) and turn.get("role") and turn.get("content")]
+            return [
+                turn
+                for turn in parsed
+                if isinstance(turn, dict) and turn.get("role") and turn.get("content")
+            ]
         except Exception as exc:
-            logger.warning("Short-term memory read failed; continuing without history: %s", exc)
+            logger.warning(
+                "Short-term memory read failed; continuing without history: %s", exc
+            )
             return []
 
-    def save(self, tenant_id: str | int, user_id: str | int, session_id: str | None, turn: ConversationTurn | dict[str, Any]) -> None:
+    def save(
+        self,
+        tenant_id: str | int,
+        user_id: str | int,
+        session_id: str | None,
+        turn: ConversationTurn | dict[str, Any],
+    ) -> None:
         if not session_id:
             return
         record = turn.to_dict() if isinstance(turn, ConversationTurn) else dict(turn)
         if not record.get("timestamp"):
             record["timestamp"] = datetime.now(timezone.utc).isoformat()
-        if record.get("role") not in {"user", "assistant"} or not str(record.get("content", "")).strip():
+        if (
+            record.get("role") not in {"user", "assistant"}
+            or not str(record.get("content", "")).strip()
+        ):
             logger.warning("Ignoring invalid short-term memory turn")
             return
         try:
@@ -83,7 +100,11 @@ class ShortTermMemory:
                         history.append(record)
                         history = history[-self.max_turns :]
                         pipe.multi()
-                        pipe.setex(key, self.ttl_seconds, json.dumps(history, ensure_ascii=False))
+                        pipe.setex(
+                            key,
+                            self.ttl_seconds,
+                            json.dumps(history, ensure_ascii=False),
+                        )
                         pipe.execute()
                         return
                     except Exception as exc:
@@ -92,9 +113,13 @@ class ShortTermMemory:
                             continue
                         raise
         except Exception as exc:
-            logger.warning("Short-term memory write failed; answer was not blocked: %s", exc)
+            logger.warning(
+                "Short-term memory write failed; answer was not blocked: %s", exc
+            )
 
-    def clear(self, tenant_id: str | int, user_id: str | int, session_id: str | None) -> None:
+    def clear(
+        self, tenant_id: str | int, user_id: str | int, session_id: str | None
+    ) -> None:
         if not session_id:
             return
         try:
@@ -106,7 +131,9 @@ class ShortTermMemory:
         """Clear every active session for one user without touching other users."""
         try:
             client = self._client()
-            keys = list(client.scan_iter(match=f"atlas:stm:{tenant_id}:{user_id}:*", count=100))
+            keys = list(
+                client.scan_iter(match=f"atlas:stm:{tenant_id}:{user_id}:*", count=100)
+            )
             return int(client.delete(*keys)) if keys else 0
         except Exception as exc:
             logger.warning("Short-term memory bulk clear failed: %s", exc)

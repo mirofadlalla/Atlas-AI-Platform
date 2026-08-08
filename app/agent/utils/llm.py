@@ -60,7 +60,9 @@ def call_agent_llm(
 
     def _invoke() -> dict:
         with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(_call_llm_sync, prompt, tier) # llm call in a separate thread to allow timeout becauze llm call is blocking and can take a long time. We want to enforce a timeout on the call.
+            future = pool.submit(
+                _call_llm_sync, prompt, tier
+            )  # llm call in a separate thread to allow timeout becauze llm call is blocking and can take a long time. We want to enforce a timeout on the call.
             try:
                 return future.result(timeout=agent_settings.llm_timeout_seconds)
             except FuturesTimeout as exc:
@@ -73,8 +75,12 @@ def call_agent_llm(
     output_tokens = int(result.get("output_tokens", 0))
     cost_usd = _estimate_cost_usd(input_tokens, output_tokens)
 
-    agent_llm_tokens_total.labels(tenant_id=tenant_label, direction="input").inc(input_tokens)
-    agent_llm_tokens_total.labels(tenant_id=tenant_label, direction="output").inc(output_tokens)
+    agent_llm_tokens_total.labels(tenant_id=tenant_label, direction="input").inc(
+        input_tokens
+    )
+    agent_llm_tokens_total.labels(tenant_id=tenant_label, direction="output").inc(
+        output_tokens
+    )
     agent_llm_cost_usd_total.labels(tenant_id=tenant_label).inc(cost_usd)
 
     return {
@@ -86,7 +92,10 @@ def call_agent_llm(
 def llm_usage_updates(result: dict, state: dict) -> dict:
     """Build state delta for token/cost counters from an LLM result."""
     return {
-        "input_tokens": state.get("input_tokens", 0) + int(result.get("input_tokens", 0)),
-        "output_tokens": state.get("output_tokens", 0) + int(result.get("output_tokens", 0)),
-        "llm_cost_usd": state.get("llm_cost_usd", 0.0) + float(result.get("cost_usd", 0.0)),
+        "input_tokens": state.get("input_tokens", 0)
+        + int(result.get("input_tokens", 0)),
+        "output_tokens": state.get("output_tokens", 0)
+        + int(result.get("output_tokens", 0)),
+        "llm_cost_usd": state.get("llm_cost_usd", 0.0)
+        + float(result.get("cost_usd", 0.0)),
     }

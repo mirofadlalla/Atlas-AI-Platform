@@ -1,4 +1,7 @@
-from app.agent.utils.context_budget import truncate_to_char_budget, truncate_to_token_budget
+from app.agent.utils.context_budget import (
+    truncate_to_char_budget,
+    truncate_to_token_budget,
+)
 
 
 def test_truncate_to_char_budget():

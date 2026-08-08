@@ -5,6 +5,7 @@ Priority:
   1. Groq cloud API (primary — fast, reliable)
   Falls back on: configured via GROQ_API_KEY in settings / .env
 """
+
 import logging
 from groq import Groq
 from app.core.config import settings
@@ -86,7 +87,11 @@ class LLMService:
                 yield delta_content, None
 
             # Groq sends usage in the last chunk via x_groq field
-            if hasattr(chunk, "x_groq") and chunk.x_groq and hasattr(chunk.x_groq, "usage"):
+            if (
+                hasattr(chunk, "x_groq")
+                and chunk.x_groq
+                and hasattr(chunk.x_groq, "usage")
+            ):
                 u = chunk.x_groq.usage
                 usage_data["input"] = getattr(u, "prompt_tokens", 0)
                 usage_data["output"] = getattr(u, "completion_tokens", 0)

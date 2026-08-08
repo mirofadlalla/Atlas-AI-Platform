@@ -24,10 +24,10 @@ class CircuitBreaker:
         self.failure_threshold = failure_threshold
         self.recovery_timeout_seconds = recovery_timeout_seconds
         self._failures = 0
-        self._opened_at: float | None = None # 
+        self._opened_at: float | None = None  #
         self._lock = threading.Lock()
 
-    def _is_open(self) -> bool: # هل الـ Circuit مقفول الآن؟
+    def _is_open(self) -> bool:  # هل الـ Circuit مقفول الآن؟
         if self._opened_at is None:
             return False
         if time.time() - self._opened_at >= self.recovery_timeout_seconds:
@@ -78,7 +78,9 @@ def configure_breakers() -> None:
 
     for breaker in (llm_circuit_breaker, db_circuit_breaker):
         breaker.failure_threshold = agent_settings.circuit_breaker_failure_threshold
-        breaker.recovery_timeout_seconds = agent_settings.circuit_breaker_recovery_seconds
+        breaker.recovery_timeout_seconds = (
+            agent_settings.circuit_breaker_recovery_seconds
+        )
 
 
 configure_breakers()

@@ -1,4 +1,3 @@
-from typing import Optional
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
@@ -16,13 +15,13 @@ class Settings(BaseSettings):
 
     # ── PostgreSQL ────────────────────────────────────────────────────────
     postgres_user: str = "postgres"
-    postgres_pass : str = "1234"         # REQUIRED — no default intentionally
+    postgres_pass: str = "1234"  # REQUIRED — no default intentionally
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_db: str = ""
 
     # ── JWT Auth ──────────────────────────────────────────────────────────
-    api_secret_key: str         # REQUIRED — no default intentionally
+    api_secret_key: str  # REQUIRED — no default intentionally
 
     # ── External APIs ─────────────────────────────────────────────────────
     hf_api: str = ""
@@ -36,7 +35,9 @@ class Settings(BaseSettings):
     # ── Redis ─────────────────────────────────────────────────────────────
     redis_host: str = "localhost"
     redis_port: int = 6379
-    redis_password: str = "atlas_redis_password"   # Empty = no auth; set a real password in prod
+    redis_password: str = (
+        "atlas_redis_password"  # Empty = no auth; set a real password in prod
+    )
     redis_db: int = 0
     stm_ttl_seconds: int = 7200
     stm_max_turns: int = 20
@@ -107,7 +108,9 @@ class Settings(BaseSettings):
     def REDIS_URL_NO_DB(self) -> str:
         """Redis URL without database number (for semantic cache)."""
         if self.redis_password:
-            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/0"
+            return (
+                f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/0"
+            )
         return f"redis://{self.redis_host}:{self.redis_port}/0"
 
 

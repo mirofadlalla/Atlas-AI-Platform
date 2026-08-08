@@ -14,18 +14,17 @@ import logging
 from pathlib import Path
 
 from qdrant_client import QdrantClient
-from langchain_core.messages import HumanMessage
 from app.core.config import settings
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 
-QDRANT_URL      = settings.qdrant_url
+QDRANT_URL = settings.qdrant_url
 COLLECTION_NAME = settings.qdrant_collection_name
-TENANT_ID       = None           # change to your tenant
-OUTPUT_PATH     = Path(__file__).parent / "evaluation_dataset.json"
-MAX_CHUNKS      = 30               # how many chunks to generate questions from
+TENANT_ID = None  # change to your tenant
+OUTPUT_PATH = Path(__file__).parent / "evaluation_dataset.json"
+MAX_CHUNKS = 30  # how many chunks to generate questions from
 
 
 def fetch_points(tenant_id: str, max_chunks: int = MAX_CHUNKS) -> list[dict]:
@@ -37,18 +36,15 @@ def fetch_points(tenant_id: str, max_chunks: int = MAX_CHUNKS) -> list[dict]:
     global TENANT_ID
     TENANT_ID = tenant_id  # store for later use in main()
 
-    logger.info(f"Fetching points for tenant_id='{tenant_id}' from '{COLLECTION_NAME}' ...")
+    logger.info(
+        f"Fetching points for tenant_id='{tenant_id}' from '{COLLECTION_NAME}' ..."
+    )
 
     while True:
         result, next_offset = client.scroll(
             collection_name=COLLECTION_NAME,
             scroll_filter={
-                "must": [
-                    {
-                        "key": "payload.tenant_id",
-                        "match": {"value": tenant_id}
-                    }
-                ]
+                "must": [{"key": "payload.tenant_id", "match": {"value": tenant_id}}]
             },
             limit=50,
             offset=offset,
@@ -57,11 +53,13 @@ def fetch_points(tenant_id: str, max_chunks: int = MAX_CHUNKS) -> list[dict]:
         )
 
         for point in result:
-            all_points.append({
-                "id":      str(point.id),
-                "content": point.payload.get("content", ""),
-                "metadata": point.payload.get("payload", {}),
-            })
+            all_points.append(
+                {
+                    "id": str(point.id),
+                    "content": point.payload.get("content", ""),
+                    "metadata": point.payload.get("payload", {}),
+                }
+            )
 
         logger.info(f"  Fetched {len(all_points)} points so far ...")
 
@@ -78,6 +76,7 @@ def fetch_points(tenant_id: str, max_chunks: int = MAX_CHUNKS) -> list[dict]:
 def build_llm():
     """Initialize the Groq LLM via CustomLocalLLM wrapper."""
     from app.services.llm_runner import CustomLocalLLM
+
     return CustomLocalLLM()
 
 
@@ -107,7 +106,11 @@ def generate_qa(llm, content: str) -> dict | None:
     prompt = PROMPT_TEMPLATE.format(content=content.strip())
     try:
         response = llm.invoke(prompt)
-        raw = response if isinstance(response, str) else getattr(response, "content", str(response))
+        raw = (
+            response
+            if isinstance(response, str)
+            else getattr(response, "content", str(response))
+        )
         raw = raw.strip()
 
         # Try to parse JSON — the LLM might wrap it in backticks
@@ -128,7 +131,7 @@ def build_dataset(points: list[dict], llm) -> list[dict]:
     q_counter = 1
 
     for point in points:
-        doc_id  = point["id"]
+        doc_id = point["id"]
         content = point["content"]
 
         if not content.strip():
@@ -139,18 +142,22 @@ def build_dataset(points: list[dict], llm) -> list[dict]:
         qa = generate_qa(llm, content)
 
         if qa is None:
-            logger.warning(f"  Skipping chunk {doc_id[:8]} — LLM returned no valid JSON.")
+            logger.warning(
+                f"  Skipping chunk {doc_id[:8]} — LLM returned no valid JSON."
+            )
             continue
 
-        dataset.append({
-            "id":           f"q_{q_counter:03d}",
-            "question":     qa.get("question", ""),
-            "answer":       qa.get("answer", ""),
-            "relevant_ids": [doc_id],
-            "paraphrases":  qa.get("paraphrases", []),
-            # Optional: store the source chunk for traceability
-            "_source_chunk": content[:300],
-        })
+        dataset.append(
+            {
+                "id": f"q_{q_counter:03d}",
+                "question": qa.get("question", ""),
+                "answer": qa.get("answer", ""),
+                "relevant_ids": [doc_id],
+                "paraphrases": qa.get("paraphrases", []),
+                # Optional: store the source chunk for traceability
+                "_source_chunk": content[:300],
+            }
+        )
         q_counter += 1
 
     return dataset

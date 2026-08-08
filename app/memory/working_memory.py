@@ -18,16 +18,26 @@ class ContextItem:
 class WorkingMemory:
     """Fits useful context into a fixed token budget without storing it."""
 
-    def __init__(self, max_tokens: int, token_counter: TokenCounter | None = None) -> None:
+    def __init__(
+        self, max_tokens: int, token_counter: TokenCounter | None = None
+    ) -> None:
         self.max_tokens = max_tokens
         self.counter = token_counter or TokenCounter()
         self._items: list[ContextItem] = []
         self.context_sources: list[str] = []
         self.tokens_used = 0
 
-    def add(self, source: str, content: str | None, priority: int, max_tokens: int | None = None) -> "WorkingMemory":
+    def add(
+        self,
+        source: str,
+        content: str | None,
+        priority: int,
+        max_tokens: int | None = None,
+    ) -> "WorkingMemory":
         if content and content.strip():
-            self._items.append(ContextItem(source, content.strip(), priority, max_tokens))
+            self._items.append(
+                ContextItem(source, content.strip(), priority, max_tokens)
+            )
         return self
 
     def assemble(self) -> str:

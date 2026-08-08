@@ -7,11 +7,11 @@ logger = logging.getLogger(__name__)
 
 
 class CrossEncoderReranker(BaseReranker):
-
     def __init__(self, model_name: str = None):
         model_name = model_name or settings.cross_encoder_model
         try:
             from sentence_transformers import CrossEncoder
+
             self.model = CrossEncoder(model_name)
             self.model_name = model_name
             logger.info(f"Loaded cross-encoder model: {model_name}")
@@ -23,12 +23,8 @@ class CrossEncoderReranker(BaseReranker):
             self.model = None
 
     def rerank(
-        self,
-        query: str,
-        documents: List[Document],
-        top_k: int = 10
+        self, query: str, documents: List[Document], top_k: int = 10
     ) -> List[Document]:
-
         if not self.model or not documents:
             return documents[:top_k]
 
@@ -40,11 +36,7 @@ class CrossEncoderReranker(BaseReranker):
             for doc, score in zip(documents, scores):
                 doc.rerank_score = float(score)
 
-            reranked = sorted(
-                documents,
-                key=lambda x: x.rerank_score,
-                reverse=True
-            )
+            reranked = sorted(documents, key=lambda x: x.rerank_score, reverse=True)
 
             logger.debug(
                 f"Reranked {len(documents)} documents "

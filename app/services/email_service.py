@@ -11,7 +11,9 @@ class EmailService:
     """Service for sending email notifications (e.g. invitation tokens)."""
 
     @staticmethod
-    def send_email(to_email: str, subject: str, body_html: str, body_text: str = None) -> bool:
+    def send_email(
+        to_email: str, subject: str, body_html: str, body_text: str = None
+    ) -> bool:
         """
         Send an email via SMTP server. If credentials are not configured,
         logs the email content so tokens are visible in development logs.
@@ -51,9 +53,9 @@ class EmailService:
         Send an invitation email containing the invitation token and registration link.
         """
         registration_url = f"{settings.frontend_url}/register-via-invitation?token={token}&tenant_id={tenant_id}"
-        
+
         subject = "You're Invited to Join Atlas AI Platform"
-        
+
         body_html = f"""
         <html>
             <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
@@ -113,7 +115,7 @@ class EmailService:
         """Send email when admin approves or rejects user registration."""
         is_approved = status.lower() == "approved"
         subject = f"Account Registration {'Approved' if is_approved else 'Updated'}"
-        
+
         if is_approved:
             body_html = f"""
             <html>

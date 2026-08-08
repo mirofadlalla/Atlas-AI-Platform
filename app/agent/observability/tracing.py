@@ -56,10 +56,11 @@ logger = logging.getLogger(__name__)
 # └── Execute
 #        20 ms
 
+
 @dataclass
 class Span:
-    trace_id: str # كل الـ Spans الخاصة بنفس الطلب ليها نفس Trace ID.
-    span_id: str # كل Span ليها ID خاص.
+    trace_id: str  # كل الـ Spans الخاصة بنفس الطلب ليها نفس Trace ID.
+    span_id: str  # كل Span ليها ID خاص.
     name: str
     start_time: float
     attributes: dict[str, Any] = field(default_factory=dict)
