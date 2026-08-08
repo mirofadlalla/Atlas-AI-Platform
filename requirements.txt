@@ -22,7 +22,8 @@ langchain==0.1.20
 langchain-qdrant==0.1.4
 langgraph==0.0.21
 sentence-transformers==2.2.2
-fastembed==0.3.6
+# fastembed >=0.7.4 supports pillow >=11.0.0 (fastembed 0.3.6 had pillow <11.0.0 restriction)
+fastembed>=0.7.4,<0.9.0
 
 # Task Queue & Caching
 celery==5.3.4
@@ -59,8 +60,7 @@ tenacity==8.2.3
 tiktoken>=0.7.0,<1.0.0
 
 # Explicit transitive-dep pins to resolve security CVEs
-# Pillow >=11.0.0 fixes heap-corruption and out-of-bounds CVEs in 10.4.0;
-# it is pulled in by fastembed and sentence-transformers.
+# Pillow >=11.0.0 fixes heap-corruption and out-of-bounds CVEs in 10.4.0
 pillow>=11.0.0
 # psutil is used by app.core.monitors (resource-metrics) but was not declared.
 psutil>=5.9.0
