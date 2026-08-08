@@ -6,6 +6,7 @@ Records metrics to Prometheus and database for monitoring and analytics.
 """
 import logging
 import time
+import json
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from app.rag.retrivel_data_pipline import (
     RetrievalPipeline,
     build_query_cache_key,
     get_local_query_cache,
+    serialize_retrieved_documents,
 )
 from app.core.monitors import cache_hits_total
 from app.services.mlflow_service import MLflowService
@@ -33,6 +35,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/query",
 )
+
+
+def _sse_event(event: str, payload: dict) -> str:
+    """Encode one event without allowing answer text to corrupt SSE framing."""
+    return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
 
 
 @router.post("/ask")
@@ -123,6 +130,7 @@ async def ask_question(
             logger.info("[CACHE HIT - LOCAL MEMORY] Returning cached result for: %s...", request.query[:50])
             chat_history = short_term_history
             pipeline = None
+            retrieved_documents = cached_result.get("documents", [])
         else:
             logger.info("[CACHE MISS - LOCAL MEMORY] Generating new answer for: %s...", request.query[:50])
             recalled_memories = SemanticMemory().recall(request.query, user_id, tenant_id)
@@ -141,6 +149,10 @@ async def ask_question(
 
             # Only construct the retriever on a cache miss.
             pipeline = RetrievalPipeline(tenant_id=tenant_id, db=db)
+            # Retrieve once.  The same documents are sent to the LLM and to
+            # the client in the final SSE event; /retrieve is no longer needed
+            # by the query page after an answer request.
+            retrieved_documents = pipeline.retrieve(request.query)
         
         async def answer_generator():
             """
@@ -158,14 +170,18 @@ async def ask_question(
             cost_usd = 0.0
             input_tokens = 0
             output_tokens = 0
-            retrieved_docs_ids = cached_result.get("docs_ids", "") if cache_hit else ""
+            retrieved_docs_ids = (
+                cached_result.get("docs_ids", "")
+                if cache_hit
+                else ",".join(document.metadata.get("_id", "") for document in retrieved_documents)
+            )
             
             try:
                 if cache_hit:
                     # A hit is a completed prior interaction.  Re-running
                     # memory writes/extraction would duplicate long-term data.
                     full_answer = cached_result["answer"]
-                    yield full_answer
+                    yield _sse_event("answer", {"content": full_answer})
                 else:
                     # The pipeline receives the precomputed key so its shared
                     # streaming helper stores the same entry checked above.
@@ -176,9 +192,10 @@ async def ask_question(
                         session_id=request.session_id,
                         cache_key=cache_key,
                         cache_checked=True,
+                        documents=retrieved_documents,
                     ):
                         full_answer += chunk
-                        yield chunk
+                        yield _sse_event("answer", {"content": chunk})
 
                     memory.save(tenant_id, user_id, request.session_id, ConversationTurn("user", request.query, ""))
                     memory.save(tenant_id, user_id, request.session_id, ConversationTurn("assistant", full_answer, ""))
@@ -192,6 +209,12 @@ async def ask_question(
                         user_id,
                         tenant_id,
                     )
+
+                yield _sse_event(
+                    "documents",
+                    {"documents": serialize_retrieved_documents(retrieved_documents)},
+                )
+                yield _sse_event("done", {})
                 
                 # Calculate total latency
                 latency = time.time() - start_time
@@ -259,7 +282,7 @@ async def ask_question(
                 
             except Exception as e:
                 logger.error(f"Error during query streaming: {e}", exc_info=True)
-                yield f"\n\nError: {str(e)}"
+                yield _sse_event("error", {"message": str(e)})
             
             finally:
                 # End MLflow run
@@ -269,7 +292,7 @@ async def ask_question(
                     except Exception as mlflow_end_error:
                         logger.error(f"Error ending MLflow run: {mlflow_end_error}")
         
-        return StreamingResponse(answer_generator(), media_type="text/plain")
+        return StreamingResponse(answer_generator(), media_type="text/event-stream")
         
     except Exception as e:
         logger.error(f"Error processing query: {e}", exc_info=True)
@@ -321,15 +344,9 @@ async def retrieve_documents(
         # Retrieve documents
         documents = pipeline.retrieve(query=request.query)
         
-        # Format response
-        doc_results = []
-        for doc in documents:
-            doc_results.append({
-                "id": doc.metadata.get("_id", ""),
-                "content": doc.page_content[:500],  # First 500 chars
-                "metadata": doc.metadata,
-                "source": doc.metadata.get("source", "unknown")
-            })
+        # Keep the standalone retrieval endpoint's payload identical to the
+        # documents event emitted by /ask.
+        doc_results = serialize_retrieved_documents(documents)
         
         logger.info(
             f"Documents retrieved - Tenant: {tenant_id}, Query: {request.query[:50]}, "

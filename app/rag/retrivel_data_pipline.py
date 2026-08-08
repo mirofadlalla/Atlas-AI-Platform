@@ -113,6 +113,19 @@ def set_local_query_cache(cache_key: str, value: dict) -> None:
     with _query_cache_lock:
         _query_cache[cache_key] = value
 
+
+def serialize_retrieved_documents(documents) -> list[dict]:
+    """Return the public document shape used by both /ask and /retrieve."""
+    return [
+        {
+            "id": document.metadata.get("_id", ""),
+            "content": document.page_content[:500],
+            "metadata": document.metadata,
+            "source": document.metadata.get("source", "unknown"),
+        }
+        for document in documents
+    ]
+
 # Token pricing now lives in settings (see FIX #7) so it can be updated in one
 # place if the underlying model or provider pricing changes.
 _DEFAULT_INPUT_TOKEN_COST = 0.0000001
@@ -306,6 +319,7 @@ class RetrievalPipeline:
         session_id: str | None = None,
         cache_key: str | None = None,
         cache_checked: bool = False,
+        documents=None,
     ):
         """
         Core streaming implementation shared by ask() and ask_stream().
@@ -350,7 +364,7 @@ class RetrievalPipeline:
 
         # 2. Retrieve documents, then assemble only the highest-priority
         # context that fits the configured model window.
-        docs = self.retrieve(query) if self.use_reranker else self.retriever.invoke(query)
+        docs = documents if documents is not None else self.retrieve(query)
 
         logger.info(f"Starting answer generation for query: {query[:50]}...")
         logger.info(f"Number of context documents: {len(docs)}")
@@ -397,6 +411,7 @@ class RetrievalPipeline:
             self._set_cached(cache_key, {
                 'answer': full_answer,
                 'docs_ids': retrieved_docs_ids,
+                'documents': serialize_retrieved_documents(docs),
                 'timestamp': time.time()
             })
             logger.info("✅ Query result cached in local memory")
@@ -419,6 +434,7 @@ class RetrievalPipeline:
         session_id: str | None = None,
         cache_key: str | None = None,
         cache_checked: bool = False,
+        documents=None,
     ):
         """
         Answer the question using the Cache and the local LLM.
@@ -428,6 +444,7 @@ class RetrievalPipeline:
         yield from self._stream_answer(
             query, use_local_cache=True, chat_history=chat_history,
             user_id=user_id, session_id=session_id, cache_key=cache_key, cache_checked=cache_checked,
+            documents=documents,
         )
 
     def ask_stream(
@@ -438,6 +455,7 @@ class RetrievalPipeline:
         session_id: str | None = None,
         cache_key: str | None = None,
         cache_checked: bool = False,
+        documents=None,
     ):
         """
         Stream the answer to a query with logging of run and cost information.
@@ -448,6 +466,7 @@ class RetrievalPipeline:
         yield from self._stream_answer(
             query, use_local_cache=True, chat_history=chat_history,
             user_id=user_id, session_id=session_id, cache_key=cache_key, cache_checked=cache_checked,
+            documents=documents,
         )
 
     @property

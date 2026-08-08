@@ -22,6 +22,7 @@ sentence-transformers==2.2.2
 # Task Queue & Caching
 celery==5.3.4
 redis==5.0.1
+cachetools>=5.3.0
 
 # LLM Integration
 openai==1.13.3

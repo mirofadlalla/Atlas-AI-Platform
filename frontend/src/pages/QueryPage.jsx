@@ -61,24 +61,41 @@ function QueryPage({ user }) {
       const reader = streamResponse.body.getReader();
       const decoder = new TextDecoder();
       let fullAnswer = '';
+      let eventBuffer = '';
+
+      const handleStreamEvent = (eventBlock) => {
+        const lines = eventBlock.split('\n');
+        const eventName = lines.find((line) => line.startsWith('event:'))?.slice(6).trim();
+        const dataLine = lines.find((line) => line.startsWith('data:'))?.slice(5).trim();
+        if (!eventName || !dataLine) return;
+
+        const payload = JSON.parse(dataLine);
+        if (eventName === 'answer') {
+          fullAnswer += payload.content || '';
+          setAnswer(fullAnswer);
+          if (answerBoxRef.current) {
+            answerBoxRef.current.scrollTop = answerBoxRef.current.scrollHeight;
+          }
+        } else if (eventName === 'documents') {
+          setRetrievedDocs(payload.documents || []);
+        } else if (eventName === 'error') {
+          throw new Error(payload.message || 'Failed to get answer');
+        }
+      };
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
-        
-        fullAnswer += decoder.decode(value, { stream: true });
-        setAnswer(fullAnswer);
-        
-        // Auto-scroll to bottom
-        if (answerBoxRef.current) {
-          answerBoxRef.current.scrollTop = answerBoxRef.current.scrollHeight;
+        if (value) {
+          eventBuffer += decoder.decode(value, { stream: !done });
+          const events = eventBuffer.split('\n\n');
+          eventBuffer = events.pop();
+          events.forEach(handleStreamEvent);
         }
+        if (done) break;
       }
-
-      // Also retrieve related documents
-      const docsResponse = await apiService.retrieveDocuments(query);
-      if (docsResponse.documents) {
-        setRetrievedDocs(docsResponse.documents);
+      eventBuffer += decoder.decode();
+      if (eventBuffer.trim()) {
+        handleStreamEvent(eventBuffer);
       }
 
     } catch (err) {

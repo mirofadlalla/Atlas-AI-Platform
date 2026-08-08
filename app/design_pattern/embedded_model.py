@@ -12,6 +12,7 @@ import logging
 from typing import List
 
 import requests
+from cachetools import TTLCache
 from langchain_core.embeddings import Embeddings
 
 from app.core.config import settings
@@ -38,6 +39,11 @@ class EmbeddedModel(Embeddings):
 
     _instance = None
     _lock = threading.Lock()
+    # Semantic-memory recall and hybrid document retrieval both request the
+    # same dense `retrieval.query` vector during one /ask request.  Keep a
+    # small, exact, short-lived cache so the second caller reuses it.
+    _query_embedding_cache = TTLCache(maxsize=4_096, ttl=60)
+    _query_embedding_cache_lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
@@ -169,5 +175,19 @@ class EmbeddedModel(Embeddings):
 
     def embed_query(self, text: str) -> List[float]:
         self._ensure_initialized()
+        cache_key = text.strip()
+        if cache_key:
+            with self._query_embedding_cache_lock:
+                cached_vector = self._query_embedding_cache.get(cache_key)
+            if cached_vector is not None:
+                logger.debug("Reused exact query embedding from local cache")
+                return list(cached_vector)
+
         result = self._embed_batch([text], task="retrieval.query")
-        return result[0] if result else []
+        vector = result[0] if result else []
+        if cache_key and vector:
+            with self._query_embedding_cache_lock:
+                # Store an immutable copy so callers cannot mutate the cached
+                # vector before Qdrant consumes it.
+                self._query_embedding_cache[cache_key] = tuple(vector)
+        return vector
