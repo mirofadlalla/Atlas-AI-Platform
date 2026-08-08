@@ -1,19 +1,25 @@
-# Environments
+# ==================== Secrets & Environment ====================
 .env
 .env.local
 .env.*.local
 
-# MLflow & Experiment Tracking
+# ==================== uv Toolchain Artifacts ====================
+# These are large local-only caches; never needed inside the image.
+.uv-cache/
+.uv-python/
+.requirements-resolved.txt
+
+# ==================== MLflow & Experiment Tracking ====================
 mlruns/
 mlruns
 
-# Logs
+# ==================== Logs ====================
 celery_worker.log
 *.log
 *.syslog
 logs/
 
-# Python Cache & Bytecode
+# ==================== Python Cache & Bytecode ====================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -23,13 +29,13 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# Virtual Environments
+# ==================== Virtual Environments ====================
 venv/
 .venv/
 env/
 ENV/
 
-# Node & Frontend Build Artifacts
+# ==================== Node & Frontend Build Artifacts ====================
 node_modules/
 frontend/node_modules/
 frontend/build/
@@ -37,7 +43,7 @@ frontend/dist/
 frontend/.next/
 frontend/out/
 
-# Git & IDE Files
+# ==================== Git & IDE Files ====================
 .git/
 .gitignore
 .vscode/
@@ -45,8 +51,15 @@ frontend/out/
 .DS_Store
 Thumbs.db
 
-# Temporary & System Artifacts
+# ==================== Tests (not needed in production image) ====================
+tests/
+
+# ==================== Documentation & Design Artifacts ====================
+SRS/
+digrams/
+README.md
+
+# ==================== Temporary & System Artifacts ====================
 tmp/
 .system_generated/
 scratch/
-README.md

@@ -1,0 +1,58 @@
+[flake8]
+# Line-length: 120 chars.
+#
+# Rationale: the codebase was developed without a flake8 config and black
+# was used for formatting (black's default is 88).  Many existing lines
+# legitimately exceed 88 chars (e.g., long string literals, URLs, generated
+# code in alembic/versions).  Setting 120 gives a generous but still
+# meaningful safety net and matches common project conventions.
+#
+# Style enforcement for code is owned by black (`black --line-length 88`).
+# Flake8 E501 at 120 is a safety net for genuinely unreadable single-liners.
+max-line-length = 120
+
+# Rules that conflict with black's formatting decisions:
+#   E203 — whitespace before ':' (black adds this in slice notation)
+#   W503 — line break before binary operator (PEP 8 conflict; black prefers W503-style)
+extend-ignore = E203, W503
+
+# Per-file ignores for files that have structural reasons to exceed limits:
+#
+#   agent_route.py: SSE yield strings are single JSON blobs that cannot be
+#     split across lines without altering the streaming protocol.
+#
+#   retriever.py: E402 (import-not-at-top) is intentional — os.environ must
+#     be set before HuggingFace Hub imports to suppress symlink warnings on
+#     Windows.  The noqa comment on each import makes this explicit.
+#
+#   email_service.py: Long HTML template strings and multi-line f-string
+#     bodies that cannot be meaningfully wrapped.
+#
+#   trakcer_db_file_repositorie.py / file_tracker.py / generate_eval_dataset.py:
+#     Long docstring sentences that would become unreadable if hard-wrapped.
+#
+#   tenant_registration_service.py: Long SQL/string constant.
+per-file-ignores =
+    app/routes/agent_route.py: E501
+    app/services/email_service.py: E501, W293
+    app/routes/auth_route.py: W293
+    app/rag/steps/retriever.py: E402
+    app/rag/steps/file_tracker.py: E501
+    app/rag/evaluation/generate_eval_dataset.py: E501
+    app/repositories/trakcer_db_file_repositorie.py: E501
+    app/services/tenant_registration_service.py: E501
+
+# Exclude generated, cache, and build directories.
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    .eggs,
+    *.egg,
+    build,
+    dist,
+    alembic/versions,
+    .pytest_cache,
+    .mypy_cache,
+    mlruns,

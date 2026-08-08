@@ -19,7 +19,7 @@ class AgentSettings(BaseSettings):
     sql_max_result_rows_in_prompt: int = 20
     sql_max_allowed_cost: float = 1000.0
     sql_cost_unknown_default: float = 1001.0
-    sql_namespace: str = ""  #  أسماء الجداول المسموح بيها (مبدئيًا فاضي).
+    sql_namespace: str = ""  # أسماء الجداول المسموح بيها (مبدئيًا فاضي).
     sql_allowed_columns: str = ""  # أسماء الأعمدة المسموح بيها (مبدئيًا فاضي).
     schema_cache_ttl_seconds: int = (
         300  # مدة صلاحية الكاش بالثواني (هنا 300 ثانية = 5 دقائق).

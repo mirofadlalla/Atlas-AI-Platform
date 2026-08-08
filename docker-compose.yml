@@ -24,7 +24,8 @@ services:
 
   # ==================== Qdrant Vector Database ====================
   qdrant:
-    image: qdrant/qdrant:latest
+    # Pinned to the same version used in CI (ci.yml) — prevents local/CI version drift.
+    image: qdrant/qdrant:v1.17.0
     container_name: atlas-qdrant
     ports:
       - "${QDRANT_PORT:-6333}:6333"
@@ -32,10 +33,14 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:6333/health"]
+      # /readyz returns 200 only after Qdrant is fully initialised and ready
+      # to serve REST and gRPC traffic.  /health returns 200 immediately on
+      # startup (before collections are loaded), making it unsuitable as a
+      # readiness probe.
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/readyz"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 30s
     networks:
       - atlas-network
@@ -43,7 +48,10 @@ services:
 
   # ==================== Redis Cache & Message Broker ====================
   redis:
-    image: redis/redis-stack-server:latest
+    # Pinned to the same major version used in CI (redis/redis-stack-server:7.2.0-v10).
+    # RedisStack includes RediSearch, RedisJSON, RedisGraph, etc.
+    # Plain redis:7-alpine does NOT include these modules.
+    image: redis/redis-stack-server:7.2.0-v10
     container_name: atlas-redis
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-atlas_redis_password}
     ports:
