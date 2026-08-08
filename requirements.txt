@@ -20,6 +20,8 @@ python-dotenv==1.0.0
 # qdrant-client >=1.18.0 avoids protobuf EnumTypeWrapper | None PEP604 type hint issue in 1.17.0
 qdrant-client>=1.18.0,<2.0.0
 langchain==0.1.20
+langchain-community==0.0.38
+langchain-core==0.1.53
 langchain-qdrant==0.1.4
 langgraph==0.0.21
 sentence-transformers==2.2.2
@@ -46,6 +48,8 @@ prometheus-fastapi-instrumentator==6.1.0
 sentry-sdk>=2.0.0,<3.0.0
 
 # MLflow for Experiment Tracking
+# setuptools provides pkg_resources required by mlflow.utils.requirements_utils
+setuptools>=68.0.0
 mlflow==2.10.1
 
 # Utilities
