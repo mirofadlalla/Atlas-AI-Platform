@@ -30,6 +30,8 @@ cachetools>=5.3.0
 # LLM Integration
 openai==1.30.5
 langchain-openai==0.1.7
+# Groq cloud LLM provider — used by LLMService (llm_singlton.py) and retry.py
+groq>=0.9.0,<2.0
 
 # Monitoring & Metrics
 prometheus-client==0.19.0
@@ -50,7 +52,8 @@ sqlglot==25.21.3
 tenacity==8.2.3
 tiktoken>=0.7.0,<1.0.0
 
-# Development (optional)
+# Development & Testing
 pytest==7.4.3
+pytest-asyncio>=0.23.0
 black==23.12.0
 flake8==6.1.0

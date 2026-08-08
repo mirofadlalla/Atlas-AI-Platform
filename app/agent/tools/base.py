@@ -106,7 +106,8 @@ class AgentTool(ABC):
     has_data_key: str
 
     @abstractmethod
-    def run(self, state: AgentState) -> ToolResult: ...
+    def run(self, state: AgentState) -> ToolResult:
+        ...
 
 
 class ToolRegistry:

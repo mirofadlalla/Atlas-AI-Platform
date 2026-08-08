@@ -10,34 +10,81 @@ permissions:
   contents: read
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Lint & format
+  # ---------------------------------------------------------------------------
   lint-and-format:
     name: Lint and format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -r requirements.txt
-      - run: black --check app tests main.py
-      - run: flake8 app tests main.py
 
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check formatting (black)
+        run: black --check app tests main.py
+
+      - name: Lint (flake8)
+        run: flake8 app tests main.py
+
+  # ---------------------------------------------------------------------------
+  # 2. Unit tests
+  #
+  # These tests must NOT require PostgreSQL, Redis, or Qdrant.
+  # The env vars below satisfy Settings() validation at import time without
+  # granting any real service access.
+  # ---------------------------------------------------------------------------
   unit-tests:
     name: Unit tests
     runs-on: ubuntu-latest
+    env:
+      # Required by Settings() — test-only placeholders, no real service access
+      API_SECRET_KEY: ci-unit-test-secret-not-for-production
+      POSTGRES_PASS: ci-unit-test-pass
+      POSTGRES_USER: ci_user
+      POSTGRES_DB: ci_test
+      POSTGRES_HOST: localhost
+      # Groq SDK constructor does not validate the key; all LLM calls are
+      # mocked in unit tests so an empty string is safe.
+      GROQ_API_KEY: ""
+      # Redis: ShortTermMemory fails open when Redis is unreachable, so unit
+      # tests that don't explicitly test Redis are unaffected.
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      # Qdrant: SemanticMemory accepts injected clients in unit tests; real
+      # Qdrant connectivity is not required.
+      QDRANT_URL: http://localhost:6333
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -r requirements.txt
-      - run: pytest tests -q -m "not integration"
 
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests (excluding integration)
+        run: pytest tests -q -m "not integration" --tb=short
+
+  # ---------------------------------------------------------------------------
+  # 3. Integration tests
+  #
+  # Spins up real PostgreSQL, Redis Stack, and Qdrant containers.
+  # ---------------------------------------------------------------------------
   integration-tests:
     name: Integration tests
     runs-on: ubuntu-latest
+
     services:
       postgres:
         image: postgres:15-alpine
@@ -45,55 +92,114 @@ jobs:
           POSTGRES_USER: atlas_user
           POSTGRES_PASSWORD: atlas_test_password
           POSTGRES_DB: atlas_test
-        ports: ["5432:5432"]
+        ports:
+          - "5432:5432"
         options: >-
           --health-cmd "pg_isready -U atlas_user -d atlas_test"
-          --health-interval 10s --health-timeout 5s --health-retries 5
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      # Using redis-stack-server (same image as docker-compose.yml) so that
+      # any RedisStack modules (RediSearch, RedisJSON) are available.
+      # Plain redis:7-alpine does NOT include these modules.
       redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
+        image: redis/redis-stack-server:7.2.0-v10
+        ports:
+          - "6379:6379"
         options: >-
           --health-cmd "redis-cli ping"
-          --health-interval 10s --health-timeout 5s --health-retries 5
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      # Qdrant: /readyz returns 200 only after the node is fully initialised.
+      # The explicit health-check ensures the service container blocks until
+      # Qdrant is ready to accept requests before any test step runs.
       qdrant:
         image: qdrant/qdrant:v1.17.0
-        ports: ["6333:6333"]
+        ports:
+          - "6333:6333"
+          - "6334:6334"
+        options: >-
+          --health-cmd "curl -sf http://localhost:6333/readyz"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
+      # Application configuration — values match the service containers above
       POSTGRES_USER: atlas_user
       POSTGRES_PASS: atlas_test_password
       POSTGRES_DB: atlas_test
       POSTGRES_HOST: localhost
-      POSTGRES_PORT: 5432
+      POSTGRES_PORT: "5432"
       REDIS_HOST: localhost
-      REDIS_PORT: 6379
+      REDIS_PORT: "6379"
       REDIS_PASSWORD: ""
       QDRANT_URL: http://localhost:6333
-      API_SECRET_KEY: ci-only-not-a-production-secret
+      API_SECRET_KEY: ci-integration-test-secret
+      GROQ_API_KEY: ""
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -r requirements.txt
-      - name: Wait for Qdrant
-        run: |
-          for attempt in {1..20}; do
-            curl --fail http://localhost:6333/health && exit 0
-            sleep 3
-          done
-          exit 1
-      - run: alembic upgrade head
-      - run: pytest tests -q -m integration
 
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Service containers are already healthy at this point (GitHub Actions
+      # waits for health checks to pass before executing steps).
+      # The manual sleep/curl loop has been removed — it was both fragile
+      # (could pass before gRPC was ready) and redundant with the health check.
+
+      - name: Run Alembic migrations
+        run: alembic upgrade head
+
+      - name: Run integration tests
+        run: pytest tests -q -m integration --tb=short
+
+  # ---------------------------------------------------------------------------
+  # 4. Dependency and code security scan
+  # ---------------------------------------------------------------------------
   security:
     name: Dependency and code security scan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install pip-audit bandit
-      - run: pip-audit -r requirements.txt
-      - run: bandit -r app -ll
+
+      - name: Install audit tools and project dependencies
+        # pip-audit must resolve the full dependency graph (including
+        # transitive deps) to find all vulnerabilities.  Installing
+        # requirements.txt first ensures the resolver sees the same
+        # environment as production.
+        run: |
+          pip install pip-audit bandit
+          pip install -r requirements.txt
+
+      - name: Audit dependencies (pip-audit)
+        # --desc: show CVE descriptions in output
+        # If a vulnerability exists in a transitive dep that cannot be
+        # upgraded without breaking the project, add a narrow
+        #   --ignore-vuln GHSA-xxxx-xxxx-xxxx
+        # with a comment explaining why and when it will be resolved.
+        #
+        # Current known issues:
+        #   ecdsa (via python-jose): GHSA-wgq4-4cfg-c4x3 — side-channel
+        #     python-jose[cryptography] is already declared which uses the
+        #     'cryptography' backend for RSA; ecdsa is only pulled for EC
+        #     operations.  If EC keys are not used in production, this is
+        #     low-risk.  Track at:
+        #     https://github.com/mpdavis/python-jose/issues/265
+        run: pip-audit -r requirements.txt --desc
+
+      - name: Static code security analysis (bandit)
+        run: bandit -r app -ll

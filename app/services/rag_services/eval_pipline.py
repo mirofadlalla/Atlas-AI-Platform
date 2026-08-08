@@ -87,9 +87,9 @@ def evaluate_task(self, tenant_id: str, path: str, runs: int = 2, run_id: str = 
                     # تجميع متوسط النتائج للمقاييس (لو موجودة في النتيجة)
                     avg_scores = {}
                     if results and len(results) > 0:
-                        total_precision = total_recall = total_f1 = total_mrr = (
-                            total_token_f1
-                        ) = 0
+                        total_precision = (
+                            total_recall
+                        ) = total_f1 = total_mrr = total_token_f1 = 0
                         valid_retrieval = valid_gen = 0
 
                         for r in results:

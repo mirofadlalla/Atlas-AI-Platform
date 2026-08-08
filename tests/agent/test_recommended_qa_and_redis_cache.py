@@ -15,7 +15,9 @@ def test_recommended_qa_tenant_isolation_and_limit():
     RecommendedQAService._tenant_cache = {}
 
     # Mock DB queries
-    db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
+    db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = (
+        []
+    )
 
     # Add question for tenant 1
     with (
