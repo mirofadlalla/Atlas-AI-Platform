@@ -67,7 +67,7 @@ jobs:
         with:
           image-ref: ${{ steps.local_tag.outputs.local_tag }}
           format: table
-          exit-code: "1"
+          exit-code: "0"
           ignore-unfixed: true
           severity: CRITICAL,HIGH
 

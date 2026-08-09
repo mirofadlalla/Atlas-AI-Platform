@@ -1,505 +1,338 @@
-# Atlas AI Celery - Background Task Queue
+# Atlas AI — Celery Background Task Module
 
-**Module**: `app/celery`  
-**Purpose**: Asynchronous task execution via Celery + RabbitMQ  
-**Last Updated**: March 2026
+## Overview
 
----
+This module (`app/celery/celery_config.py`) configures the Celery distributed task queue used by Atlas AI for asynchronous / background processing. It is a **configuration module only** — it defines the `Celery` application instance, its broker/backend connections, queue topology, task routing table, serialization, worker pool behavior, time limits, retry policy, and a periodic ("beat") schedule.
 
-## 📋 Overview
+**Provided code:** `celery_config.py` (104 lines), plus a pre-existing `README.md` in the same folder.
 
-Celery handles long-running operations **asynchronously** without blocking HTTP responses:
+**Not provided:** the actual task implementations (e.g. `ingest_file_task`, `evaluate_task`, `log_query_run_and_cost`, `extract_semantic_memory`, `write_episode`), the FastAPI routes that presumably enqueue them, the database/vector-store repositories they use, and any Docker/deployment manifests. Everything about *what the tasks actually do* is therefore **Referenced but not provided** — this document does not describe their internal logic, only what can be inferred from how they are registered and routed in `celery_config.py`.
 
-✅ **Document Ingestion** - Process large files in background  
-✅ **Evaluation Pipelines** - Run benchmarks without tying up workers  
-✅ **Query Logging** - Write results to database after request completes  
-✅ **Distributed** - Multiple workers process tasks in parallel  
+> Note: an existing `README.md` was found alongside the config file containing example task implementations, route handlers, and monitoring code. Since that content is documentation/example code rather than the actual Atlas AI source, it is **not treated as verified implementation** in this document. Only `celery_config.py` is treated as ground truth.
 
 ---
 
-## 🏗️ Architecture
+## Responsibilities
+
+* Instantiate and configure the shared `celery_app` object used app-wide (`atlas_ai`).
+* Define the message broker and result backend connections.
+* Declare the queue topology (exchange + queues + routing keys).
+* Route specific, named tasks to specific queues.
+* Set serialization, worker pool, time-limit, retry, and tracking behavior.
+* Autodiscover and explicitly import task modules so workers register them.
+* Define a periodic task via Celery Beat.
+
+## Boundaries
+
+* This file does not define any task logic itself — no `@celery_app.task` functions appear in it.
+* It does not define the FastAPI application, database models, or vector store — those are only referenced by dotted path in `task_routes` and `conf.imports`.
+* It does not configure Prometheus/Flower/monitoring — none of that is present in the provided file.
+
+---
+
+## Project Structure
 
 ```
-FastAPI Route (client request)
-    ↓
-Route calls service.some_task.delay(args)  [enqueue to queue]
-    ↓
-RabbitMQ Broker (amqp://guest:guest@localhost:5672//)
-    ├─ ingest_data_queue     [document processing]
-    ├─ eval_data_queue       [evaluation tasks]
-    ├─ logging_queue         [database logging]
-    └─ queue_dead            [failed tasks]
-    ↓
-Celery Worker Pool
-    ├─ Worker 1 (processes ingest tasks)
-    ├─ Worker 2 (processes eval tasks)
-    └─ Worker 3 (processes logging tasks)
-    ↓
-Task Result Backend (RabbitMQ RPC)
-    ↓
-Route polls result or client receives callback
+celery/
+├── README.md            # Pre-existing docs (not verified against source; see note above)
+├── celery_config.py     # Celery app instance, queues, routing, worker/time/retry config, beat schedule
+└── __pycache__/         # Compiled bytecode (not source)
 ```
+
+`Not enough information from the provided code` regarding any other files in `app/celery/` or the broader `app/` tree.
 
 ---
 
-## ⚙️ Configuration (`celery_config.py`)
+## How It Works / Architecture
+
+```text
+                 ┌───────────────────────────────┐
+                 │   Producer (Not Provided)      │
+                 │   e.g. FastAPI route calling    │
+                 │   some_task.delay(...)          │
+                 └───────────────┬────────────────┘
+                                 │  publishes message
+                                 ▼
+                 ┌───────────────────────────────┐
+                 │  Broker: AMQP (RabbitMQ)        │
+                 │  CELERY_BROKER_URL env var,     │
+                 │  default amqp://guest:guest@    │
+                 │  localhost:5672//               │
+                 └───────────────┬────────────────┘
+                                 │
+                   "atlas_ai_exchange" (direct exchange)
+                                 │
+        ┌────────────────────────┼───────────────────────┬───────────────────┐
+        ▼                        ▼                        ▼                   ▼
+┌─────────────────┐   ┌────────────────────┐   ┌────────────────────┐  ┌───────────────┐
+│ ingest_data_queue│   │  eval_data_queue    │   │  logging_queue      │  │  queue_dead    │
+│ routing_key=     │   │  routing_key=       │   │  routing_key=       │  │  routing_key=  │
+│ "ingest"         │   │  "eval"              │   │  "logging" (default)│  │  "dead"        │
+└────────┬─────────┘   └──────────┬──────────┘   └──────────┬──────────┘  └────────────────┘
+         │                        │                          │             (declared, not
+         ▼                        ▼                          ▼              routed to by any
+┌─────────────────────────────────────────────────────────────────────┐     task in this file)
+│                   Celery Worker(s) (Not Provided)                    │
+│  consume from queue(s), execute task function, ack late,             │
+│  restart after 10 tasks, one task in-flight per prefetch slot        │
+└───────────────────────────┬───────────────────────────────────────┘
+                            │ result
+                            ▼
+                 ┌───────────────────────────────┐
+                 │ Result Backend: rpc://          │
+                 │ (CELERY_RESULT_BACKEND env var) │
+                 └───────────────────────────────┘
+```
+
+`Not enough information from the provided code` about who consumes the result backend or whether callers poll for results — no producer code is included.
+
+---
+
+## Configuration (`celery_config.py`)
+
+### Celery App Instantiation
 
 ```python
 celery_app = Celery(
     "atlas_ai",
-    broker="amqp://guest:guest@localhost:5672//",  # RabbitMQ connection
-    backend="rpc://",                               # Result storage
+    broker=os.getenv("CELERY_BROKER_URL", "amqp://guest:guest@localhost:5672//"),
+    backend=os.getenv("CELERY_RESULT_BACKEND", "rpc://"),
 )
 ```
 
-### Task Queues
+* App name: `atlas_ai`.
+* Broker: AMQP (RabbitMQ), configurable via `CELERY_BROKER_URL`, defaulting to a local guest/guest RabbitMQ instance.
+* Result backend: `rpc://` (Celery's RPC/AMQP-based backend), configurable via `CELERY_RESULT_BACKEND`.
 
-| Queue | Routing Key | Purpose | Max Duration |
-|-------|-------------|---------|--------------|
-| `ingest_data_queue` | `ingest` | Upload/ingest documents | 10 min |
-| `eval_data_queue` | `eval` | Run evaluations | 10 min |
-| `logging_queue` | `logging` | Write logs to DB | 10 min |
-| `queue_dead` | `dead` | Failed task retries | N/A |
-
-### Key Settings
+### Exchange and Queues
 
 ```python
-# Serialization
-task_serializer = "json"              # Simple JSON encoding
-result_serializer = "json"
+default_exchange = Exchange("atlas_ai_exchange", type="direct")
 
-# Worker Pool
-worker_pool = "threads"               # Thread-based (Windows compatible)
-worker_max_tasks_per_child = 10       # Restart after 10 tasks (memory leak prevention)
-worker_prefetch_multiplier = 1        # One task at a time (prevent queue spam)
-
-# Time Limits
-task_soft_time_limit = 550 seconds    # 9:10 - graceful shutdown
-task_time_limit = 600 seconds         # 10:00 - hard kill
-
-# Reliability
-task_acks_late = True                 # Ack only after completion (no loss)
-task_reject_on_worker_lost = True     # Re-queue if worker dies
-task_default_retry_delay = 30 seconds # Wait before retry
-task_max_retries = 3                  # Max 3 attempts
-
-# Tracking
-task_track_started = True             # Monitor progress
-timezone = "UTC"                      # Central time reference
+celery_app.conf.task_queues = (
+    Queue("ingest_data_queue", default_exchange, routing_key="ingest"),
+    Queue("eval_data_queue", default_exchange, routing_key="eval"),
+    Queue("logging_queue", default_exchange, routing_key="logging"),
+    Queue("queue_dead", default_exchange, routing_key="dead"),
+)
 ```
 
----
+A single direct exchange, `atlas_ai_exchange`, routes to four declared queues. `queue_dead` is declared but no task in this file is routed to it, and no dead-lettering mechanism (e.g. `x-dead-letter-exchange` policy) is configured in the provided code — its use is `Not enough information from the provided code`.
 
-## 🎯 Defined Tasks
-
-### Task Routing
+### Default Routing
 
 ```python
-celery_app.conf.task_routes = {
-    "app.services.rag_services.ingest_rag_service.ingest_file_task": {
-        "queue": "ingest_data_queue",
-        "routing_key": "ingest",
-    },
-    "app.services.rag_services.eval_pipline.evaluate_task": {
-        "queue": "eval_data_queue",
-        "routing_key": "eval",
-    },
-    "app.services.rag_services.query_logging_service.log_query_run_and_cost": {
-        "queue": "logging_queue",
-        "routing_key": "logging",
-    },
+celery_app.conf.task_default_queue = "logging_queue"
+celery_app.conf.task_default_exchange = "atlas_ai_exchange"
+celery_app.conf.task_default_routing_key = "logging"
+```
+
+Any task not explicitly matched in `task_routes` falls back to `logging_queue`.
+
+### Explicit Task Routing Table
+
+| Task (dotted path) | Queue | Routing Key |
+|---|---|---|
+| `app.services.rag_services.ingest_rag_service.ingest_file_task` | `ingest_data_queue` | `ingest` |
+| `app.services.rag_services.eval_pipline.evaluate_task` | `eval_data_queue` | `eval` |
+| `app.services.rag_services.eval_pipline.generate_eval_dataset_task` | `eval_data_queue` | `eval` |
+| `app.services.rag_services.query_logging_service.log_query_run_and_cost` | `logging_queue` | `logging` |
+| `app.services.semantic_memory_service.extract_semantic_memory` | `logging_queue` | `logging` |
+| `app.services.semantic_memory_service.prune_low_importance_semantic_memories` | `logging_queue` | `logging` |
+| `app.services.episodic_memory_service.write_episode` | `logging_queue` | `logging` |
+
+None of these task functions are present in the provided code — their argument signatures, business logic, and error handling are `Referenced but not provided`.
+
+### Serialization
+
+```python
+task_serializer="json"
+result_serializer="json"
+accept_content=["json"]
+```
+
+Only JSON is accepted for both task arguments and results; this restricts task arguments to JSON-serializable types.
+
+### Worker Pool Settings
+
+| Setting | Value | Effect |
+|---|---|---|
+| `worker_pool` | `"threads"` | Uses a thread pool instead of the default prefork (process) pool — the code comment states this is for better Windows compatibility |
+| `worker_max_tasks_per_child` | `10` | Worker thread/child is recycled after 10 tasks (mitigates memory growth) |
+| `worker_prefetch_multiplier` | `1` | Each worker process fetches only one task at a time from the queue |
+| `worker_disable_rate_limits` | `False` | Per-task rate limits (if set on individual tasks) remain enforced |
+
+### Time Limits
+
+| Setting | Value |
+|---|---|
+| `task_soft_time_limit` | 550s (9m10s) — a `SoftTimeLimitExceeded` exception is raised inside the task, allowing cleanup |
+| `task_time_limit` | 600s (10m) — the worker process/thread is forcibly terminated |
+
+### Retry / Acknowledgement
+
+| Setting | Value | Effect |
+|---|---|---|
+| `task_acks_late` | `True` | Message is acknowledged only after the task finishes (success or failure), not upon receipt |
+| `task_reject_on_worker_lost` | `True` | If the worker dies mid-task, the message is rejected/requeued rather than silently lost |
+| `task_default_retry_delay` | 30s | Default wait before a retried task is attempted again |
+| `task_max_retries` | 3 | Default cap on retry attempts |
+
+Note: `task_acks_late=True` combined with non-idempotent task logic can cause duplicate execution if a worker crashes after completing side effects but before acknowledging. Whether the referenced tasks are idempotent is `Not enough information from the provided code`.
+
+### Tracking / Timezone
+
+```python
+task_track_started=True
+timezone="UTC"
+enable_utc=True
+```
+
+Enables the `STARTED` task state (visible to anything inspecting task state, e.g. via the result backend) and standardizes all task-related timestamps to UTC.
+
+### Task Discovery
+
+```python
+celery_app.autodiscover_tasks(["app.services"])
+celery_app.conf.imports = (
+    "app.services.semantic_memory_service",
+    "app.services.episodic_memory_service",
+)
+```
+
+`autodiscover_tasks` looks for `tasks.py` (or equivalent, depending on Celery's Django/module conventions) inside `app.services`. The code comment explains the explicit `conf.imports` entry exists because the semantic and episodic memory service modules are **not** named `tasks.py`, so autodiscovery would otherwise miss them; they must be imported directly for the worker process to register their `@celery_app.task`-decorated functions.
+
+### Beat Schedule (Periodic Tasks)
+
+```python
+celery_app.conf.beat_schedule = {
+    "prune-low-importance-semantic-memories-nightly": {
+        "task": "app.services.semantic_memory_service.prune_low_importance_semantic_memories",
+        "schedule": 24 * 60 * 60,
+    }
 }
 ```
 
-### Task Examples
-
-**1. Ingest Document Task**
-
-```python
-# File: app/services/rag_services/ingest_rag_service.py
-from app.celery.celery_config import celery_app
-
-@celery_app.task(name="app.services.rag_services.ingest_rag_service.ingest_file_task")
-def ingest_file_task(
-    file_path: str,
-    document_id: str,
-    tenant_id: str,
-    metadata: dict = None
-) -> dict:
-    """Ingest document: chunk → embed → store in Qdrant + DB"""
-    
-    try:
-        # 1. Parse document
-        chunks = parse_document(file_path)
-        
-        # 2. Embed chunks (heavy operation)
-        embeddings = embed_batch(chunks)
-        
-        # 3. Store in Qdrant
-        qdrant_repository.upsert_documents(
-            document_id=document_id,
-            tenant_id=tenant_id,
-            chunks=chunks,
-            embeddings=embeddings
-        )
-        
-        # 4. Log to database
-        log_ingest(document_id, len(chunks), success=True)
-        
-        return {
-            "status": "completed",
-            "chunks_created": len(chunks),
-            "document_id": document_id
-        }
-    except Exception as e:
-        log_ingest(document_id, 0, success=False, error=str(e))
-        raise  # Celery will retry
-```
-
-**Usage from HTTP endpoint:**
-
-```python
-# File: app/routes/ingest_rag_route.py
-from app.services.rag_services.ingest_rag_service import ingest_file_task
-
-@router.post("/upload")
-async def upload_document(file: UploadFile, current_user: TokenData = Depends(verify_token)):
-    """Accept file upload, queue ingest task, return immediately"""
-    
-    # Save temporary file
-    temp_path = f"/tmp/{file.filename}"
-    with open(temp_path, "wb") as f:
-        f.write(await file.read())
-    
-    # Queue task (returns immediately)
-    task = ingest_file_task.delay(
-        file_path=temp_path,
-        document_id=str(uuid4()),
-        tenant_id=current_user.tenant_id,
-        metadata={"uploaded_by": current_user.email}
-    )
-    
-    # Return task ID for polling
-    return {
-        "file_id": task.id,
-        "filename": file.filename,
-        "status": "queued"
-    }
-```
-
-**2. Query Logging Task**
-
-```python
-# File: app/services/rag_services/query_logging_service.py
-from app.celery.celery_config import celery_app
-
-@celery_app.task(name="app.services.rag_services.query_logging_service.log_query_run_and_cost")
-def log_query_run_and_cost(
-    tenant_id: str,
-    user_id: str,
-    query: str,
-    answer: str,
-    tokens_used: int,
-    cost_usd: float,
-    duration_ms: float,
-    cache_hit: bool = False
-) -> dict:
-    """Async log query execution to database"""
-    
-    db = get_db_session()
-    try:
-        # 1. Create Run record
-        run = Runs(
-            tenant_id=tenant_id,
-            user_id=user_id,
-            question=query,
-            final_answer=answer,
-            status="completed",
-            total_tokens=tokens_used,
-            total_cost_usd=cost_usd,
-            duration_ms=duration_ms,
-            metadata={"cache_hit": cache_hit}
-        )
-        db.add(run)
-        db.commit()
-        
-        # 2. Log cost
-        if cost_usd > 0:
-            cost_log = CostLog(
-                tenant_id=tenant_id,
-                resource_type="llm",
-                operation="query",
-                cost_usd=cost_usd,
-                tokens_used=tokens_used,
-                run_id=str(run.id)
-            )
-            db.add(cost_log)
-            db.commit()
-        
-        return {"status": "logged"}
-    finally:
-        db.close()
-```
-
-**Usage from query endpoint:**
-
-```python
-# File: app/routes/query_route.py
-from app.services.rag_services.query_logging_service import log_query_run_and_cost
-
-@router.post("/search")
-async def search(
-    request: QueryRequest,
-    current_user: TokenData = Depends(verify_token)
-):
-    """Execute query and queue async logging"""
-    
-    # Execute query (synchronous RAG)
-    result = rag_service.search(request.query)
-    
-    # Queue logging (non-blocking)
-    log_query_run_and_cost.delay(
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.user_id,
-        query=request.query,
-        answer=result.answer,
-        tokens_used=result.tokens,
-        cost_usd=result.cost_usd,
-        duration_ms=result.duration_ms,
-        cache_hit=result.cache_hit
-    )
-    
-    # Return immediately
-    return {
-        "answer": result.answer,
-        "duration_ms": result.duration_ms,
-        "cost_usd": result.cost_usd
-    }
-```
+One periodic task is configured: `prune_low_importance_semantic_memories`, run every 24 hours (86,400 seconds) via Celery Beat. This requires a separate `celery beat` process to be running in addition to worker processes — beat itself is not started anywhere in the provided code.
 
 ---
 
-## 🚀 Running Workers
+## External Dependencies
 
-### Development (Single Worker)
-
-```bash
-# Terminal 1: Start RabbitMQ
-docker run -d -p 5672:5672 -p 15672:15672 rabbitmq:3.12-management
-
-# Terminal 2: Run Celery worker
-cd atlas-ai
-python -m celery -A app.celery.celery_config worker \
-  --loglevel=info \
-  --concurrency=4 \
-  --pool=threads
-```
-
-### Production (Multiple Workers)
-
-```bash
-# Worker 1: Ingestion tasks
-python -m celery -A app.celery.celery_config worker \
-  --queues=ingest_data_queue \
-  --hostname=ingest_worker@%h \
-  --concurrency=2
-
-# Worker 2: Evaluation tasks
-python -m celery -A app.celery.celery_config worker \
-  --queues=eval_data_queue \
-  --hostname=eval_worker@%h \
-  --concurrency=4
-
-# Worker 3: Logging tasks
-python -m celery -A app.celery.celery_config worker \
-  --queues=logging_queue \
-  --hostname=logging_worker@%h \
-  --concurrency=8
-```
-
-### Docker Compose
-
-```yaml
-# docker-compose.yml
-celery_worker_ingest:
-  image: atlas-ai:latest
-  command: celery -A app.celery.celery_config worker --queues=ingest_data_queue
-  depends_on:
-    - rabbitmq
-    - postgres
-
-celery_worker_eval:
-  image: atlas-ai:latest
-  command: celery -A app.celery.celery_config worker --queues=eval_data_queue
-  depends_on:
-    - rabbitmq
-    - postgres
-```
+| Dependency | Purpose | Where Used | Required? |
+|---|---|---|---|
+| Celery | Task queue framework | Entire file | Yes |
+| Kombu (`Exchange`, `Queue`) | Message routing primitives underlying Celery | Queue/exchange declarations | Yes |
+| RabbitMQ (AMQP broker) | Message broker for task dispatch | `broker=` connection string | Yes (default), overridable via `CELERY_BROKER_URL` |
+| RPC/AMQP result backend | Stores/returns task results | `backend="rpc://"` | Yes (default), overridable via `CELERY_RESULT_BACKEND` |
+| `app.services.rag_services.*` | Task implementations for ingestion and evaluation | Referenced in `task_routes` | Referenced but not provided |
+| `app.services.semantic_memory_service` | Task implementations for semantic memory extraction/pruning | Referenced in `task_routes`, `conf.imports`, `beat_schedule` | Referenced but not provided |
+| `app.services.episodic_memory_service` | Task implementation for episodic memory writes | Referenced in `task_routes`, `conf.imports` | Referenced but not provided |
 
 ---
 
-## 📊 Monitoring Tasks
+## Configuration (Environment Variables)
 
-### Celery Flower (UI Dashboard)
-
-```bash
-pip install flower
-
-# Start Flower on http://localhost:5555
-python -m celery -A app.celery.celery_config flower
+```env
+CELERY_BROKER_URL=<your-amqp-broker-url>          # default: amqp://guest:guest@localhost:5672//
+CELERY_RESULT_BACKEND=<your-result-backend-url>   # default: rpc://
 ```
 
-Features:
-- ✅ Real-time task execution
-- ✅ Queue depth monitoring
-- ✅ Worker status
-- ✅ Task statistics (pending, arrived, started)
-- ✅ Task details (args, result, traceback)
-
-### Command Line Inspection
-
-```bash
-# List active tasks
-celery -A app.celery.celery_config inspect active
-
-# Check tasks in queue
-celery -A app.celery.celery_config inspect reserved
-
-# Get worker stats
-celery -A app.celery.celery_config inspect stats
-
-# Revoke task (cancel ongoing)
-celery -A app.celery.celery_config revoke <task_id>
-```
-
-### Prometheus Metrics
-
-Celery metrics must be exported manually:
-
-```python
-# File: app/core/monitors.py
-from prometheus_client import Counter, Histogram
-
-celery_tasks_total = Counter(
-    "celery_tasks_total",
-    "Total Celery tasks",
-    ["task_name", "status"]  # status: succeeded, failed, retried
-)
-
-celery_task_duration = Histogram(
-    "celery_task_duration_seconds",
-    "Task execution duration",
-    ["task_name"]
-)
-
-# Middleware to track tasks
-@celery_app.task(bind=True)
-def my_task(self):
-    try:
-        # Task logic
-        pass
-        celery_tasks_total.labels(
-            task_name=self.name,
-            status="succeeded"
-        ).inc()
-    except Exception as e:
-        celery_tasks_total.labels(
-            task_name=self.name,
-            status="failed"
-        ).inc()
-        raise
-```
+No other environment variables, settings classes, credentials, model names, or feature flags appear in the provided code.
 
 ---
 
-## ⚠️ Error Handling & Retries
+## Async / Background Processing
 
-### Automatic Retries
-
-```python
-@celery_app.task(
-    name="my_task",
-    bind=True,
-    max_retries=3,
-    default_retry_delay=30
-)
-def my_task(self, arg1):
-    try:
-        # Task logic
-        return result
-    except Exception as exc:
-        # Retry with exponential backoff
-        raise self.retry(exc=exc, countdown=2 ** self.request.retries)
-```
-
-### Dead Letter Queue
-
-```python
-# Failed tasks route to queue_dead
-Queue("queue_dead", default_exchange, routing_key="dead")
-
-# Monitor dead letter queue
-celery -A app.celery.celery_config inspect active
-```
+* **What runs asynchronously:** any task registered under the dotted paths in `task_routes`, plus anything Celery discovers under `app.services` or explicitly imports (`semantic_memory_service`, `episodic_memory_service`). These execute inside separate worker processes/threads, not in the calling request thread.
+* **What runs synchronously:** `Not enough information from the provided code` — no producer/caller code (e.g. FastAPI routes calling `.delay()`) is included in this module.
+* **Task lifecycle:** message published to `atlas_ai_exchange` with a routing key → routed to the matching queue → picked up by a worker (thread pool, prefetch=1) → executed → acknowledged only after completion (`task_acks_late=True`) → result (if any) sent to the `rpc://` backend.
+* **Retry behavior:** default retry delay of 30s and max 3 retries are configured at the app level; whether individual tasks override these or call `self.retry(...)` explicitly is `Not enough information from the provided code` since no task bodies are provided.
+* **Periodic task:** `prune_low_importance_semantic_memories` is scheduled every 24 hours via `beat_schedule`, requiring a running `celery beat` process.
+* **Why asynchronous processing exists:** the implementation suggests background processing is intended to keep potentially slow operations — document ingestion, evaluation runs, and logging/memory writes — off the synchronous request path, based on the task names and queue naming (`ingest_data_queue`, `eval_data_queue`, `logging_queue`). This inference is drawn from naming conventions only; no producer code confirms it.
 
 ---
 
-## 🔒 Security
+## Error Handling
 
-**Message Signing** (optional, add if needed):
+Configured at the app level:
 
-```python
-celery_app.conf.update(
-    security_key="/path/to/key.pem",
-    security_certificate="/path/to/cert.pem",
-    security_cert_store="/path/to/trust.pem"
-)
-```
+* `task_acks_late=True` — a task is only acknowledged (removed from the queue) after it finishes, so a crashed worker leaves the message for redelivery.
+* `task_reject_on_worker_lost=True` — if the worker process is lost mid-execution, the unacknowledged message is rejected (and, depending on broker/queue configuration, requeued) instead of being dropped.
+* `task_default_retry_delay=30`, `task_max_retries=3` — default backoff/retry ceiling for tasks; actual retry invocation (e.g. `self.retry()`) is task-specific and not present in this file.
+* `task_soft_time_limit=550` / `task_time_limit=600` — long-running tasks are first given a soft signal to exit gracefully, then hard-killed 50 seconds later if still running.
+* A `queue_dead` queue is declared for potential dead-lettering, but no task routes to it and no RabbitMQ dead-letter-exchange policy is set in the provided code — so it is **not automatically populated** by anything shown here.
 
-**Authentication** (RabbitMQ credentials):
-
-```bash
-export CELERY_BROKER_URL=amqp://username:password@rabbitmq:5672//
-```
+`Not enough information from the provided code` regarding: behavior when RabbitMQ is unreachable at startup, exception handling inside individual tasks, or what happens to results if the `rpc://` backend is unavailable.
 
 ---
 
-## 📁 File Structure
+## Observability
 
-```
-app/celery/
-├── README.md                ← You are here
-├── celery_config.py         # Configuration and queues
-└── __pycache__/
-```
+`task_track_started=True` is the only observability-related setting present — it makes the `STARTED` state available to anything querying task status via the result backend. No logging, metrics (Prometheus), tracing, or MLflow integration appears in `celery_config.py`. The pre-existing `README.md` in this folder shows example Prometheus counter/histogram code, but this is example/aspirational code, not part of the provided `celery_config.py` source, so it is documented here only as **Referenced but not provided**.
 
 ---
 
-## 🧠 Best Practices
+## Security
 
-1. **Keep tasks small** - Should complete in seconds/minutes, not hours
-2. **Idempotent tasks** - Safe to retry without side effects
-3. **Use task routing** - Route to specific queues by task type
-4. **Monitor queues** - Watch for backlog growth
-5. **Version tasks** - Change task names when logic changes
-6. **Error logging** - Capture exceptions with traceback
-7. **Result backends** - Use Redis for faster result retrieval
+* Broker credentials are read from an environment variable (`CELERY_BROKER_URL`) rather than hardcoded, except for the default fallback `amqp://guest:guest@localhost:5672//`, which uses RabbitMQ's default guest/guest credentials. This default is insecure for anything beyond local development and should be overridden via the environment variable in any shared/production environment.
+* No message signing, TLS configuration, authentication of task producers, or per-tenant isolation is present in this file.
+* Because `task_serializer` and `accept_content` are both restricted to `"json"`, the config avoids Celery's insecure default pickle deserialization — this is a concrete, present security control.
+* `Not implemented / not visible in the provided code`: any tenant isolation for task arguments (e.g. tenant_id validation), authentication between producers and the broker beyond the connection string, or authorization checks on which callers may enqueue which tasks.
 
 ---
 
-## 🐛 Troubleshooting
+## Performance
 
-| Issue | Check |
-|-------|-------|
-| Tasks stuck in queue | Worker running? RabbitMQ connection OK? |
-| Tasks timing out | Increase `task_time_limit` if task legitimately slow |
-| Memory leaks | Check `worker_max_tasks_per_child` is set |
-| Tasks not retrying | Verify `task_acks_late = True` |
-| No results returned | Check `backend` configuration (RPC or Redis) |
+### Implemented Optimizations
+* `worker_prefetch_multiplier=1` avoids a single worker hoarding many queued tasks, improving fairness across workers under uneven load.
+* `worker_max_tasks_per_child=10` bounds per-process memory growth by recycling workers periodically.
+* Dedicated queues per task category (`ingest_data_queue`, `eval_data_queue`, `logging_queue`) allow independent scaling/consumption of different workloads, since consumers can be started against a subset of queues (`--queues=` flag) — though the worker startup commands themselves are not part of this file.
+
+### Potential Optimization Opportunities
+* `worker_pool="threads"` limits true parallelism for CPU-bound task code compared to Celery's default prefork pool, though it may suit I/O-bound tasks (e.g. network calls to embedding APIs, databases).
+* The `rpc://` result backend does not persist results beyond the RPC exchange lifecycle in the way Redis/database backends do — if task results need to be queried later or by multiple consumers, a persistent backend may be preferable. This is a potential consideration, not a confirmed limitation, since no code shows how results are consumed.
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: March 2026  
-**Broker**: RabbitMQ 3.12+  
-**Worker Pool**: Threads (Windows-compatible)
+## Failure Scenarios
+
+| Failure | Expected Behavior (per provided config) | Impact |
+|---|---|---|
+| RabbitMQ broker unreachable | `Not enough information from the provided code` — no startup/connection-retry logic shown | Task publishing/consumption would fail; downstream behavior not specified |
+| Worker process crashes mid-task | Message is not acked (`task_acks_late=True`) and is rejected/requeued (`task_reject_on_worker_lost=True`) | Task is redelivered to another worker; task should be idempotent to avoid duplicate side effects (idempotency not verifiable from this file) |
+| Task exceeds soft time limit (550s) | A `SoftTimeLimitExceeded` exception is raised inside the task | Task can catch this and clean up; behavior depends on task code, not shown |
+| Task exceeds hard time limit (600s) | Worker is forcibly terminated | Task is killed; per `task_acks_late`/`task_reject_on_worker_lost`, message handling follows the same requeue path as a lost worker |
+| Result backend (`rpc://`) unavailable | `Not enough information from the provided code` | Not specified |
+
+---
+
+## Testing
+
+No tests were provided in the analyzed code.
+
+---
+
+## Deployment
+
+No Dockerfiles, docker-compose manifests, process managers, or startup scripts are included in the provided code. The module implies (via `broker`/`backend` defaults) that a RabbitMQ instance is expected to be reachable, and via `beat_schedule` that a separate `celery beat` process is required alongside worker process(es) to actually run the periodic pruning task. Concrete startup commands, container definitions, health checks, and worker-to-queue assignment in deployment are `Not enough information from the provided code`.
+
+---
+
+## Known Limitations
+
+### Confirmed Limitations
+* Default broker credentials (`guest:guest`) are used if `CELERY_BROKER_URL` is not set — insecure outside local development.
+* `queue_dead` is declared but nothing in this file routes tasks to it or configures a dead-letter policy, so failed/expired messages are not automatically captured by it based on this configuration alone.
+* No observability (metrics/tracing/logging) is configured in this file.
+
+### Potential Risks / Improvements
+* Consider a persistent result backend (e.g. Redis) if task results must be queried after the fact by other services.
+* Consider wiring `queue_dead` to an actual RabbitMQ dead-letter-exchange policy or explicit task-level error routing if failed-task capture is desired.
+* Consider environment-based enforcement (e.g. failing startup) if `CELERY_BROKER_URL` is unset in non-local environments, to avoid silently using default guest credentials.
+
+---
+
+## Summary
+
+`celery_config.py` defines the Celery application (`atlas_ai`) for Atlas AI's background processing layer: an AMQP/RabbitMQ broker with an RPC result backend, four queues on a single direct exchange (`ingest_data_queue`, `eval_data_queue`, `logging_queue`, `queue_dead`), explicit routing for seven named tasks spanning RAG ingestion/evaluation, query cost logging, and semantic/episodic memory maintenance, JSON-only serialization, a thread-based worker pool with periodic recycling, late acknowledgement with requeue-on-worker-loss, bounded retries, and a nightly Beat-scheduled pruning task. The actual task logic, producers (API routes), and deployment topology are referenced by name only and were not included in the provided code, so this document does not describe their behavior beyond what the routing table and comments in `celery_config.py` reveal.

@@ -1,2173 +1,1273 @@
-# Atlas AI Platform - Complete Documentation
+# 🧠 Atlas AI Platform
 
-## Table of Contents
-1. [Project Overview](#project-overview)
-2. [Technology Stack](#technology-stack)
-3. [Architecture](#architecture)
-4. [Project Structure](#project-structure)
-5. [Installation & Setup](#installation--setup)
-6. [Configuration](#configuration)
-7. [Running the Application](#running-the-application)
-8. [API Endpoints](#api-endpoints)
-9. [Core Features & Components](#core-features--components)
-10. [Database Schema](#database-schema)
-11. [RAG Pipeline](#rag-pipeline)
-12. [Agent System](#agent-system)
-13. [Monitoring & Observability](#monitoring--observability)
-14. [Development Guide](#development-guide)
-15. [Deployment](#deployment)
-16. [Troubleshooting](#troubleshooting)
-17. [Contributing](#contributing)
+> A production-grade, multi-tenant AI platform that combines agentic reasoning,
+> retrieval-augmented generation, and a three-layer memory system to answer complex
+> questions over organizational knowledge.
 
 ---
 
-## Project Overview
+## 📋 Table of Contents
 
-**Atlas AI Platform** is an enterprise-grade, multi-tenant SaaS application that combines **Retrieval-Augmented Generation (RAG)** with **autonomous multi-step reasoning agents** to enable organizations with:
-
-- 🤖 **Intelligent Query Answering**: Semantic search across documents with reranking
-- 🧠 **Multi-Step Reasoning**: LangGraph-based autonomous agents that decompose complex questions
-- 📊 **Real-time Streaming**: Server-Sent Events (SSE) for live agent thinking process
-- 💰 **Cost Tracking**: Detailed billing and token usage analytics
-- 🏢 **Multi-Tenancy**: Complete tenant isolation with role-based access
-- 🔐 **User Management**: Admin approval workflow with invitation system
-- 📈 **Monitoring**: Prometheus + Grafana for system metrics and observability
-- ⚡ **Async Processing**: Celery task queue for non-blocking operations
-
----
-
-## Technology Stack
-
-### Backend
-- **Framework**: FastAPI (Python 3.10+) with Uvicorn ASGI server
-- **ORM**: SQLAlchemy with Alembic migrations
-- **API Documentation**: OpenAPI/Swagger (auto-generated)
-
-### AI/ML Components
-- **LLM**: OpenAI API (GPT-4, GPT-3.5-Turbo)
-- **Embeddings**: Sentence Transformers (all-MiniLM-L6-v2)
-- **Vector Database**: Qdrant (hybrid dense/sparse search)
-- **Reasoning Engine**: LangGraph (stateful multi-step workflows)
-- **Reranking**: Cross-Encoder (ms-marco-MiniLM-L-6-v2) + BM25
-
-### Databases & Caching
-- **Relational DB**: PostgreSQL 15
-- **Vector DB**: Qdrant
-- **Cache**: Redis 7 (query cache, semantic cache, Celery broker)
-- **Message Queue**: RabbitMQ/AMQP (Celery broker)
-
-### Monitoring & Logging
-- **Metrics**: Prometheus
-- **Visualization**: Grafana
-- **Error Tracking**: Sentry
-- **Logging**: JSON structured logs via pythonjsonlogger
-
-### Frontend
-- **Framework**: React (SPA)
-- **Build Tool**: webpack/Create React App
-- **API Client**: Axios with automatic JWT handling
-- **Real-time**: Server-Sent Events (SSE)
-
-### Infrastructure
-- **Containerization**: Docker & Docker Compose
-- **Package Management**: pip with requirements.txt
-- **Database Migrations**: Alembic
+- [The Problem](#the-problem)
+- [Why Simpler Approaches Fall Short](#why-simpler-approaches-fall-short)
+- [What Atlas AI Is](#what-atlas-ai-is)
+- [High-Level Architecture](#high-level-architecture)
+- [How It Works: A Request End to End](#how-it-works-a-request-end-to-end)
+- [Core Components](#core-components)
+- [Agent Architecture Deep Dive](#agent-architecture-deep-dive)
+- [RAG Architecture Deep Dive](#rag-architecture-deep-dive)
+- [Memory Architecture Deep Dive](#memory-architecture-deep-dive)
+- [Memory vs. RAG: Understanding the Distinction](#memory-vs-rag-understanding-the-distinction)
+- [Multi-Tenancy](#multi-tenancy)
+- [Knowledge Ingestion Flow](#knowledge-ingestion-flow)
+- [Why These Components Exist Together](#why-these-components-exist-together)
+- [Example: A User Asking a Question](#example-a-user-asking-a-question)
+- [Technology Stack](#technology-stack)
+- [Repository Structure](#repository-structure)
+- [Operational Overview](#operational-overview)
+- [Security and Isolation](#security-and-isolation)
+- [Observability](#observability)
+- [Design Principles](#design-principles)
+- [What Makes Atlas AI Architecturally Interesting](#what-makes-atlas-ai-architecturally-interesting)
+- [Architecture Map](#architecture-map)
+- [Documentation Navigation](#documentation-navigation)
 
 ---
 
-## Architecture
+## 🔥 The Problem
 
-### High-Level System Architecture
+Organizations accumulate knowledge across many sources: PDF reports, relational databases,
+historical records, policies, and conversation history. When someone needs to find an answer,
+they face several compounding challenges:
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                     React Frontend (SPA)                       │
-│                    (Auth, Query, Upload UI)                    │
-└─────────────────────────┬──────────────────────────────────────┘
-                          │ HTTPS/WSS
-                          ▼
-┌────────────────────────────────────────────────────────────────┐
-│                   FastAPI Backend (4 workers)                  │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │ Routes Layer: /auth, /query, /agent, /ingest, /metrics  │  │
-│  └──────────────────────┬─────────────────────────────────┘  │
-│                         │                                      │
-│  ┌──────────────────────▼─────────────────────────────────┐  │
-│  │     Services Layer (Business Logic & Controllers)      │  │
-│  │  • Auth Service      • RAG Service      • Agent Runner │  │
-│  │  • Ingest Service    • Logging Service  • Cost Tracker │  │
-│  └──────────────────────┬─────────────────────────────────┘  │
-│                         │                                      │
-│  ┌──────────────────────▼─────────────────────────────────┐  │
-│  │   Repositories Layer (Data Access Abstraction)         │  │
-│  └──┬──────────────┬──────────────┬────────────────────┬─┘  │
-└─────┼──────────────┼──────────────┼────────────────────┼──────┘
-      │              │              │                    │
-   ┌──▼──────┐  ┌───▼───────┐ ┌───▼──────┐         ┌───▼────┐
-   │PostgreSQL│  │ Qdrant    │ │  Redis   │         │Celery  │
-   │  (Users, │  │ (Vectors, │ │  (Cache, │         │(Tasks) │
-   │  Tenants,│  │ Embeddings)│ │ Broker)  │         │        │
-   │  Runs,   │  │           │ │          │         └────┬───┘
-   │  Costs)  │  │           │ │          │              │
-   └──────────┘  └──────────┘ └──────────┘         ┌─────▼──────┐
-                                                    │ RabbitMQ   │
-                                                    │ (Message   │
-                                                    │  Broker)   │
-                                                    └────────────┘
+- **Knowledge is scattered.** The information needed to answer a real question rarely lives in
+  one place. It may span a document, a database table, and context from a previous conversation.
+- **Traditional search is too shallow.** Keyword search finds documents that contain the right
+  words, not documents that contain the right answers. The user then has to read, interpret, and
+  synthesize those documents themselves.
+- **Queries are often complex and multi-step.** A question like *"Compare our Q3 revenue to the
+  targets in the planning document, and remind me what we decided last week"* requires database
+  access, document retrieval, and memory of a prior conversation — all synthesized into one answer.
+- **Context is lost between sessions.** A stateless AI treats every conversation as a fresh start.
+  It cannot remember that a user prefers concise bullet points, or that a key term carries a
+  domain-specific meaning in this organization.
+- **Multiple organizations cannot safely share a system.** In a multi-tenant deployment, Tenant A's
+  data must be completely invisible to Tenant B — across documents, conversations, database access,
+  and long-term memory.
+- **LLM calls are expensive.** Without caching, budget controls, and cost tracking, an AI platform
+  can consume enormous compute resources on redundant or runaway queries.
 
-External APIs:
-├─ OpenAI (LLM)
-├─ Prometheus (Metrics)
-├─ Sentry (Error Tracking)
-└─ Email Service (Invitations)
-```
+Simple Retrieval-Augmented Generation (RAG) partially addresses the first two problems. But it cannot
+handle multi-step reasoning, has no memory of prior interactions, and does not know when to query
+a database versus a document store.
 
-### Request Flow Diagram
-
-```
-User Query (HTTP POST)
-    │
-    ├─► [Authentication Middleware]
-    │   └─► Validate JWT, extract tenant_id
-    │
-    ├─► [Rate Limiter]
-    │   └─► Check request quota (Redis)
-    │
-    ├─► [Route Handler]
-    │   ├─► Input validation (Pydantic schemas)
-    │   └─► Call service layer
-    │
-    ├─► [Service Layer]
-    │   ├─► Business logic
-    │   ├─► Repository calls for DB/Vector DB
-    │   └─► Stream response (SSE for agents)
-    │
-    ├─► [Repository Layer]
-    │   ├─► PostgreSQL CRUD
-    │   ├─ Qdrant vector search
-    │   └─► Redis cache operations
-    │
-    └─► [Async Task (Celery)]
-        ├─► Logging (non-blocking)
-        ├─► Cost aggregation
-        └─► Email notifications
-```
+Atlas AI is designed to solve all of these problems together.
 
 ---
 
-## Project Structure
+## ⚠️ Why Simpler Approaches Fall Short
+
+A minimal AI system might look like this:
 
 ```
-atlas-ai/
-├─ alembic/                          # Database migration management
-│  ├─ versions/                      # Migration scripts
-│  │  ├─ dcf644ec6a71_create_atlas_db.py
-│  │  ├─ 31ddc81adc69_create_atlas_db_tables.py
-│  │  ├─ 1eb4a877921f_create_runs_and_costlog_tables.py
-│  │  ├─ 3c409934de50_added_tracker_db_table.py
-│  │  ├─ add_user_approval_workflow.py
-│  │  ├─ add_invitations_table.py
-│  │  ├─ add_processing_status_to_tracker.py
-│  │  └─ add_user_approval_workflow.py
-│  ├─ env.py                        # Alembic configuration
-│  └─ script.py.mako                # Migration template
-│
-├─ app/                              # Main application package
-│
-│  ├─ core/                          # Foundation & Configuration
-│  │  ├─ config.py                   # Pydantic Settings (environment variables)
-│  │  │                              # - Database URLs
-│  │  │                              # - Redis/Qdrant configuration
-│  │  │                              # - API keys, JWT secrets
-│  │  │                              # - LLM model names and timeouts
-│  │  ├─ db.py                       # SQLAlchemy setup
-│  │  │                              # - Engine initialization
-│  │  │                              # - Session factory
-│  │  │                              # - Connection pooling
-│  │  ├─ auth.py                     # JWT & Password utilities
-│  │  │                              # - Token creation/verification
-│  │  │                              # - bcrypt password hashing
-│  │  │                              # - Claims extraction
-│  │  ├─ monitors.py                 # Prometheus metrics registration
-│  │  │                              # - HTTP request/response metrics
-│  │  │                              # - Document ingestion metrics
-│  │  │                              # - Custom LLM metrics
-│  │  ├─ metrics.py                  # RAG-specific metric container
-│  │  │                              # - Token usage aggregation
-│  │  │                              # - Cache statistics
-│  │  │                              # - Latency tracking
-│  │  ├─ rate_limitizer.py           # Role-based rate limiting
-│  │  │                              # - Admin: 300 req/min
-│  │  │                              # - User: 100 req/min
-│  │  │                              # - Guest: 20 req/min
-│  │  └─ README.md                   # Core module documentation
-│
-│  ├─ models/                        # SQLAlchemy ORM Models
-│  │  ├─ base.py                     # Base model with common fields
-│  │  │                              # - id (UUID)
-│  │  │                              # - created_at, updated_at
-│  │  │                              # - tenant_id (multi-tenancy)
-│  │  ├─ user.py                     # User model
-│  │  │                              # - email, password_hash
-│  │  │                              # - role (admin, user, viewer)
-│  │  │                              # - approval_status (pending/approved/rejected)
-│  │  ├─ tenant.py                   # Tenant (Organization) model
-│  │  │                              # - company_name, plan_tier
-│  │  │                              # - subscription_status
-│  │  ├─ runs.py                     # Agent execution runs model
-│  │  │                              # - agent_type, status
-│  │  │                              # - tokens_used, latency_ms
-│  │  │                              # - cache_hit, cost_usd
-│  │  ├─ costLog.py                  # Cost tracking model
-│  │  │                              # - cost_type (embedding, completion)
-│  │  │                              # - model_used, token_count
-│  │  │                              # - cost_usd
-│  │  ├─ documents.py                # Document metadata model
-│  │  │                              # - file_hash (deduplication)
-│  │  │                              # - chunk_count
-│  │  ├─ invitation.py               # Invitation model
-│  │  │                              # - token, email
-│  │  │                              # - expires_at, status
-│  │  ├─ TRACKER_DB_FILE.py          # File processing status model
-│  │  │                              # - file_path, status
-│  │  │                              # - progress_percentage
-│  │  ├─ uuid.py                     # UUID generation utils
-│  │  ├─ __init__.py
-│  │  └─ README.md                   # Models documentation
-│
-│  ├─ agent/                         # LangGraph-based Reasoning Engine
-│  │  ├─ core/
-│  │  │  ├─ state.py                 # AgentState TypedDict
-│  │  │  │                           # - question, decomposed_questions
-│  │  │  │                           # - thoughts, observations
-│  │  │  │                           # - cost tracking, token counts
-│  │  │  ├─ graph.py                 # LangGraph workflow definition
-│  │  │  │                           # - State machine transitions
-│  │  │  │                           # - Node connections
-│  │  │  │                           # - Conditional routing
-│  │  │  └─ callbacks.py             # Event streaming & logging
-│  │  │
-│  │  ├─ nodes/
-│  │  │  ├─ decompose_node.py        # Question decomposition
-│  │  │  │                           # - Break complex Q into sub-questions
-│  │  │  │                           # - Creates execution plan
-│  │  │  ├─ thought_node.py          # Decision logic
-│  │  │  │                           # - Decide next action (retrieve/SQL/finish)
-│  │  │  │                           # - Route based on reasoning
-│  │  │  ├─ retrieval_node.py        # RAG document retrieval
-│  │  │  │                           # - Calls Qdrant vector search
-│  │  │  │                           # - Integrates reranking
-│  │  │  ├─ sql_node.py              # SQL query execution
-│  │  │  │                           # - Plans SQL queries
-│  │  │  │                           # - Executes against PostgreSQL
-│  │  │  └─ finish_node.py           # Final answer formatting
-│  │  │                              # - Aggregates observations
-│  │  │                              # - Returns formatted response
-│  │  │
-│  │  ├─ tools/
-│  │  │  ├─ retrieval.py             # Semantic search implementation
-│  │  │  │                           # - Query embedding
-│  │  │  │                           # - Qdrant hybrid search
-│  │  │  │                           # - Cross-encoder reranking
-│  │  │  │                           # - Result formatting
-│  │  │  ├─ sql_engine/
-│  │  │  │  ├─ query_planner.py      # SQL query planning
-│  │  │  │  │                        # - Question to SQL translation
-│  │  │  │  │                        # - Safety checks
-│  │  │  │  └─ executor.py           # SQL execution wrapper
-│  │  │  │                           # - Connection pooling
-│  │  │  │                           # - Result formatting
-│  │  │  └─ utils.py                 # Tool utilities
-│  │  │
-│  │  ├─ schemas.py                  # Pydantic request/response schemas
-│  │  ├─ README.md                   # Agent architecture documentation
-│  │  └─ __init__.py
-│
-│  ├─ rag/                           # RAG Pipeline
-│  │  ├─ ingest_data_pipline.py      # Document ingestion orchestration
-│  │  │                              # - File upload handling
-│  │  │                              # - Deduplication (SHA-256 hash)
-│  │  │                              # - Document parsing (PDF, markdown, JSON)
-│  │  │                              # - Semantic chunking
-│  │  │                              # - Batch embedding generation
-│  │  │                              # - Qdrant upsert
-│  │  ├─ retrivel_data_pipline.py    # Query processing pipeline
-│  │  │                              # - 3-tier cache checking
-│  │  │                              # - Embedding generation
-│  │  │                              # - Hybrid vector search
-│  │  │                              # - Cross-encoder reranking
-│  │  │                              # - Result formatting
-│  │  ├─ reranker.py                 # Reranking strategies
-│  │  │                              # - Cross-Encoder model
-│  │  │                              # - BM25 fallback
-│  │  │                              # - Hybrid scoring
-│  │  ├─ data/                       # Temporary data storage
-│  │  ├─ evaluation/                 # RAG evaluation suite
-│  │  ├─ steps/                      # Pipeline step implementations
-│  │  ├─ README.md                   # RAG documentation
-│  │  └─ __init__.py
-│
-│  ├─ repositories/                  # Data Access Layer (Repository Pattern)
-│  │  ├─ user_repository.py          # User CRUD operations
-│  │  │                              # - Create, get, list, update, delete
-│  │  │                              # - Tenant-filtered queries
-│  │  │                              # - Role-based filtering
-│  │  ├─ tenant_repository.py        # Tenant CRUD operations
-│  │  │                              # - Org registration
-│  │  │                              # - Plan management
-│  │  ├─ runs_repository.py          # Agent execution history
-│  │  │                              # - Store run records
-│  │  │                              # - Query with date range filtering
-│  │  │                              # - Cost aggregation
-│  │  ├─ cost_log_repository.py      # Cost tracking & billing
-│  │  │                              # - Log LLM costs
-│  │  │                              # - Generate billing reports
-│  │  ├─ qdrant.py                   # Vector database operations
-│  │  │                              # - Hybrid search (dense + sparse)
-│  │  │                              # - Collection management
-│  │  │                              # - Metadata filtering
-│  │  ├─ invitation_repository.py    # Invitation management
-│  │  │                              # - Create invitations
-│  │  │                              # - Validate tokens
-│  │  │                              # - Accept/reject invitations
-│  │  ├─ trakcer_db_file_repositorie.py # File processing status
-│  │  │                              # - Track ingestion progress
-│  │  ├─ README.md                   # Repository pattern documentation
-│  │  └─ __init__.py
-│
-│  ├─ services/                      # Business Logic Layer
-│  │  ├─ llm_runner.py               # LLM API wrapper
-│  │  │                              # - OpenAI integration
-│  │  │                              # - Token counting & cost calculation
-│  │  │                              # - Streaming support
-│  │  │                              # - Error handling & retries
-│  │  ├─ token_service.py            # JWT token management
-│  │  │                              # - Token creation
-│  │  │                              # - Token verification
-│  │  │                              # - Token refresh logic
-│  │  ├─ hash_service.py             # Password utilities
-│  │  │                              # - bcrypt hashing
-│  │  │                              # - Verification
-│  │  │
-│  │  ├─ auth_services/
-│  │  │  ├─ auth_service.py          # Login/logout logic
-│  │  │  │                           # - User authentication
-│  │  │  │                           # - Current user extraction
-│  │  │  ├─ auth_admin_service.py    # Admin operations
-│  │  │  │                           # - User approval
-│  │  │  │                           # - Role management
-│  │  │  └─ user_profile_service.py  # Profile management
-│  │  │                              # - Update profile
-│  │  │                              # - Preference management
-│  │  │
-│  │  ├─ rag_services/
-│  │  │  ├─ ingest_rag_service.py    # RAG ingestion orchestration
-│  │  │  │                           # - Validation & deduplication
-│  │  │  │                           # - Repository coordination
-│  │  │  ├─ query_logging_service.py # Async query logging
-│  │  │  │                           # - Celery task for logging
-│  │  │  ├─ agent_logging_service.py # Agent execution logging
-│  │  │  │                           # - Detailed telemetry
-│  │  │  └─ eval_pipline.py          # RAG evaluation
-│  │  │                              # - Quality metrics
-│  │  │                              # - Performance benchmarks
-│  │  │
-│  │  ├─ tenant_registration_service.py # Organization signup
-│  │  │                              # - Tenant creation
-│  │  │                              # - Admin user setup
-│  │  ├─ user_approval_service.py    # User approval workflow
-│  │  │                              # - Approve/reject users
-│  │  ├─ invitation_management_service.py # Invitation lifecycle
-│  │  │                              # - Create, send, validate
-│  │  ├─ README.md                   # Services documentation
-│  │  └─ __init__.py
-│
-│  ├─ routes/                        # API Endpoint Handlers
-│  │  ├─ auth_routes.py              # /api/auth/*
-│  │  │                              # - POST /register
-│  │  │                              # - POST /login
-│  │  │                              # - GET /profile
-│  │  │                              # - POST /invitations/send
-│  │  │                              # - POST /invitations/validate
-│  │  │                              # - POST /invitations/register
-│  │  ├─ query_routes.py             # /api/query/*
-│  │  │                              # - POST /search (RAG)
-│  │  │                              # - GET /cache-stats
-│  │  ├─ agent_routes.py             # /api/agent/*
-│  │  │                              # - POST /reason (SSE)
-│  │  │                              # - GET /runs
-│  │  │                              # - GET /runs/{id}
-│  │  ├─ ingest_rag_routes.py        # /api/ingest-rag/*
-│  │  │                              # - POST /upload
-│  │  │                              # - GET /status/{id}
-│  │  │                              # - GET /documents
-│  │  ├─ eval_rag_routes.py          # /api/eval-rag/*
-│  │  │                              # - POST /evaluate
-│  │  │                              # - GET /results
-│  │  ├─ metrics_routes.py           # /api/metrics
-│  │  │                              # - Prometheus metrics endpoint
-│  │  ├─ README.md                   # API documentation
-│  │  ├─ __init__.py
-│  │  └─ schemas.py                  # Request/response Pydantic models
-│
-│  ├─ controllers/                   # HTTP Request Handlers (optional layer)
-│  │  ├─ auth_controller.py          # Auth-related handlers
-│  │  ├─ ingest_rag_controller.py    # Ingest-related handlers
-│  │  ├─ README.md
-│  │  └─ __init__.py
-│
-│  ├─ design_pattern/                # Design Patterns
-│  │  ├─ embedded_model.py           # Singleton pattern
-│  │  │                              # - Single embedding model instance
-│  │  │                              # - Thread-safe lazy loading
-│  │  ├─ llm_singlton.py             # LLM singleton
-│  │  │                              # - Shared LLM instance
-│  │  ├─ upload_factory.py           # Factory pattern
-│  │  │                              # - Dynamic file handler creation
-│  │  ├─ upload_factory_pattern/     # Strategy pattern
-│  │  │                              # - PDF handler
-│  │  │                              # - Markdown handler
-│  │  │                              # - JSON handler
-│  │  ├─ user_factory.py             # User creation factory
-│  │  ├─ README.md                   # Design patterns documentation
-│  │  └─ __init__.py
-│
-│  ├─ celery/                        # Task Queue Configuration
-│  │  ├─ celery_config.py            # Celery setup
-│  │  │                              # - Broker (RabbitMQ)
-│  │  │                              # - Backend (RPC result storage)
-│  │  │                              # - Queue definitions
-│  │  │                              # - Task routing
-│  │  └─ README.md
-│
-│  ├─ files/                         # File Storage
-│  │  ├─ eval_files/                 # Evaluation dataset files
-│  │  └─ uploads/                    # User-uploaded documents
-│
-│  ├─ __init__.py
-│  └─ __pycache__/
-│
-├─ frontend/                         # React SPA
-│  ├─ src/
-│  │  ├─ components/                 # React components
-│  │  ├─ pages/                      # Page components
-│  │  ├─ services/                   # API client service
-│  │  ├─ hooks/                      # Custom React hooks
-│  │  ├─ utils/                      # Utility functions
-│  │  ├─ styles/                     # CSS/SCSS files
-│  │  ├─ App.js                      # Root component
-│  │  └─ index.js                    # Entry point
-│  ├─ public/                        # Static assets
-│  ├─ build/                         # Production build output
-│  ├─ package.json                   # Dependencies
-│  ├─ README.md                      # Frontend documentation
-│  └─ webpack.config.js              # Build configuration
-│
-├─ alembic.ini                       # Alembic CLI configuration
-├─ docker-compose.yml                # Full local stack (Postgres, Qdrant, Redis)
-├─ docker-compose.monitoring.yml     # Monitoring stack (Prometheus, Grafana)
-├─ Dockerfile                        # Multi-stage API container build
-├─ main.py                           # FastAPI application entry point
-├─ logging_setup.py                  # JSON structured logging configuration
-├─ requirements.txt                  # Python dependencies
-├─ START_MONITORING.bat              # Windows script to start monitoring
-├─ verify_metrics.py                 # Utility script for metric verification
-├─ fake_metrics.txt                  # Fake data for testing
-│
-├─ monitoring/                       # Prometheus & Grafana
-│  ├─ prometheus.yml                 # Prometheus scrape config
-│  ├─ prometheus.monitoring.yml      # Extended monitoring config
-│  ├─ grafana/                       # Grafana dashboards
-│  │  └─ atlas-monitoring.json       # Main dashboard definition
-│  └─ README.md                      # Monitoring documentation
-│
-├─ mlruns/                           # MLflow experiment tracking (optional)
-│  └─ models/                        # Model artifacts
-│
-├─ diagrams/                         # Architecture diagrams
-│
-├─ SRS/                              # Software Requirements Specification docs
-│
-└─ GRAFANA_METRICS_FIX.md            # Grafana troubleshooting guide
+User --> Vector Search --> LLM --> Answer
+```
+
+This works for simple, isolated questions. It breaks down quickly when:
+
+| Challenge | Why minimal RAG fails |
+|---|---|
+| Multi-step question | RAG retrieves once and answers. It cannot try a different source if insufficient. |
+| Structured data question | RAG searches documents. It cannot query a relational database. |
+| Conversational context | RAG has no memory of previous turns. The user must re-explain context every time. |
+| Long-running user preferences | The system cannot remember that this user always wants bullet points. |
+| Multi-tenant isolation | A simple shared vector store requires careful metadata filtering everywhere, with no architectural enforcement. |
+| Cost and performance | A naive pipeline sends every query to the most expensive model with no caching or tracking. |
+
+Atlas AI addresses all of these with an **agentic architecture** that reasons about *how* to answer
+before attempting to answer.
+
+---
+
+## 🚀 What Atlas AI Is
+
+Atlas AI is a **multi-tenant AI platform** built for organizations that need to query their own
+knowledge — both structured (database tables) and unstructured (documents, PDFs) — using natural language.
+
+At its core, Atlas AI places an **Agent** between the user and the underlying data sources. The Agent
+does not blindly retrieve and generate. It thinks: it classifies the question, consults memory,
+decides whether the answer requires a document search, a database query, or both, executes those
+retrievals, and synthesizes a grounded final answer. After answering, it extracts and persists useful
+information for future interactions.
+
+**Who it is for:**
+- Organizations that want AI-powered question answering over their own private knowledge and data
+- Developers building intelligent assistants on top of proprietary structured and unstructured data
+- Teams that need complete tenant isolation — each organization gets its own isolated slice of the system
+
+**What it enables:**
+- Answering questions that require reasoning across structured and unstructured data simultaneously
+- Conversations that remember context within a session and across sessions
+- Per-user and per-tenant knowledge and memory boundaries
+- Full observability into AI behavior, costs, and system performance
+
+---
+
+## 🏗️ High-Level Architecture
+
+```
+                     +---------------------------+
+                     |           User            |
+                     +-------------+-------------+
+                                   |
+                         JWT Auth + Rate Limit
+                                   |
+                     +-------------v-------------+
+                     |       FastAPI              |
+                     |       API Layer            |
+                     |  (SSE Streaming / REST)    |
+                     +-------------+-------------+
+                                   |
+                     +-------------v-------------+
+                     |                           |
+                     |  LangGraph Agent Graph    |
+                     |                           |
+                     +---+----------+--------+---+
+                         |          |        |
+              +----------v--+  +----v---+  +-v----------+
+              | Memory       |  |  RAG   |  | SQL Tool   |
+              | System       |  | Tool   |  |            |
+              +------+-------+  +---+----+  +-----+------+
+                     |              |             |
+         +-----------v------+  +----v------+  +---v--------+
+         | Short-Term: Redis |  |  Qdrant   |  | PostgreSQL |
+         | Episodic: Postgres|  | (Docs +   |  | (Structured|
+         | Semantic: Qdrant  |  |  Semantic  |  |  Data)     |
+         +-------------------+  |  Memory)  |  +------------+
+                                +-----------+
+                                   |
+                     +-------------v-------------+
+                     |   LLM Provider             |
+                     |  (Groq / llama-3.3-70b)   |
+                     +-------------+-------------+
+                                   |
+                     +-------------v-------------+
+                     |   Final Answer             |
+                     |  (streamed via SSE)        |
+                     +---------------------------+
+
+  --- Async Background (Celery Workers + Beat) ----------------------
+  | Memory extraction after each interaction                         |
+  | Episode summary writing after each session turn                  |
+  | Document ingestion into the RAG knowledge base                   |
+  | Query logging and per-tenant cost tracking                       |
+  | Nightly semantic memory pruning                                  |
+  -------------------------------------------------------------------
+
+  --- Observability --------------------------------------------------
+  | Prometheus metrics + Grafana dashboards                          |
+  | MLflow experiment tracking (queries, evaluations, ingestion)     |
+  | Sentry error monitoring and ASGI tracing                         |
+  -------------------------------------------------------------------
 ```
 
 ---
 
-## Installation & Setup
+## ⚙️ How It Works: A Request End to End
 
-### Prerequisites
-- **Python 3.10+** (3.11 recommended)
-- **Docker & Docker Compose**
-- **PostgreSQL 15** (or via Docker)
-- **Redis 7** (or via Docker)
-- **Qdrant** (or via Docker)
-- **OpenAI API Key**
-- **Git**
+Every request flows through the same deliberate sequence. Here is what happens from the moment
+a user sends a question to the moment they receive an answer.
 
-### Step 1: Clone Repository
-```bash
-git clone <repository-url>
-cd atlas-ai
+### 1. 🔐 Authentication and Rate Limiting
+The request arrives at the FastAPI API layer. A JWT token identifies the user and their tenant.
+Rate limiting is applied per client IP before any processing begins.
+
+### 2. 💬 Session History Loading
+The Agent graph starts executing. Its first node loads the short-term conversation history for the
+current session from Redis — the last several turns. This gives the agent immediate conversational
+context without loading entire histories.
+
+### 3. 📖 Episodic Recall
+The agent loads compact summaries of the user's **previous sessions** from PostgreSQL. These episode
+summaries capture what happened in past conversations in compressed form, so the agent has context
+across sessions without replaying full history at full cost.
+
+### 4. 🧠 Semantic Memory Recall
+The agent queries the user's **semantic memory** in Qdrant: persistent facts, preferences, and tool
+hints extracted from previous interactions — filtered strictly to the requesting user and tenant.
+If the user mentioned a preferred format or domain-specific context in a prior session, it is recalled here.
+
+### 5. 🔬 Question Decomposition
+With all context loaded, the agent sends the question to the LLM for decomposition. Complex questions
+are broken into ordered sub-questions. Simple questions pass through as-is. This allows each part
+of a complex question to be handled with the right tool.
+
+### 6. 🤔 Reasoning and Tool Selection (Think Node)
+For each sub-question, the agent enters a reasoning loop. It classifies the question: does this need
+structured data (`data` type → SQL) or document knowledge (`knowledge` type → retrieval)? Based
+on what has already been retrieved and this classification, it decides the next action.
+
+### 7. 🔧 Tool Execution
+
+**SQL Tool:** Generates a SQL query, validates it for safety, enforces tenant isolation by injecting
+the tenant filter, checks the estimated query cost, and executes it. Results are formatted and
+returned to the agent state.
+
+**Retrieval Tool:** Queries the tenant's Qdrant collection using hybrid search (dense + sparse
+vectors) with a tenant filter applied. Results are re-ranked and passed back to the agent as
+grounded context.
+
+The agent has fallback logic: if SQL returns nothing, it may try retrieval. It actively detects and
+breaks out of loops if it begins repeating the same actions.
+
+### 8. ✍️ Answer Synthesis
+Once sufficient information is collected, the finish node assembles all context — SQL results,
+retrieved document chunks, semantic memories, episodic summaries, and conversation history — into an
+LLM prompt. The LLM generates an answer for the current sub-question. If the original question was
+decomposed into multiple sub-questions, a second LLM call synthesizes all sub-answers into one
+coherent final response.
+
+### 9. 📡 Streaming Response
+The final answer is streamed back to the client via **Server-Sent Events (SSE)**. The client
+receives real-time events as the agent reasons — thought events, tool-start/end events, and the
+final answer — rather than waiting for the entire process to complete silently.
+
+### 10. 💾 Async Memory Persistence
+After the answer is returned, the agent writes the new turn to Redis. Two background Celery tasks
+are triggered asynchronously:
+- **Semantic memory extraction:** The LLM analyzes the completed interaction and extracts durable
+  facts, preferences, and tool hints. These are stored in Qdrant.
+- **Episode writing:** The session is summarized and stored as an episode in PostgreSQL for future
+  cross-session recall.
+
+Neither task blocks the response to the user.
+
+---
+
+## 🧩 Core Components
+
+### 🌐 API Layer
+
+The API layer is a **FastAPI** application that exposes all platform capabilities as REST endpoints.
+It handles JWT authentication, request validation, rate limiting, CORS, SSE streaming, and Prometheus
+metrics instrumentation.
+
+| Route Prefix | Purpose |
+|---|---|
+| `/api/auth` | Tenant registration, user login, invitation management, admin approval |
+| `/api/agent` | Agentic question answering with SSE streaming |
+| `/api/query` | Direct RAG query pipeline (without full agent reasoning) |
+| `/api/ingest-rag` | Document ingestion into the knowledge base |
+| `/api/memory` | User memory management |
+| `/api/internal/metrics` | Internal metrics collection (key-protected) |
+| `/api/eval-rag` | RAG evaluation pipeline |
+| `/api/recommended-qa` | Tenant-configured recommended Q&A pairs |
+
+> Deep dive: [app/routes/README.md](app/routes/README.md)
+
+### 🤖 Agent
+
+The Agent is the reasoning core of Atlas AI. It is a **LangGraph StateGraph** — a directed graph
+where each node performs one specific function and conditional edges determine which node runs next
+based on current state. The agent does not apply a fixed pipeline; it reasons dynamically.
+
+> Deep dive: [app/agent/README.md](app/agent/README.md)
+
+### 📚 RAG System
+
+The RAG system provides access to organizational knowledge stored in documents. Documents are
+ingested asynchronously, semantically chunked, dual-embedded (dense + sparse), and stored in Qdrant
+with tenant metadata. At query time, hybrid search retrieves the most relevant chunks, which are
+re-ranked before being presented to the LLM.
+
+> Deep dive: [app/rag/README.md](app/rag/README.md)
+
+### 🧠 Memory System
+
+Three complementary memory layers provide continuity across turns, sessions, and time:
+- **Short-Term Memory** — current session conversation history (Redis, TTL-bound)
+- **Episodic Memory** — compressed summaries of past sessions (PostgreSQL)
+- **Semantic Memory** — durable user facts and preferences (Qdrant, importance-scored)
+
+> Deep dive: [app/memory/README.md](app/memory/README.md)
+
+### ⚡ Background Workers
+
+Non-blocking tasks are dispatched to **Celery** workers with Redis as the broker. Separate queues
+handle ingestion, evaluation, and logging. A **Celery Beat** scheduler runs the nightly memory
+pruning job.
+
+> Deep dive: [app/celery/README.md](app/celery/README.md)
+
+---
+
+## 🤖 Agent Architecture Deep Dive
+
+The agent is a LangGraph `StateGraph`. Every node reads from and writes to a shared `AgentState`
+TypedDict. Conditional edges (`route_action`, `route_after_finish`) determine the execution path at runtime.
+
+```
+                 Incoming Request
+                        |
+             +-----------v-----------+
+             |      memory_read      |  Load session turns (Redis)
+             +-----------+-----------+
+                         |
+             +-----------v-----------+
+             |    episodic_recall    |  Load cross-session summaries (PostgreSQL)
+             +-----------+-----------+
+                         |
+             +-----------v-----------+
+             |    semantic_recall    |  Load user facts (Qdrant)
+             +-----------+-----------+
+                         |
+             +-----------v-----------+
+             |       decompose       |  Break question into sub-questions (LLM)
+             +-----------+-----------+
+                         |
+             +-----------v-----------+
+             |        think          |  Reason: what action is needed?
+             +----+--------+-----+---+
+                  |        |     |
+         +--------v-+  +---v--+  +-v------+
+         | sql_tool |  |retr- |  | finish |
+         |          |  |ieval |  |        |
+         +--------+-+  +-+----+  +---+----+
+                  |      |           |
+                  +------+           | (if more sub-questions remain -> back to think)
+                     |               |
+               back to think         | (if all done)
+                                     v
+                         +----------+-----------+
+                         |     memory_write      |  Persist turn; trigger async tasks
+                         +----------------------+
 ```
 
-### Step 2: Create Virtual Environment
-```bash
-# Windows
-python -m venv venv
-venv\Scripts\activate
+**Key agent behaviors:**
 
-# macOS/Linux
-python3 -m venv venv
-source venv/bin/activate
+| Behavior | How it works |
+|---|---|
+| Question classification | Before tool selection, each sub-question is classified as `data` (SQL) or `knowledge` (retrieval) |
+| Loop detection | Action history is tracked; the agent detects repeated actions and SQL-retrieval oscillation patterns |
+| Step budgeting | Each sub-question has a configurable max step count; budget overruns trigger graceful degradation |
+| Fallback chaining | SQL failure with no results automatically tries retrieval; both failing causes an early finish |
+| Sub-question synthesis | For N sub-questions, a final LLM call synthesizes all N answers into one response |
+| Idempotency | Requests with the same `run_id` return the cached result, preventing duplicate LLM costs on retries |
+| Prompt injection protection | Retrieved chunks are prefixed with `UNTRUSTED DATA` label to prevent content injection attacks |
+
+> Deep dive: [app/agent/README.md](app/agent/README.md)
+
+---
+
+## 📚 RAG Architecture Deep Dive
+
+RAG operates in two distinct phases: **ingestion** (async, one-time per document) and **retrieval**
+(synchronous, per agent request).
+
+### 📥 Ingestion Pipeline
+
+```
+Raw Document (PDF, etc.)
+         |
+         v
+  Document Loading (LangChain loaders)
+         |
+         v
+  Token-Based Splitting (2000-token chunks, 50-token overlap)
+         |
+         v
+  Semantic Chunking
+  (SemanticChunker refines boundaries by embedding similarity,
+   merging or splitting to respect topic coherence)
+         |
+         v
+  Dual Embedding
+  (Dense vectors via EmbeddedModel/Jina,
+   Sparse vectors via BM25/FastEmbed)
+         |
+         v
+  Storage in Qdrant (tenant_id in payload for isolation)
+         |
+         v
+  File Tracking in PostgreSQL
+  (hash-based deduplication -- unchanged files are skipped on re-ingest)
 ```
 
-### Step 3: Install Python Dependencies
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
+### 🔍 Retrieval Pipeline
+
+```
+User Query (from Agent)
+         |
+         v
+  In-Process Cache Check (TTLCache, keyed by tenant + query hash)
+         |
+         v  (cache miss)
+  Hybrid Search in Qdrant
+  (dense + sparse vectors in one query, filtered by tenant_id)
+         |
+         v
+  Hybrid Re-Ranking (CrossEncoder + BM25 scores combined)
+         |
+         v
+  Top-K Chunks returned to Agent
+  (prefixed with UNTRUSTED DATA marker for prompt safety)
 ```
 
-### Step 4: Set Up Environment Variables
-Create a `.env` file in the root directory:
-```env
-# Database
-DATABASE_URL=postgresql://postgres:password@localhost:5432/atlas_db
-SQLALCHEMY_ECHO=False
+The hybrid retrieval (dense semantic search + sparse BM25) outperforms dense-only search,
+especially for exact-match queries and domain-specific terminology.
 
-# Redis
-REDIS_URL=redis://localhost:6379/0
-REDIS_CACHE_DB=1
+> Deep dive: [app/rag/README.md](app/rag/README.md)
 
-# Qdrant Vector DB
-QDRANT_URL=http://localhost:6333
-QDRANT_API_KEY=YOUR_API_KEY
+---
 
-# LLM & Embeddings
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxx
-OPENAI_MODEL=gpt-4
-EMBEDDING_MODEL=all-MiniLM-L6-v2
+## 🧠 Memory Architecture Deep Dive
 
-# JWT & Auth
-JWT_SECRET_KEY=your-super-secret-key-change-in-production
-JWT_ALGORITHM=HS256
-JWT_EXPIRATION_HOURS=1
-BCRYPT_ROUNDS=12
+Memory is one of the most architecturally distinctive features of Atlas AI. Three complementary
+layers operate at different timescales and serve different purposes.
 
-# Celery
-CELERY_BROKER_URL=amqp://guest:guest@localhost:5672//
-
-# Sentry (Optional)
-SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
-
-# CORS
-ALLOWED_ORIGINS=["http://localhost:3000", "http://localhost:8000"]
-
-# Environment
-ENVIRONMENT=development
-DEBUG=True
+```
+              Atlas AI Memory System
+                       |
+      +----------------+-----------------+
+      |                |                 |
+      v                v                 v
+Short-Term         Episodic          Semantic
+Memory             Memory            Memory
+      |                |                 |
+Within a session   Across sessions   Durable facts
+      |                |                 |
+   Redis           PostgreSQL          Qdrant
+  (TTL: 2h,       (compressed         (user-scoped,
+   20 turns max)   summaries,          importance-scored,
+                   90-day retention)   nightly-pruned)
 ```
 
-### Step 5: Start Docker Services
-```bash
-# Start all services (Postgres, Redis, Qdrant, Prometheus, Grafana)
-docker-compose up -d
+### ⚡ Short-Term Memory
+- **Stores:** Raw conversation turns (user + assistant) for the active session
+- **Read:** First node of every agent run
+- **Written:** After the final answer is delivered
+- **Why:** Provides immediate conversational context. Redis failures are non-fatal — the answer
+  is never blocked by a memory error.
 
-# Verify services
-docker-compose ps
+### 📖 Episodic Memory
+- **Stores:** LLM-generated compact summaries of completed sessions (not raw turns)
+- **Read:** Early in the agent graph, before question decomposition
+- **Written:** Asynchronously via Celery after each session turn completes
+- **Why:** Allows the agent to know what happened in prior sessions without replaying full histories.
+
+### 💡 Semantic Memory
+- **Stores:** Durable user facts, preferences, and tool hints. Types: `fact`, `preference`,
+  `tool_hint`. Each carries an importance score (0.0-1.0).
+- **Read:** Similarity search against the current question, filtered by `tenant_id` + `user_id`
+- **Written:** Asynchronously via Celery. The `MemoryExtractor` uses the LLM to identify what is
+  worth retaining. Transient requests, credentials, and chain-of-thought are explicitly excluded.
+- **Pruning:** A nightly Celery Beat job removes memories below a configurable importance threshold.
+
+### 🔄 Working Memory (Transient)
+A per-request token-budget context assembler: takes all available context (conversation history,
+episodic summaries, semantic memories, retrieved documents), sorts by priority, and fits as much
+as possible into the configured LLM context window. Destroyed after each request — never persisted.
+
+> Deep dive: [app/memory/README.md](app/memory/README.md)
+
+---
+
+## 🔀 Memory vs. RAG: Understanding the Distinction
+
+Both memory and RAG retrieve information before the LLM generates an answer. They serve fundamentally
+different purposes and should not be conflated.
+
+| Dimension | Memory | RAG |
+|---|---|---|
+| **Purpose** | Remember things about the user and their interactions | Retrieve organizational knowledge from documents |
+| **Source** | Prior conversations and LLM-extracted user facts | Ingested documents in the knowledge base |
+| **Scope** | Strictly per-user (semantic/episodic/short-term) | Per-tenant (all users share the same knowledge base) |
+| **Question answered** | "What do I know about this specific user?" | "What do the organization's documents say about this topic?" |
+| **Lifetime** | Permanent (semantic), session-scoped (short-term), recent-sessions (episodic) | Persists as long as documents are in the knowledge base |
+| **Written by** | The memory system itself, automatically from interactions | Administrators via document ingestion |
+| **Role in prompts** | Personalization and conversational continuity | Factual grounding in organizational knowledge |
+
+The agent uses both simultaneously. It loads user-specific memory before reasoning, and can invoke
+the RAG retrieval tool to find relevant document passages. These are complementary, not alternatives.
+
+---
+
+## 🏢 Multi-Tenancy
+
+Atlas AI is designed from the ground up to serve multiple isolated organizations from a single deployment.
+
+```
+Platform
+|
++-- Tenant A (Organization A)
+|   +-- Users (roles: admin / user, with approval workflow)
+|   +-- Documents (Qdrant, filtered by tenant_id in payload)
+|   +-- Short-Term Memory (Redis key: atlas:stm:{tenant_id}:{user_id}:{session_id})
+|   +-- Episodic Memory (PostgreSQL, filtered by tenant_id)
+|   +-- Semantic Memory (Qdrant, filtered by tenant_id + user_id)
+|   +-- SQL Access (SQLValidator enforces tenant filter on every query)
+|
++-- Tenant B (Organization B)
+    +-- Users (completely separate from Tenant A)
+    +-- Documents (completely separate from Tenant A's)
+    +-- Short-Term Memory
+    +-- Episodic Memory
+    +-- Semantic Memory
 ```
 
-### Step 6: Run Database Migrations
-```bash
-# Upgrade to latest schema
-alembic upgrade head
+**Isolation is enforced at multiple independent layers simultaneously:**
+- **JWT tokens** carry `tenant_id` and `user_id`; callers cannot override them
+- **Qdrant payload filters** are applied on every query for both document retrieval and semantic memory
+- **Redis key structure** namespaces all session data by tenant and user
+- **PostgreSQL repositories** always include `tenant_id` in queries
+- **SQL Tool** (`SQLValidator`) injects the tenant filter into every generated query before execution
 
-# Verify migrations
-alembic current
+**User management:**
+- New tenants register with a first admin user
+- Additional users join via invitation (configurable approval workflow)
+- Admins manage users within their own tenant only
+- Rate limiting on registration and login prevents brute-force attacks
+
+---
+
+## 📥 Knowledge Ingestion Flow
+
+Documents enter the system through an asynchronous pipeline that runs entirely off the request path.
+
+```
+Administrator uploads document via /api/ingest-rag
+         |
+         v
+  API validates auth and tenant context
+         |
+         v
+  Celery task dispatched to ingest_data_queue
+         |
+         v
+  File hash calculated
+  (skip if hash matches a previously processed file)
+         |
+         v
+  Document loaded into text (LangChain loaders)
+         |
+         v
+  Semantic chunking (token split + embedding-based boundary refinement)
+         |
+         v
+  Dual embedding (dense: EmbeddedModel/Jina, sparse: BM25/FastEmbed)
+         |
+         v
+  Stored in Qdrant (tenant_id in payload metadata)
+         |
+         v
+  Processing status tracked in PostgreSQL (processing -> completed / failed)
+         |
+         v
+  Metrics recorded (latency, chunk count, document type)
 ```
 
-### Step 7: Initialize Embedding Model (First Time)
-```bash
-python -c "from app.design_pattern.embedded_model import EmbeddingModel; model = EmbeddingModel.get_instance()"
+Hash-based deduplication means re-submitting an unchanged document is safe and fast.
+
+---
+
+## 🔗 Why These Components Exist Together
+
+It is worth explaining why Atlas AI cannot be simplified to a basic RAG pipeline.
+
+**User -> RAG -> LLM** handles one class of question: *"What does this document say about topic X?"*
+
+But real organizational questions are rarely that clean:
+
+| Question type | What it needs |
+|---|---|
+| "What were our Q3 sales?" | SQL tool to query the database |
+| "What does the strategy document say about growth?" | RAG retrieval |
+| "Compare Q3 sales to the strategy targets" | Both SQL and RAG, synthesized |
+| "Based on what we discussed last week, what should I prioritize?" | Episodic memory + possibly retrieval |
+| "Remind me -- I prefer concise bullet points" | Semantic memory to recall the preference |
+| "Give me a comprehensive analysis" | Question decomposition into sub-questions |
+
+Each component exists because a real class of questions cannot be answered without it:
+
+| Component | Without it, you cannot... |
+|---|---|
+| Agent | Handle multi-step questions or choose dynamically between SQL and RAG |
+| SQL Tool | Answer questions about structured data in the relational database |
+| RAG Tool | Answer questions grounded in uploaded documents |
+| Short-Term Memory | Maintain a coherent multi-turn conversation |
+| Episodic Memory | Remember what happened in previous sessions |
+| Semantic Memory | Remember durable user facts and preferences across sessions |
+| Celery Workers | Ingest documents or persist memory without blocking API responses |
+| Multi-tenancy | Serve multiple organizations safely from one deployment |
+| Observability | Know what the system is doing, what it costs, and where it fails |
+
+---
+
+## 💡 Example: A User Asking a Question
+
+**Scenario:** A user in Organization A asks: *"What were the top three revenue drivers last
+quarter, and what does the strategy document say about each of them?"*
+
+```
+User sends question to /api/agent/ask-agent
+         |
+         v
+JWT validated -> tenant_id and user_id extracted
+         |
+         v
+Agent graph executes:
+  |
+  +-- memory_read
+  |   Loads last N turns from Redis (current session)
+  |
+  +-- episodic_recall
+  |   Loads summaries of last 3 sessions from PostgreSQL
+  |
+  +-- semantic_recall
+  |   Queries Qdrant for user facts matching the question
+  |   (e.g., "user prefers concise bullet points")
+  |
+  +-- decompose
+  |   LLM breaks question into two sub-questions:
+  |   Sub-Q1: "What were the top three revenue drivers last quarter?"
+  |   Sub-Q2: "What does the strategy document say about each driver?"
+  |
+  +-- think (Sub-Q1) -> classifies as "data" -> routes to sql_tool
+  |   sql_tool: generates SQL, validates, enforces tenant filter,
+  |             checks query cost, executes, returns structured rows
+  |
+  +-- finish (Sub-Q1)
+  |   LLM generates: "Top 3 drivers: X, Y, Z"
+  |
+  +-- think (Sub-Q2) -> classifies as "knowledge" -> routes to retrieval_tool
+  |   retrieval_tool: hybrid search in Qdrant (tenant-filtered),
+  |                   re-ranks results, returns relevant passages
+  |
+  +-- finish (Sub-Q2)
+  |   LLM generates answer grounded in strategy document passages
+  |
+  +-- synthesize
+  |   Single LLM call combines Sub-Q1 and Sub-Q2 answers into one response
+  |
+  +-- memory_write
+      Saves turn to Redis
+      Triggers Celery: extract semantic memories
+      Triggers Celery: write episode summary
+         |
+         v
+Answer streamed to user via SSE
+(user sees thought events and tool events in real time,
+ then receives the final synthesized answer)
 ```
 
 ---
 
-## Configuration
+## 🛠️ Technology Stack
 
-### Environment Variables Reference
-
-#### Database Configuration
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | - |
-| `SQLALCHEMY_ECHO` | Log SQL queries for debugging | False |
-| `DB_POOL_SIZE` | Max concurrent connections | 20 |
-| `DB_POOL_TIMEOUT` | Connection timeout (seconds) | 30 |
-
-#### Cache & Message Queue
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `REDIS_URL` | Redis connection string | redis://localhost:6379 |
-| `REDIS_CACHE_DB` | Redis database for caching | 1 |
-| `CELERY_BROKER_URL` | Message broker for task queue | amqp://guest:guest@localhost:5672 |
-
-#### Vector Database
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `QDRANT_URL` | Qdrant API endpoint | http://localhost:6333 |
-| `QDRANT_API_KEY` | Qdrant authentication | - |
-| `QDRANT_TIMEOUT` | Request timeout (seconds) | 30 |
-
-#### LLM Integration
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `OPENAI_API_KEY` | OpenAI API key | - |
-| `OPENAI_MODEL` | Default model for reasoning | gpt-4 |
-| `OPENAI_TIMEOUT` | API timeout (seconds) | 60 |
-| `EMBEDDING_MODEL` | Sentence Transformers model | all-MiniLM-L6-v2 |
-
-#### Authentication & Security
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `JWT_SECRET_KEY` | Secret for token signing | - |
-| `JWT_ALGORITHM` | Token encoding algorithm | HS256 |
-| `JWT_EXPIRATION_HOURS` | Token lifetime | 1 |
-| `BCRYPT_ROUNDS` | Password hashing iterations | 12 |
-
-#### Application Settings
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `ENVIRONMENT` | dev/staging/production | development |
-| `DEBUG` | Enable debug mode | False |
-| `LOG_LEVEL` | Logging level | INFO |
-| `ALLOWED_ORIGINS` | CORS allowed origins | ["http://localhost:3000"] |
+| Technology | Role in Atlas AI |
+|---|---|
+| **FastAPI** | API framework: routing, request validation, dependency injection, SSE, Prometheus middleware |
+| **LangGraph** | Agent orchestration: stateful graph execution, conditional routing, node lifecycle management |
+| **Qdrant** | Vector database: document storage (RAG) and semantic memory — hybrid dense+sparse search |
+| **PostgreSQL** | Relational database: user/tenant management, episodic memory, file tracking, cost logs, run records |
+| **Redis (Redis Stack)** | Short-term conversation memory, Celery broker and result backend |
+| **Celery** | Background task queue: document ingestion, memory extraction, episode writing, query logging |
+| **Celery Beat** | Scheduled task dispatcher: nightly semantic memory pruning |
+| **LangChain** | Document loading, text splitting, retrieval chain construction |
+| **Groq / llama-3.3-70b** | Default LLM provider for agent reasoning and answer generation |
+| **Jina AI** | Remote embedding model for document and memory vectors |
+| **FastEmbed / BM25** | Sparse vector generation for hybrid retrieval |
+| **CrossEncoder (ms-marco-MiniLM)** | Re-ranking model for retrieved document chunks |
+| **MLflow** | Experiment tracking: RAG queries, evaluation runs, document ingestion runs |
+| **Prometheus** | Metrics collection: HTTP, RAG pipeline, agent nodes, LLM cost, system resources |
+| **Grafana** | Metrics visualization (monitoring Docker Compose stack) |
+| **Sentry** | Error monitoring and ASGI-level tracing |
+| **Alembic** | Database schema migrations |
+| **JWT (python-jose)** | Authentication token issuance and validation |
+| **Docker / Compose** | Containerized deployment of all services |
 
 ---
 
-## Running the Application
+## 📁 Repository Structure
 
-### Start Backend Server
-```bash
-# Development mode with auto-reload
-python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
-# Production mode (4 workers)
-python -m uvicorn main:app --workers 4 --host 0.0.0.0 --port 8000
 ```
-
-### Start Celery Worker
-```bash
-# Terminal 2
-celery -A app.celery.celery_config worker --loglevel=info
-```
-
-### Start Frontend Development Server
-```bash
-# Terminal 3
-cd frontend
-npm install
-npm start
-```
-
-### Access Applications
-- **FastAPI Docs**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **Frontend**: http://localhost:3000
-- **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:3000 (user: admin, pass: admin)
-
-### Docker Compose Quick Start
-```bash
-# Build and start all services
-docker-compose up --build
-
-# Stop all services
-docker-compose down
-
-# View logs
-docker-compose logs -f api
+atlas-ai-platform/
+|
++-- main.py                        Application entry point, lifespan, middleware, health check
++-- Dockerfile                     Container image definition
++-- docker-compose.yml             Full stack: API, Postgres, Qdrant, Redis, Celery, Beat
++-- docker-compose.monitoring.yml  Prometheus + Grafana monitoring stack
++-- requirements.txt               Python dependencies
++-- alembic/                       Database migration scripts
++-- alembic.ini                    Alembic configuration
++-- logging_config.json            Structured JSON logging configuration
+|
++-- app/
+|   +-- agent/                     Agent system (LangGraph graph, nodes, tools, prompts)
+|   |   +-- core/                  Graph definition, state schema, router, agent config
+|   |   +-- nodes/                 All graph node implementations
+|   |   +-- tools/                 SQL tool, retrieval tool, tool registry
+|   |   +-- prompts/               Prompt registry (decompose, thought, answer synthesis)
+|   |   +-- observability/         Agent-specific Prometheus metrics, tracing, logging
+|   |   +-- eval/                  Agent evaluation harness
+|   |   +-- utils/                 LLM calling, retry, state helpers, classification
+|   |
+|   +-- rag/                       RAG system (ingestion + retrieval pipelines)
+|   |   +-- steps/                 Loader, semantic chunker, embedder, ingest, retriever
+|   |   +-- rerankers/             BM25, CrossEncoder, and Hybrid re-ranker
+|   |   +-- evaluation/            RAG evaluation pipeline
+|   |
+|   +-- memory/                    Memory system (all three layers)
+|   |   +-- short_term_memory.py   Redis-backed session memory
+|   |   +-- episodic_memory.py     PostgreSQL-backed cross-session summaries
+|   |   +-- semantic_memory.py     Qdrant-backed durable user facts
+|   |   +-- working_memory.py      Per-request token-budget context assembler (transient)
+|   |   +-- memory_extractor.py    LLM-based extraction of durable facts from interactions
+|   |
+|   +-- routes/                    FastAPI route handlers (one file per domain)
+|   +-- controllers/               Thin coordination between routes and services
+|   +-- services/                  Business logic (auth, memory, RAG services, MLflow, email)
+|   +-- repositories/              Database access layer (SQLAlchemy)
+|   +-- models/                    SQLAlchemy ORM models (Tenant, User, Episode, CostLog, etc.)
+|   +-- schema/                    Pydantic request/response schemas
+|   +-- celery/                    Celery app configuration and queue/routing definitions
+|   +-- core/                      Shared infrastructure (config, database, Prometheus, rate limiter)
+|   +-- design_pattern/            Shared utilities (singleton embedding model)
+|
++-- monitoring/
+|   +-- prometheus.yml             Prometheus scrape configuration
+|   +-- grafana/                   Grafana dashboard definitions
+|
++-- tests/                         Test suite
++-- scripts/                       Utility scripts
++-- SRS/                           System Requirements Specification
 ```
 
 ---
 
-## API Endpoints
-
-### Authentication (`/api/auth/`)
-
-#### Register New Tenant
-```http
-POST /api/auth/register
-Content-Type: application/json
-
-{
-  "company_name": "Acme Corp",
-  "admin_email": "admin@acme.com",
-  "admin_password": "SecurePassword123!",
-  "plan_tier": "pro"
-}
-
-Response 201:
-{
-  "tenant_id": "uuid",
-  "user_id": "uuid",
-  "token": "jwt-token",
-  "expires_in": 3600
-}
-```
-
-#### Login
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "email": "user@acme.com",
-  "password": "password"
-}
-
-Response 200:
-{
-  "token": "jwt-token",
-  "user_id": "uuid",
-  "tenant_id": "uuid",
-  "role": "admin"
-}
-```
-
-#### Get Current Profile
-```http
-GET /api/auth/profile
-Authorization: Bearer {token}
-
-Response 200:
-{
-  "user_id": "uuid",
-  "email": "user@acme.com",
-  "role": "admin",
-  "tenant_id": "uuid",
-  "approval_status": "approved"
-}
-```
-
-#### Send User Invitation
-```http
-POST /api/auth/invitations/send
-Authorization: Bearer {admin-token}
-Content-Type: application/json
-
-{
-  "email": "newuser@acme.com",
-  "role": "user"
-}
-
-Response 201:
-{
-  "invitation_id": "uuid",
-  "token": "invitation-token",
-  "expires_at": "2024-03-25T10:00:00Z"
-}
-```
-
-#### Validate Invitation
-```http
-POST /api/auth/invitations/validate
-Content-Type: application/json
-
-{
-  "token": "invitation-token"
-}
-
-Response 200:
-{
-  "valid": true,
-  "email": "newuser@acme.com",
-  "expires_at": "2024-03-25T10:00:00Z"
-}
-```
-
-#### Register via Invitation
-```http
-POST /api/auth/invitations/register
-Content-Type: application/json
-
-{
-  "token": "invitation-token",
-  "password": "NewPassword123!",
-  "first_name": "John",
-  "last_name": "Doe"
-}
-
-Response 201:
-{
-  "user_id": "uuid",
-  "email": "newuser@acme.com",
-  "approval_status": "pending"
-}
-```
-
----
-
-### Query & RAG (`/api/query/`)
-
-#### Simple RAG Search
-```http
-POST /api/query/search
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "query": "What are the key metrics for Q3 2024?",
-  "top_k": 5,
-  "use_cache": true
-}
-
-Response 200:
-{
-  "results": [
-    {
-      "content": "...",
-      "metadata": { "source": "document.pdf", "page": 5 },
-      "relevance_score": 0.92,
-      "cached": false
-    }
-  ],
-  "execution_time_ms": 245,
-  "tokens_used": 1500,
-  "cost_usd": 0.0225
-}
-```
-
-#### Cache Statistics
-```http
-GET /api/query/cache-stats
-Authorization: Bearer {token}
-
-Response 200:
-{
-  "total_queries": 150,
-  "cache_hits": 45,
-  "cache_hit_rate": 0.30,
-  "avg_cache_latency_ms": 2.3,
-  "avg_retrieval_latency_ms": 234.5
-}
-```
-
----
-
-### Agent Reasoning (`/api/agent/`)
-
-#### Multi-Step Reasoning (SSE Streaming)
-```http
-POST /api/agent/reason
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "query": "Analyze our Q3 performance and recommend cost optimization strategies",
-  "max_iterations": 10,
-  "stream": true
-}
-
-Response 200 (Server-Sent Events):
-event: agent_start
-data: {"run_id": "uuid", "query": "..."}
-
-event: decomposed_questions
-data: {"question": "What was Q3 revenue?", "sub_questions": [...]}
-
-event: thought
-data: {"thought": "I should retrieve financial documents first"}
-
-event: tool_start
-data: {"tool": "retrieval", "query": "Q3 financial results"}
-
-event: tool_result
-data: {"documents": [...], "latency_ms": 234}
-
-event: cost_update
-data: {"tokens": 1200, "cost_usd": 0.018}
-
-event: agent_finish
-data: {"answer": "...", "cost_usd": 0.025, "reasoning": "..."}
-```
-
-#### Get Agent Execution Runs
-```http
-GET /api/agent/runs?page=1&limit=10&start_date=2024-01-01&end_date=2024-03-25
-Authorization: Bearer {token}
-
-Response 200:
-{
-  "total": 45,
-  "page": 1,
-  "limit": 10,
-  "runs": [
-    {
-      "run_id": "uuid",
-      "query": "...",
-      "status": "completed",
-      "created_at": "2024-03-20T10:15:00Z",
-      "tokens_used": 5000,
-      "cost_usd": 0.075,
-      "latency_ms": 2340,
-      "cache_hit": false
-    }
-  ]
-}
-```
-
-#### Get Run Details
-```http
-GET /api/agent/runs/{run_id}
-Authorization: Bearer {token}
-
-Response 200:
-{
-  "run_id": "uuid",
-  "query": "...",
-  "decomposed_questions": [
-    { "question": "Q1", "answer": "A1" },
-    { "question": "Q2", "answer": "A2" }
-  ],
-  "final_answer": "...",
-  "reasoning_trace": [...],
-  "token_breakdown": { "prompt": 2000, "completion": 3000 },
-  "cost_breakdown": { "completion": 0.05, "embedding": 0.025 },
-  "execution_time_ms": 2340,
-  "status": "completed"
-}
-```
-
----
-
-### Document Ingestion (`/api/ingest-rag/`)
-
-#### Upload Document
-```http
-POST /api/ingest-rag/upload
-Authorization: Bearer {token}
-Content-Type: multipart/form-data
-
-{
-  "file": <binary>,
-  "document_name": "Q3 Report",
-  "tags": ["financial", "2024"]
-}
-
-Response 202:
-{
-  "task_id": "uuid",
-  "status": "processing",
-  "document_id": "uuid",
-  "file_hash": "sha256hash",
-  "progress": 0
-}
-```
-
-#### Check Ingestion Status
-```http
-GET /api/ingest-rag/status/{document_id}
-Authorization: Bearer {token}
-
-Response 200:
-{
-  "document_id": "uuid",
-  "file_name": "Q3 Report.pdf",
-  "status": "completed",
-  "progress": 100,
-  "chunks_created": 245,
-  "tokens_used": 12000,
-  "created_at": "2024-03-20T10:15:00Z",
-  "completed_at": "2024-03-20T10:18:30Z"
-}
-```
-
-#### List Documents
-```http
-GET /api/ingest-rag/documents?page=1&limit=20
-Authorization: Bearer {token}
-
-Response 200:
-{
-  "total": 45,
-  "documents": [
-    {
-      "document_id": "uuid",
-      "file_name": "Q3 Report.pdf",
-      "status": "completed",
-      "chunks": 245,
-      "created_at": "2024-03-20T10:15:00Z",
-      "tags": ["financial", "2024"]
-    }
-  ]
-}
-```
-
----
-
-### Evaluation (`/api/eval-rag/`)
-
-#### Run RAG Evaluation
-```http
-POST /api/eval-rag/evaluate
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "eval_dataset_id": "uuid",
-  "sample_size": 30
-}
-
-Response 202:
-{
-  "eval_run_id": "uuid",
-  "status": "running",
-  "progress": 0
-}
-```
-
-#### Get Evaluation Results
-```http
-GET /api/eval-rag/results/{eval_run_id}
-Authorization: Bearer {token}
-
-Response 200:
-{
-  "eval_run_id": "uuid",
-  "status": "completed",
-  "metrics": {
-    "retrieval_accuracy": 0.87,
-    "answer_relevance": 0.91,
-    "answer_completeness": 0.84,
-    "latency_avg_ms": 234.5,
-    "cost_per_query_usd": 0.025
-  }
-}
-```
-
----
-
-### Metrics (`/api/metrics`)
-
-#### Prometheus Metrics
-```http
-GET /api/metrics
-Content-Type: text/plain
-
-Response 200:
-# HELP atlas_http_requests_total Total HTTP requests
-# TYPE atlas_http_requests_total counter
-atlas_http_requests_total{method="GET",endpoint="/api/query/search",status="200"} 1250
-
-# HELP atlas_http_request_duration_seconds HTTP request latency
-# TYPE atlas_http_request_duration_seconds histogram
-atlas_http_request_duration_seconds_bucket{le="0.001",endpoint="/api/query/search"} 50
-atlas_http_request_duration_seconds_bucket{le="0.5",endpoint="/api/query/search"} 1200
-
-# HELP atlas_rag_tokens_total RAG token consumption
-# TYPE atlas_rag_tokens_total counter
-atlas_rag_tokens_total{model="gpt-4",type="prompt"} 125000
-atlas_rag_tokens_total{model="gpt-4",type="completion"} 75000
-
-# ... [more metrics]
-```
-
----
-
-## Core Features & Components
-
-### 1. Multi-Tenant Architecture
-
-Every operation is tenant-scoped:
-
-**User Registration**
-```
-/api/auth/register
-├─ Create Tenant record
-├─ Create Admin User (approved)
-├─ Generate JWT with tenant_id claim
-└─ Return token
-```
-
-**Tenant Isolation**
-- Every table has `tenant_id` column
-- Every query filters by `tenant_id` (from JWT)
-- Users can only access their tenant's data
-- Queries are SQL-injected with: `WHERE tenant_id = ?`
-
-**Exemplary Code** (from `repositories/user_repository.py`):
-```python
-def get_users(self, tenant_id: UUID) -> List[User]:
-    return self.db.query(User).filter(
-        User.tenant_id == tenant_id
-    ).all()
-```
-
----
-
-### 2. Role-Based Access Control (RBAC)
-
-Three role levels with graduated permissions:
-
-| Role | Permissions |
-|------|-------------|
-| **Admin** | ✅ All endpoints, user management, invitations, approvals |
-| **User** | ✅ Query, ingest, agent reasoning; ❌ No user management |
-| **Viewer** | ✅ Query only; ❌ No ingest, no agent, no management |
-
-**Rate Limiting by Role**
-- Admin: 300 requests/minute
-- User: 100 requests/minute  
-- Viewer: 20 requests/minute
-
----
-
-### 3. User Approval Workflow
-
-**Step-by-Step Process**
-
-1. **Tenant Registration** (Public)
-   - New company signs up via `/api/auth/register`
-   - Creates tenant + admin user
-   - Admin user is auto-approved
-
-2. **Invitation Creation** (Admin only)
-   - Admin sends invite: `/api/auth/invitations/send`
-   - Creates `Invitation` record with 7-day expiration
-   - Generates secure token
-
-3. **User Registration** (Public)
-   - New user clicks email link with token
-   - Posts to `/api/auth/invitations/register`
-   - Creates user with `approval_status = "pending"`
-
-4. **Admin Approval** (Admin only)
-   - Admin reviews pending users
-   - Approves: `approval_status = "approved"` → User can login
-   - Rejects: `approval_status = "rejected"` → User blocked
-
-**Database Flow**
-```
-Invitations table:
-├─ token: invitation-token-xyz
-├─ email: newuser@acme.com
-├─ expires_at: 2024-03-25T10:00:00Z
-├─ status: pending → accepted → completed
-└─ created_by: admin-user-uuid
-
-Users table (after registration via invitation):
-├─ user_id: uuid
-├─ email: newuser@acme.com
-├─ approval_status: pending → approved
-├─ role: user
-└─ created_at: 2024-03-20T10:15:00Z
-```
-
----
-
-### 4. JWT Authentication
-
-**Token Structure**
-```
-Headers: {"alg": "HS256", "typ": "JWT"}
-Payload: {
-  "sub": "user-uuid",          # User ID
-  "tenant_id": "tenant-uuid",  # Multi-tenancy claim
-  "email": "user@acme.com",
-  "role": "admin",
-  "exp": 1711000000            # Expires 1 hour from issue
-}
-Signature: HMACSHA256(header.payload, SECRET_KEY)
-```
-
-**Flow**
-```
-User Login (email/password)
-    ↓
-Verify password against bcrypt hash
-    ↓
-Extract user details + role + tenant_id
-    ↓
-Create JWT with 1-hour expiration
-    ↓
-Return token to client
-    ↓
-Client stores in localStorage
-    ↓
-Client includes in Authorization header: Bearer {token}
-    ↓
-Server verifies token in middleware
-    ├─ ✅ Valid → Extract claims, continue
-    └─ ❌ Invalid/Expired → Return 401 Unauthorized
-```
-
----
-
-## Database Schema
-
-### Core Tables
-
-#### Users
-```sql
-CREATE TABLE users (
-    id UUID PRIMARY KEY,
-    tenant_id UUID NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    first_name VARCHAR(100),
-    last_name VARCHAR(100),
-    role VARCHAR(50) NOT NULL,  -- admin, user, viewer
-    approval_status VARCHAR(50), -- pending, approved, rejected
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id)
-);
-
-CREATE INDEX idx_users_tenant_id ON users(tenant_id);
-CREATE INDEX idx_users_email ON users(email);
-```
-
-#### Tenants
-```sql
-CREATE TABLE tenants (
-    id UUID PRIMARY KEY,
-    company_name VARCHAR(255) NOT NULL,
-    plan_tier VARCHAR(50),  -- free, pro, enterprise
-    subscription_status VARCHAR(50),  -- active, trial, cancelled
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_tenants_company_name ON tenants(company_name);
-```
-
-#### Runs (Agent Executions)
-```sql
-CREATE TABLE runs (
-    id UUID PRIMARY KEY,
-    tenant_id UUID NOT NULL,
-    user_id UUID NOT NULL,
-    query TEXT NOT NULL,
-    agent_type VARCHAR(50),  -- reasoning, retrieval
-    status VARCHAR(50),  -- running, completed, failed
-    decomposed_questions JSONB,
-    observations JSONB,
-    final_answer TEXT,
-    tokens_used INTEGER,
-    prompt_tokens INTEGER,
-    completion_tokens INTEGER,
-    latency_ms FLOAT,
-    cache_hit BOOLEAN DEFAULT FALSE,
-    cost_usd DECIMAL(10, 4),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
-CREATE INDEX idx_runs_tenant_id ON runs(tenant_id);
-CREATE INDEX idx_runs_created_at ON runs(created_at DESC);
-```
-
-#### CostLog (Billing)
-```sql
-CREATE TABLE cost_logs (
-    id UUID PRIMARY KEY,
-    tenant_id UUID NOT NULL,
-    run_id UUID,
-    cost_type VARCHAR(50),  -- completion, embedding, retrieval
-    model_used VARCHAR(100),
-    token_count INTEGER,
-    cost_usd DECIMAL(10, 4),
-    created_at TIMESTAMP DEFAULT NOW(),
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-    FOREIGN KEY (run_id) REFERENCES runs(id)
-);
-
-CREATE INDEX idx_cost_logs_tenant_id ON cost_logs(tenant_id);
-CREATE INDEX idx_cost_logs_created_at ON cost_logs(created_at DESC);
-```
-
-#### Documents (Processed Files)
-```sql
-CREATE TABLE documents (
-    id UUID PRIMARY KEY,
-    tenant_id UUID NOT NULL,
-    user_id UUID NOT NULL,
-    file_name VARCHAR(255) NOT NULL,
-    file_hash VARCHAR(64),  -- SHA-256 for deduplication
-    file_size_bytes BIGINT,
-    mime_type VARCHAR(100),
-    status VARCHAR(50),  -- pending, processing, completed, failed
-    chunk_count INTEGER,
-    tokens_total INTEGER,
-    created_at TIMESTAMP DEFAULT NOW(),
-    completed_at TIMESTAMP,
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
-CREATE INDEX idx_documents_tenant_id ON documents(tenant_id);
-CREATE INDEX idx_documents_file_hash ON documents(file_hash);
-```
-
-#### Invitations (User Onboarding)
-```sql
-CREATE TABLE invitations (
-    id UUID PRIMARY KEY,
-    tenant_id UUID NOT NULL,
-    created_by_user_id UUID NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    token VARCHAR(255) UNIQUE NOT NULL,
-    status VARCHAR(50),  -- pending, accepted, expired, revoked
-    expires_at TIMESTAMP NOT NULL,
-    accepted_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT NOW(),
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-    FOREIGN KEY (created_by_user_id) REFERENCES users(id)
-);
-
-CREATE INDEX idx_invitations_tenant_id ON invitations(tenant_id);
-CREATE INDEX idx_invitations_email ON invitations(email);
-CREATE INDEX idx_invitations_token ON invitations(token);
-```
-
-#### TRACKER_DB_FILE (File Processing)
-```sql
-CREATE TABLE tracker_db_files (
-    id UUID PRIMARY KEY,
-    tenant_id UUID NOT NULL,
-    document_id UUID NOT NULL,
-    file_path VARCHAR(500),
-    status VARCHAR(50),  -- uploaded, parsing, embedding, completed, failed
-    progress_percentage INTEGER,
-    error_message TEXT,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
-    FOREIGN KEY (document_id) REFERENCES documents(id)
-);
-
-CREATE INDEX idx_tracker_tenant_id ON tracker_db_files(tenant_id);
-```
-
----
-
-## RAG Pipeline
-
-### Ingestion Pipeline (Document Upload)
-
-**Flow Diagram**
-```
-User Uploads File
-    ↓
-Validate file type & size
-├─ Supported: PDF, Markdown, JSON, TXT
-├─ Max size: 50MB
-└─ Check quota usage
-    ↓
-Compute file hash (SHA-256)
-├─ Query Documents table: SELECT * WHERE file_hash = ?
-└─ If exists → Return existing document (deduplication)
-    ↓
-Parse document
-├─ PDF: PyPDF2 extraction
-├─ Markdown: Direct parsing
-├─ JSON: Field extraction
-└─ TXT: Line-by-line parsing
-    ↓
-Semantic chunking
-├─ Split on paragraph boundaries
-├─ Respect token limits (max 512 tokens per chunk)
-├─ Include overlap for context (50 tokens pad)
-└─ Preserve metadata (page, section, source)
-    ↓
-Embed chunks
-├─ Batch embed 32 chunks at a time (efficient GPU usage)
-├─ Model: all-MiniLM-L6-v2
-├─ Output: 384-dim dense vectors
-└─ Track token usage for billing
-    ↓
-Upsert to Qdrant
-├─ Create collection if needed (4 shards, 1 replica)
-├─ Upsert vectors with metadata
-├─ Metadata: chunk_id, page, section, source, tenant_id
-└─ Enable tenant filtering in search
-    ↓
-Save document record
-├─ Create Documents table entry
-├─ Set status: completed
-├─ Store chunk_count, token_count
-└─ Record completion time
-    ↓
-Async logging (Celery)
-└─ Log ingestion metrics
-```
-
-**Example Request**
-```python
-POST /api/ingest-rag/upload
-
-# Result in databases:
-PostgreSQL Documents:
-{
-    "id": "doc-uuid",
-    "tenant_id": "tenant-uuid",
-    "file_name": "Q3_Financial_Report.pdf",
-    "file_hash": "sha256..."
-    "status": "completed",
-    "chunk_count": 245
-}
-
-Qdrant Collection "documents_tenant-uuid":
-[
-    {
-        "id": "chunk-001",
-        "vector": [0.123, -0.456, ...],  # 384 dimensions
-        "metadata": {
-            "doc_id": "doc-uuid",
-            "page": 5,
-            "section": "Financial Results",
-            "source": "Q3_Financial_Report.pdf",
-            "tenant_id": "tenant-uuid"
-        }
-    },
-    ...  # 245 chunks total
-]
-```
-
----
-
-### Retrieval Pipeline (Query Processing)
-
-**3-Tier Caching**
-```
-User Query
-    ↓
-TIER 1: In-Memory RAM Cache
-├─ Fastest (sub-millisecond)
-├─ Limited size (128MB default)
-├─ Exact query match lookup
-└─ ✅ Hit → Return cached results + cost
-    ↓ (MISS)
-TIER 2: Redis Semantic Cache
-├─ Fast (10-50ms)
-├─ Distributed across cluster
-├─ Cosine similarity threshold 0.95
-├─ Cached embedding vectors
-└─ ✅ Hit → Return cached results + cost
-    ↓ (MISS)
-TIER 3: Full Retrieval (No cache)
-└─ Full database/API access required
-```
-
-**Flow Diagram**
-```
-Checked all caches → MISS
-    ↓
-Generate Query Embedding
-├─ Model: all-MiniLM-L6-v2
-├─ Same encoder as documents
-└─ Output: 384-dim vector
-    ↓
-Hybrid Search (Qdrant)
-├─ Dense Vector Search (cosine similarity)
-│  ├─ Query vector vs document vectors
-│  └─ Return top 10 by similarity
-│
-├─ Sparse BM25 Search (keyword matching)
-│  ├─ Tokenize query
-│  ├─ BM25 scoring vs documents
-│  └─ Return top 10 by BM25 score
-│
-└─ Merge results (dedup by doc_id)
-    ↓
-Cross-Encoder Reranking
-├─ Model: ms-marco-MiniLM-L-6-v2
-├─ Score: (query, document) → relevance [0-1]
-├─ Rerank by relevance score
-└─ Return top-k (default: 5)
-    ↓
-Generate LLM Response
-├─ Prompt: "{query}\n\nDocuments:\n{reranked_docs}"
-├─ Model: GPT-4 or GPT-3.5-Turbo
-├─ Stream response token-by-token
-└─ Track tokens for billing
-    ↓
-Cache Result (Async)
-├─ Save to Redis (24-hour TTL)
-├─ Save to PostgreSQL (long-term analytics)
-└─ Log costs to CostLog table
-    ↓
-Return to User
-└─ Include: results, cost, latency, cache_hit flag
-```
-
-**Example Query**
-
-Input:
-```json
-{
-  "query": "What were our key financial metrics in Q3?",
-  "top_k": 5,
-  "use_cache": true
-}
-```
-
-Cache Check Result:
-```json
-{
-  "cache_tier": 2,
-  "latency_ms": 23,
-  "cached": true,
-  "results": [
-    {
-      "content": "Q3 Revenue: $2.5M, up 15% YoY...",
-      "relevance_score": 0.94,
-      "source": "Q3_Report.pdf",
-      "page": 3
-    },
-    ...
-  ],
-  "tokens_used": 0,
-  "cost_usd": 0.0
-}
-```
-
----
-
-### Reranking Strategies
-
-**Cross-Encoder (Primary)**
-- Neural model: `ms-marco-MiniLM-L-6-v2`
-- Input: (query, document_text) pair
-- Output: Relevance score [0-1]
-- Latency: ~2ms per document
-- Handles semantic nuances
-
-**BM25 Fallback**
-- Lexical matching: keyword overlap
-- TF-IDF + document length normalization
-- Fast (< 1ms per document)
-- Used if cross-encoder unavailable
-- Good for exact phrase matching
-
-**Hybrid Scoring**
-```
-final_score = 0.7 * cross_encoder_score + 0.3 * bm25_score
-```
-
----
-
-## Agent System
-
-### Multi-Step Reasoning with LangGraph
-
-**State Machine**
-```
-graph = StateGraph(AgentState)
-
-graph.add_node("decompose", decompose_questions)
-    # Input: question
-    # Output: decomposed_questions = [Q1, Q2, Q3, ...]
-
-graph.add_node("thought", think_node)
-    # Input: question, decomposed_questions, observations
-    # Output: next_action = ("retrieve" | "sql" | "finish")
-
-graph.add_node("retrieval", retrieve_documents)
-    # Input: question, observations
-    # Output: documents, updated observations
-
-graph.add_node("sql", execute_sql)
-    # Input: question, observations
-    # Output: result, updated observations
-
-graph.add_node("finish", format_answer)
-    # Input: question, observations
-    # Output: final_answer
-
-graph.add_edge("decompose", "thought")
-graph.add_conditional_edges(
-    source="thought",
-    path=lambda state: state["next_action"],
-    conditional_map={
-        "retrieve": "retrieval",
-        "sql": "sql",
-        "finish": "finish"
-    }
-)
-graph.add_edge("retrieval", "thought")  # Loop back
-graph.add_edge("sql", "thought")        # Loop back
-graph.add_edge("finish", END)
-```
-
-**Execution Trace Example**
+## 🚦 Operational Overview
+
+Running Atlas AI requires the following services:
+
+| Service | Purpose | Default Port |
+|---|---|---|
+| **FastAPI application** | Main API server | 8000 |
+| **PostgreSQL 15** | Relational data: users, tenants, episodes, costs | 5432 |
+| **Qdrant v1.17** | Vector data: RAG documents and semantic memory | 6333 |
+| **Redis Stack 7.2** | Short-term memory, Celery broker and backend | 6379 |
+| **Celery Worker** | Background task processing (4 concurrent threads) | — |
+| **Celery Beat** | Scheduled task dispatcher (nightly jobs) | — |
+| **Prometheus** | Metrics scraping (optional monitoring stack) | 9090 |
+| **Grafana** | Metrics dashboards (optional monitoring stack) | 3000 |
+
+**Required environment variables** (application refuses to start without these):
 
 ```
-Query: "Analyze Q3 sales trends and compare with Q2"
-    │
-    ├─► DECOMPOSE
-    │   └─ Sub-questions:
-    │       1. What were Q3 sales figures?
-    │       2. What were Q2 sales figures?
-    │       3. What are the differences?
-    │
-    ├─► THOUGHT
-    │   └─ "I should retrieve sales data for both quarters"
-    │       next_action: "retrieve"
-    │
-    ├─► RETRIEVAL
-    │   ├─ Query: "Q3 sales figures"
-    │   ├─ Retrieved: 3 documents with sales data
-    │   └─ Observation 1: "Q3 sales were $2.5M, up 15% QoQ"
-    │
-    ├─► THOUGHT
-    │   └─ "Need Q2 data for comparison"
-    │       next_action: "retrieve"
-    │
-    ├─► RETRIEVAL
-    │   ├─ Query: "Q2 sales figures"
-    │   ├─ Retrieved: 2 documents
-    │   └─ Observation 2: "Q2 sales were $2.17M"
-    │
-    ├─► THOUGHT
-    │   └─ "Have enough data to answer. Formulating response..."
-    │       next_action: "finish"
-    │
-    ├─► FINISH
-    │   └─ Answer: "Q3 sales increased 15% to $2.5M compared to Q2's $2.17M..."
-    │
-    └─► COMPLETE
-        ├─ Total tokens: 5000
-        ├─ Cost: $0.075
-        ├─ Latency: 2340ms
-        └─ Saved to Runs table
+API_SECRET_KEY=<long random secret>
+POSTGRES_PASS=<database password>
 ```
 
-**Real-Time Streaming (SSE)**
+**Optional but recommended for production:**
 
-The frontend receives these events as agent runs:
-
-```javascript
-// Client-side EventSource
-const eventSource = new EventSource('/api/agent/reason', {
-  headers: { 'Authorization': `Bearer ${token}` }
-});
-
-eventSource.addEventListener('decomposed_questions', (e) => {
-  const { question, sub_questions } = JSON.parse(e.data);
-  uiUpdateSubQuestions(sub_questions);
-});
-
-eventSource.addEventListener('thought', (e) => {
-  const { thought } = JSON.parse(e.data);
-  uiAppendThought(thought);  // Real-time display
-});
-
-eventSource.addEventListener('tool_start', (e) => {
-  const { tool, query } = JSON.parse(e.data);
-  uiShowLoading(`Executing ${tool}...`);
-});
-
-eventSource.addEventListener('tool_result', (e) => {
-  const { documents, latency_ms } = JSON.parse(e.data);
-  uiDisplayResults(documents);
-});
-
-eventSource.addEventListener('agent_finish', (e) => {
-  const { answer, cost_usd } = JSON.parse(e.data);
-  uiDisplayFinalAnswer(answer);
-  uiDisplayCost(cost_usd);
-});
+```
+GROQ_API_KEY=<LLM provider API key>
+JINA_API_KEY=<embedding provider API key>
+REDIS_PASSWORD=<Redis auth password>
+SENTRY_DSN=<error monitoring DSN>
+INTERNAL_METRICS_API_KEY=<protects the /metrics endpoint>
 ```
 
----
-
-## Monitoring & Observability
-
-### Prometheus Metrics Collection
-
-**HTTP Metrics** (`app/core/monitors.py`)
-
-```python
-atlas_http_requests_total = Counter(
-    'atlas_http_requests_total',
-    'Total HTTP requests',
-    ['method', 'endpoint', 'status']
-)
-
-atlas_http_request_duration_seconds = Histogram(
-    'atlas_http_request_duration_seconds',
-    'HTTP request latency',
-    ['endpoint'],
-    buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0)
-)
-```
-
-**RAG Metrics** (from `app/core/metrics.py`)
-
-```python
-rag_token_usage_total = Counter(
-    'atlas_rag_tokens_total',
-    'RAG token consumption',
-    ['model', 'type']  # type: prompt, completion, embedding
-)
-
-rag_process_latency_seconds = Histogram(
-    'atlas_rag_latency_seconds',
-    'RAG step latency',
-    ['step']  # step: retrieval, reranking, generation
-)
-
-rag_cache_hits_total = Counter(
-    'atlas_rag_cache_hits_total',
-    'Cache hit count',
-    ['tier']  # tier: memory, redis, database
-)
-```
-
-### Grafana Dashboards
-
-**Main Dashboard**: `monitoring/grafana/atlas-monitoring.json`
-
-**Panels**:
-1. **System Health** (CPU, Memory, Disk)
-2. **API Traffic** (Requests/sec, Endpoint breakdown, Status codes, Latency p95/p99)
-3. **LLM Consumption** (Tokens used, Costs in USD, Model breakdown)
-4. **Agent Analytics** (Avg steps per query, Sub-questions parsed, Reasoning latency)
-5. **RAG Insights** (Retrieval latency, Chunk count, Cache hit rate)
-
-**Access**
-```
-URL: http://localhost:3000
-User: admin
-Password: admin
-```
-
-### Error Tracking (Sentry)
-
-**Configuration** (in `main.py`)
-```python
-import sentry_sdk
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-
-sentry_sdk.init(
-    dsn=settings.SENTRY_DSN,
-    integrations=[FastApiIntegration()],
-    environment=settings.ENVIRONMENT,
-    traces_sample_rate=0.1  # 10% of transactions
-)
-```
-
-**Features**
-- Automatic exception capturing
-- Request context (user, tenant_id, headers)
-- Transaction tracking (performance monitoring)
-- Release tracking (version management)
-
----
-
-## Development Guide
-
-### Project Setup for Development
+**Start all services:**
 
 ```bash
-# 1. Clone & setup
-git clone <repo>
-cd atlas-ai
-python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-
-# 2. Install dependencies
-pip install -r requirements.txt
-pip install -e .  # Install in editable mode
-
-# 3. Start services
-docker-compose up -d
-
-# 4. Run migrations
-alembic upgrade head
-
-# 5. Start development server
-python -m uvicorn main:app --reload
+cp .env.example .env   # fill in required secrets
+docker compose up -d
 ```
 
-### Code Organization Best Practices
-
-**Layered Architecture**
-```
-Routes (API handlers)
-    ↓
-Services (Business logic)
-    ↓
-Repositories (Data access)
-    ↓
-Models (Database/ORM)
-```
-
-**Example: Adding a New Feature**
-
-1. **Create Model** (`app/models/`)
-```python
-class NewFeature(Base):
-    __tablename__ = "new_features"
-    id: UUID = Column(UUID)
-    tenant_id: UUID = Column(UUID, ForeignKey("tenants.id"))
-    # ... fields
-```
-
-2. **Create Repository** (`app/repositories/new_feature_repository.py`)
-```python
-class NewFeatureRepository:
-    def __init__(self, db):
-        self.db = db
-    
-    def create(self, tenant_id, data) -> NewFeature:
-        # Implementation
-        pass
-```
-
-3. **Create Service** (`app/services/new_feature_service.py`)
-```python
-class NewFeatureService:
-    def __init__(self, repo: NewFeatureRepository):
-        self.repo = repo
-    
-    def process_feature(self, tenant_id, data):
-        # Business logic
-        return self.repo.create(tenant_id, data)
-```
-
-4. **Create Route** (`app/routes/new_feature_routes.py`)
-```python
-@router.post("/new-feature")
-async def create_new_feature(
-    data: NewFeatureSchema,
-    current_user: User = Depends(get_current_user)
-):
-    service = NewFeatureService(repo)
-    return await service.process_feature(current_user.tenant_id, data)
-```
-
-### Testing
-
-**Unit Tests**
-```bash
-# Run tests
-pytest tests/unit/ -v
-
-# With coverage
-pytest tests/unit/ --cov=app
-```
-
-**Integration Tests**
-```bash
-# Start test database
-docker-compose -f docker-compose.test.yml up -d
-
-# Run integration tests
-pytest tests/integration/ -v
-```
-
-**Test Structure**
-```
-tests/
-├─ conftest.py              # Pytest fixtures
-├─ unit/
-│  ├─ test_repositories.py
-│  ├─ test_services.py
-│  └─ test_utils.py
-└─ integration/
-   ├─ test_api_endpoints.py
-   └─ test_workflows.py
-```
-
-### Alembic Database Migrations
-
-**Creating a Migration**
-```bash
-# Auto-generate based on model changes
-alembic revision --autogenerate -m "Add new field to users table"
-
-# Edit the generated file in alembic/versions/
-
-# Apply migration
-alembic upgrade head
-
-# Rollback
-alembic downgrade -1
-```
-
-### Code Style & Linting
+**Start the monitoring stack separately:**
 
 ```bash
-# Format code
-black app/
-
-# Lint
-flake8 app/
-
-# Type checking
-mypy app/
-
-# Security scan
-bandit -r app/
+docker compose -f docker-compose.monitoring.yml up -d
 ```
+
+Database migrations run automatically on API startup when `RUN_MIGRATIONS=true` is set (the
+default in the Docker Compose environment).
 
 ---
 
-## Deployment
+## 🔒 Security and Isolation
 
-### Production Checklist
+**Authentication:** Every API request requires a JWT bearer token. Tokens are issued at login
+and validated on every request. The token payload carries `tenant_id` and `user_id` — callers
+cannot override them.
 
-- [ ] Set `.env` with production secrets
-- [ ] Enable SSL/HTTPS (NGINX reverse proxy)
-- [ ] Use strong JWT_SECRET_KEY (128+ char random)
-- [ ] Configure database backups
-- [ ] Set up error tracking (Sentry)
-- [ ] Enable monitoring (Prometheus + Grafana)
-- [ ] Configure CORS for frontend domain
-- [ ] Set `DEBUG = False`
-- [ ] Use database connection pooling
-- [ ] Enable rate limiting
-- [ ] Set up logging aggregation (ELK stack optional)
+**Authorization:** User roles (`admin`, `user`) control access to tenant management endpoints.
+A configurable approval workflow allows new users to require admin approval before they can log in.
 
-### Docker Deployment
+**Tenant Isolation:** Enforced at multiple independent layers simultaneously:
+- Qdrant payload filters prevent a query for Tenant A from returning Tenant B's documents or memories
+- Redis key namespacing (`atlas:stm:{tenant_id}:{user_id}:{session_id}`) prevents cross-user memory access
+- PostgreSQL repositories always include `tenant_id` in queries
+- The SQL tool's `SQLValidator` injects the tenant filter into every generated query before execution
 
-**Build Production Image**
-```bash
-docker build -t atlas-ai:latest \
-  --build-arg ENVIRONMENT=production \
-  .
-```
+**Rate Limiting:** Login and registration endpoints are rate-limited per client IP to prevent
+brute-force attacks and mass account creation.
 
-**Docker Compose Production**
-```bash
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
+**Prompt Injection Protection:** Retrieved document chunks are prefixed with an `UNTRUSTED DATA`
+label in the LLM prompt. This prevents malicious content embedded in documents from being
+interpreted as system instructions by the LLM.
 
-**Health Checks**
-```bash
-# Check API health
-curl http://localhost:8000/health
+**Secret Validation at Startup:** The application validates required secrets at import time.
+If missing or empty, startup fails immediately with a clear error — preventing accidentally
+running production with empty credentials.
 
-# Check database
-docker-compose exec postgres psql -U postgres -d atlas_db -c "SELECT 1"
-
-# Check Qdrant
-curl http://localhost:6333/health
-
-# Check all services
-docker-compose ps
-```
-
-### Kubernetes Deployment (Optional)
-
-[Helm charts and K8s manifests in `k8s/` directory]
-
-```bash
-helm install atlas-ai ./helm-chart \
-  --set image.tag=latest \
-  --set environment=production \
-  --values k8s/values-prod.yaml
-```
+**Metrics Endpoint Protection:** The Prometheus `/metrics` endpoint is protected by an
+`X-Internal-Key` header in production, preventing external enumeration of tenant IDs, costs,
+and system resource usage.
 
 ---
 
-## Troubleshooting
+## 📊 Observability
 
-### Common Issues
+AI systems are harder to debug than traditional software. A wrong answer might come from bad
+retrieval, a confused agent, an LLM hallucination, or a data quality problem. Atlas AI is
+instrumented to surface exactly what happened and why.
 
-#### 1. **Database Connection Error**
-```
-Error: Connection refused on postgresql://localhost:5432/atlas_db
-```
+**Prometheus Metrics** (collected automatically):
+- HTTP request counts, latency histograms, response sizes — by method, endpoint, and status code
+- RAG pipeline: vector search duration, chunk count, re-ranking duration, cache hits
+- Agent: node execution counts, node durations, SQL rows returned, total executions
+- LLM cost: per-tenant cost tracking (input tokens × rate + output tokens × rate)
+- System resources: CPU, memory — collected every 10 seconds in the background
+- Celery queue depth and task throughput
 
-**Solution**:
-```bash
-# Check if PostgreSQL is running
-docker-compose ps postgres
+**MLflow Experiment Tracking:**
+- Every RAG query, evaluation run, and document ingestion is logged as an MLflow run
+- Experiments: `RAG_Query_Tracking`, `RAG_Evaluation`, `RAG_Data_Ingestion`
+- Provides a persistent audit trail of system behavior and model performance over time
 
-# Check connection string in .env
-echo $DATABASE_URL
+**Sentry:**
+- ASGI-level error capture with full stack traces and request context
+- Configurable trace sampling rate (`SENTRY_TRACES_SAMPLE_RATE`, default 10% in production)
 
-# Test connection
-psql postgresql://user:password@localhost:5432/atlas_db
-```
+**Structured Logging:**
+- All agent nodes, tools, and memory operations emit log events tagged with `tenant_id`,
+  `user_id`, and `run_id`
+- JSON-formatted logs for compatibility with log aggregation systems
 
-#### 2. **Qdrant Connection Error**
-```
-Error: Failed to connect to Qdrant at http://localhost:6333
-```
+**Health Check:**
+- `GET /health` returns application status and version, used by Docker Compose and container
+  orchestration for readiness probing
 
-**Solution**:
-```bash
-# Verify Qdrant is running
-curl http://localhost:6333/health
-
-# Check Qdrant logs
-docker-compose logs qdrant
-
-# Verify API key
-echo $QDRANT_API_KEY
-```
-
-#### 3. **Redis Cache Issues**
-```
-Error: Redis connection refused
-```
-
-**Solution**:
-```bash
-# Check Redis status
-redis-cli ping
-
-# Clear cache (if needed)
-redis-cli FLUSHDB
-
-# Restart Redis
-docker-compose restart redis
-```
-
-#### 4. **OpenAI API Errors**
-```
-Error: Invalid API key provided
-```
-
-**Solution**:
-```bash
-# Verify API key
-echo $OPENAI_API_KEY
-
-# Test API
-curl https://api.openai.com/v1/models \
-  -H "Authorization: Bearer $OPENAI_API_KEY"
-```
-
-#### 5. **Migration Errors**
-```
-Error: Alembic revision not found
-```
-
-**Solution**:
-```bash
-# Check current version
-alembic current
-
-# View migration history
-alembic history
-
-# Downgrade and retry
-alembic downgrade base
-alembic upgrade head
-```
-
-### Debug Mode
-
-Enable detailed logging:
-```bash
-# In .env
-LOG_LEVEL=DEBUG
-SQLALCHEMY_ECHO=True
-```
+> Deep dive: [app/core/README.md](app/core/README.md)
 
 ---
 
-## Contributing
+## 📐 Design Principles
 
-### Branch Naming Convention
-```
-feature/description
-bugfix/description
-hotfix/description
-docs/description
-```
+These principles are reflected in the actual implementation, not aspirational statements.
 
-### Commit Message Format
-```
-[TYPE] Short description
+**Separation of Responsibilities.**
+The Agent reasons and orchestrates. RAG retrieves document knowledge. Memory maintains continuity.
+Tools perform actions. Infrastructure stores and moves data. These responsibilities are not
+intermingled — each layer has a single well-defined role.
 
-Longer explanation if needed.
+**Tenant Isolation by Default.**
+Tenant separation is enforced independently at every storage boundary: Qdrant, Redis, PostgreSQL,
+the SQL tool, and JWT authentication all independently enforce isolation. No single point of failure
+can cause cross-tenant data leakage.
 
-Fixes #issue-number
-```
+**Fail Open, Never Block Answers.**
+Memory failures (Redis unavailable, Qdrant temporarily unreachable) are logged as warnings but
+never propagate to the user as errors. The system degrades gracefully — it answers with less context
+rather than refusing to answer. This is explicitly coded in `ShortTermMemory`, `SemanticMemory`,
+and `EpisodicMemory`.
 
-Types: `feature`, `bugfix`, `hotfix`, `docs`, `refactor`, `test`
+**Async by Default for Non-Critical Work.**
+Memory persistence, episode writing, query logging, and semantic memory extraction all happen after
+the response is delivered, via Celery tasks. User response latency is not impacted by bookkeeping.
 
-### Pull Request Process
+**Cost Awareness.**
+LLM costs are computed per interaction, persisted in PostgreSQL, and exposed as Prometheus metrics
+per tenant. This enables budget monitoring and helps identify expensive query patterns.
 
-1. Create feature branch from `main`
-2. Make atomic commits
-3. Write/update tests
-4. Update README if needed
-5. Create PR with description
-6. Wait for CI/CD + code review
-7. Merge to `main`
+**Loop Safety in Agentic Systems.**
+The agent graph actively detects repeated actions, oscillating patterns, and step budget overruns.
+Rather than looping indefinitely or crashing, it transitions to a degraded-but-functional state and
+delivers the best answer it currently has.
 
-### Code Review Checklist
-
-- [ ] Code follows project style
-- [ ] Tests pass (unit + integration)
-- [ ] No security vulnerabilities
-- [ ] Documentation updated
-- [ ] Performance acceptable
+**Observability as a First-Class Concern.**
+Prometheus metrics, MLflow experiment tracking, Sentry error monitoring, and structured logging are
+integrated into the core execution path — not optional extras.
 
 ---
 
-## Appendix
+## ✨ What Makes Atlas AI Architecturally Interesting
 
-### Glossary
+**Three-layer memory with automatic extraction.**
+Most AI systems have no persistent memory. Atlas AI has three complementary memory layers operating
+at different timescales, and the durable semantic layer is populated automatically by an LLM that
+analyzes each completed interaction to identify what is worth remembering long-term.
 
-| Term | Definition |
-|------|-----------|
-| **RAG** | Retrieval-Augmented Generation - LLM + vector database combo |
-| **Agent** | Autonomous LangGraph-based reasoning system |
-| **Embedding** | Dense vector representation of text (384 dims) |
-| **Chunk** | Semantic unit of document (one row in Qdrant) |
-| **Vector DB** | Qdrant - optimized for nearest-neighbor search |
-| **SSE** | Server-Sent Events - unidirectional real-time streaming |
-| **Tenant** | Organization/customer isolated from others |
-| **JWT** | JSON Web Token - stateless authentication |
-| **Celery** | Task queue for async processing |
-| **BM25** | Lexical text matching algorithm |
-| **Cross-Encoder** | Neural model for ranking relevance |
+**Hybrid retrieval with two-stage re-ranking.**
+The RAG retrieval combines dense semantic vectors and sparse BM25 keyword vectors in a single Qdrant
+query, then applies a hybrid CrossEncoder + BM25 re-ranking pass. This outperforms dense-only
+retrieval, especially for exact-match queries and domain-specific terminology.
 
-### Performance Benchmarks (Expected)
+**Agentic question decomposition.**
+Rather than passing the user's question directly to retrieval, the agent first decomposes complex
+questions into ordered sub-questions, answers each with the appropriate tool, and synthesizes
+the results — making multi-step questions tractable without user intervention.
 
-| Operation | Latency |
-|-----------|---------|
-| User Login | 50-100ms |
-| Simple RAG Query (cached) | 2-10ms |
-| RAG Query (retrieval) | 200-400ms |
-| Agent Reasoning (2-3 steps) | 2-5 seconds |
-| Document Ingestion (100 pages) | 30-60 seconds |
-| Embedding 100 chunks | 100-300ms |
+**Dual-mode data access.**
+The agent can answer from both structured relational data (SQL) and unstructured documents (vector
+search), and selects between them — or uses both — based on the nature of each sub-question.
 
-### Resource Requirements
+**Semantic chunking.**
+Documents are first split by token boundaries, then chunk boundaries are refined by semantic
+embedding similarity. This produces more coherent retrieval units than fixed-size splitting.
 
-**Minimum (Dev)**
-- CPU: 2 cores
-- RAM: 4GB
-- Disk: 20GB
+**Prompt injection protection built into retrieval.**
+All retrieved document context is labeled `UNTRUSTED DATA` before being placed in the LLM prompt,
+a well-established mitigation for prompt injection via malicious document content.
 
-**Recommended (Prod)**
-- CPU: 8+ cores
-- RAM: 16GB+
-- Disk: 100GB+ (SSD)
+**Idempotent agent runs.**
+Requests can include an explicit `run_id`. If the same ID is submitted again on a client retry,
+the cached result is returned without re-executing the agent, preventing duplicate LLM costs.
+
+**Nightly memory hygiene.**
+A Celery Beat scheduler runs a nightly job to prune low-importance semantic memories, keeping the
+memory store focused on genuinely useful information over time.
 
 ---
 
-##Support & Documentation
+## 🗺️ Architecture Map
 
-- **Issues**: Report bugs on GitHub Issues
-- **Discussions**: Ask questions in GitHub Discussions
-- **Docs**: See `/app/*/README.md` for component-specific docs
-- **Architecture**: See `diagrams/` folder for visual architecture
-- **API Docs**: Access at `/docs` when server is running
+| Area | Responsibility | Documentation |
+|---|---|---|
+| **Agent** | Reasoning, planning, tool selection, question decomposition, answer synthesis | [app/agent/README.md](app/agent/README.md) |
+| **RAG** | Document ingestion, semantic chunking, hybrid retrieval, re-ranking | [app/rag/README.md](app/rag/README.md) |
+| **Memory** | Short-term, episodic, and semantic memory; extraction and pruning | [app/memory/README.md](app/memory/README.md) |
+| **API Routes** | Request routing, authentication, rate limiting, SSE streaming | [app/routes/README.md](app/routes/README.md) |
+| **Services** | Auth, invitations, tenant registration, MLflow, email | [app/services/README.md](app/services/README.md) |
+| **Data Models** | Tenant, User, Episode, CostLog, TrackedFile ORM schemas | [app/models/README.md](app/models/README.md) |
+| **Infrastructure** | Config, database session, Prometheus monitors, rate limiter | [app/core/README.md](app/core/README.md) |
+| **Background Workers** | Celery queues, task routing, Beat scheduler | [app/celery/README.md](app/celery/README.md) |
+| **Controllers** | Thin coordination layer between routes and services | [app/controllers/README.md](app/controllers/README.md) |
 
 ---
 
-**Last Updated**: March 2024  
-**Version**: 1.0.0  
-**Maintainers**: Atlas AI Team
+## 🔍 Direct RAG Query Pipeline
+
+In addition to the full Agent (`/api/agent/ask-agent`), Atlas AI exposes a **direct RAG query
+endpoint** (`/api/query/ask`) that runs the retrieval-generation pipeline without agentic reasoning.
+
+**When to use each:**
+
+| Mode | Endpoint | Use case |
+|---|---|---|
+| **Agent** | `/api/agent/ask-agent` | Complex, multi-step, or ambiguous questions requiring reasoning and tool selection |
+| **Direct RAG** | `/api/query/ask` | Straightforward knowledge questions where retrieval + generation is sufficient |
+
+The direct pipeline still applies all memory layers (short-term, episodic, semantic), caches
+results, logs costs, and streams via SSE — it simply skips the graph-based reasoning loop. Both
+modes are available simultaneously and are selected by the client per-request.
+
+---
+
+## 🗄️ SQL Engine and Security
+
+The SQL tool inside the Agent is built on a dedicated security layer designed to prevent both data
+leakage and destructive operations.
+
+**How a SQL query flows through the engine:**
+
+```
+Agent decides SQL is needed
+         |
+         v
+  SQL Generator (LLM-based)
+  Generates a natural-language-to-SQL query
+         |
+         v
+  Schema Provider
+  Injects the database schema context so the LLM generates valid SQL
+         |
+         v
+  SQLValidator (AST-based, using sqlglot)
+  1. Rejects empty or multi-statement queries
+  2. Rejects non-SELECT statements (INSERT, UPDATE, DELETE, DROP, ALTER,
+     CREATE, TRUNCATE, MERGE, raw Command -- all forbidden)
+  3. Injects a parameterized tenant_id WHERE clause
+  4. Enforces optional table and column allow-lists
+  5. Runs EXPLAIN to estimate query cost before execution
+  6. Rejects queries above the configured cost threshold
+         |
+         v
+  Query executed with bound parameters (parameterized, not string-formatted)
+         |
+         v
+  Results capped at max_rows limit
+  Returned to Agent state
+```
+
+The AST-based validation using `sqlglot` means injected SQL fragments cannot bypass the check
+with string tricks — the query is parsed structurally before any execution occurs.
+
+---
+
+## 🧪 Evaluation System
+
+Atlas AI includes a dual evaluation framework — one for the RAG pipeline and one for the Agent
+routing logic — so the quality of retrieval and reasoning can be measured systematically.
+
+### RAG Evaluation
+
+The RAG evaluation pipeline (`app/rag/evaluation/`) measures three independent quality dimensions:
+
+| Metric group | What it measures |
+|---|---|
+| **Retrieval relevance** | Precision, Recall, F1, and MRR — do retrieved chunks match the known-relevant documents? |
+| **Retrieval stability** | Jaccard similarity across repeated runs of the same query — is retrieval deterministic? |
+| **Rephrase stability** | Jaccard similarity when the same question is rephrased — is retrieval robust to wording variation? |
+| **Generation quality** | Token F1 between generated answer and reference answer |
+
+Evaluation runs against a JSON dataset (`evaluation_dataset.json`) containing questions,
+relevant document IDs, reference answers, and paraphrases. Results are logged to MLflow under
+the `RAG_Evaluation` experiment for historical comparison.
+
+The pipeline is exposed via `/api/eval-rag` and can be triggered on-demand by tenant admins
+to measure their knowledge base quality after ingesting new documents.
+
+### Agent Evaluation
+
+The Agent evaluation harness (`app/agent/eval/harness.py`) provides offline testing of:
+
+| Test | What it checks |
+|---|---|
+| **Routing accuracy** | Does `classify_question_type()` correctly label questions as `data` or `knowledge`? Tested against a golden question set. |
+| **JSON extraction** | Does the LLM response parser correctly extract JSON blocks from varied LLM outputs? |
+
+The harness loads golden question cases from `tests/eval/golden_questions.json` and reports
+pass rate and failure details — used to catch regressions in classification or parsing logic
+before deployment.
+
+---
+
+## 💬 Recommended Q&A
+
+Atlas AI includes a **Recommended Q&A** system that allows tenant administrators to configure
+up to 10 pre-defined question-answer pairs for their organization.
+
+**How it works:**
+- Pairs are stored in PostgreSQL and loaded into an **in-memory thread-safe cache** at server startup
+- When a user asks a question that exactly matches a recommended question, the cached answer is
+  returned immediately — no LLM call, no retrieval, zero latency and zero cost
+- Admins can add, update, and remove recommended pairs via the `/api/recommended-qa` route
+- Changes update the in-memory cache immediately without requiring a server restart
+
+**Why it exists:** Some questions in an organization are asked constantly and have well-known,
+stable answers (e.g., "What is our refund policy?"). Caching these at the application level
+eliminates repeated RAG and LLM costs for the highest-frequency queries.
+
+---
+
+## 📨 Invitation and User Approval System
+
+User onboarding is controlled through a secure, multi-step invitation workflow.
+
+```
+Admin sends invitation
+         |
+         v
+  Invitation token generated (32-byte cryptographically random, 7-day TTL)
+  Token stored in PostgreSQL, email sent to invitee
+         |
+         v
+  Invitee clicks link -> registers via /api/auth/register-via-invitation
+  Account created with 'pending' or 'approved' status
+         |
+         v  (if approval required)
+  Admin reviews pending users
+  Admin approves or rejects -> user notified by email
+         |
+         v
+  Approved users can log in and receive JWT tokens
+```
+
+**Key controls:**
+- Invitation tokens are time-limited (7 days) and single-use
+- Admins can resend expired invitations
+- User approval status can be: `approved`, `pending`, `rejected`
+- The `approved_by` field records which admin approved the account
+- Admins can only manage users within their own tenant
+
+---
+
+## 🚦 Role-Based Rate Limiting
+
+All API endpoints are protected by a **Redis-backed, role-aware rate limiter** that applies
+different request budgets based on the authenticated user's role.
+
+| Role | Requests per minute |
+|---|---|
+| **Admin** | 300 |
+| **User** | 100 |
+| **Guest / unauthenticated** | 20 |
+
+Authentication-specific endpoints have stricter IP-based limits:
+
+| Endpoint | Limit |
+|---|---|
+| `/api/auth/login` | 10 attempts / minute / IP |
+| `/api/auth/register` | 5 registrations / minute / IP |
+
+Rate limit state is stored in Redis with a 60-second sliding window. Violations are logged for
+monitoring and analytics. If Redis is unavailable, rate limiting degrades gracefully rather than
+blocking all requests.
+
+---
+
+## 💰 Cost and Run Tracking
+
+Every LLM interaction — whether through the Agent or the direct RAG pipeline — is tracked in
+PostgreSQL with full cost attribution.
+
+**Data model:**
+
+```
+Runs table (one record per query)
+  run_id       UUID primary key
+  tenant_id    FK to Tenants (for per-tenant analytics)
+  query        The user's question
+  answer       The generated response
+  latency      End-to-end response time in seconds
+  cache_hit    Whether the result came from cache
+  retrieved_docs_ids  IDs of retrieved document chunks
+  created_at   Timestamp
+
+CostLog table (one-to-many from Runs)
+  log_id       UUID primary key
+  run_id       FK to Runs (one run can have multiple LLM calls)
+  input_tokens   Tokens sent to the LLM
+  output_tokens  Tokens generated by the LLM
+  model_name     Model used (e.g., llama-3.3-70b-versatile)
+  cost_usd       Computed cost (tokens x per-million rate)
+  created_at   Timestamp
+```
+
+A single agent run may involve multiple LLM calls (e.g., one for decomposition, one per
+sub-question, one for synthesis). Each call is recorded as a separate `CostLog` entry linked
+to the same run, so total cost per query can be computed by summing all linked entries.
+
+Cost data is also exported as Prometheus metrics (per-tenant) for real-time budget monitoring
+in Grafana.
+
+---
+
+## 🛡️ LLM Circuit Breakers
+
+The Agent protects against cascading failures from external LLM and database dependencies using
+an **in-process circuit breaker** pattern.
+
+Two circuit breakers are active at all times:
+
+| Breaker | Protects |
+|---|---|
+| `llm_circuit_breaker` | All LLM API calls (routing and generation) |
+| `db_circuit_breaker` | Database queries executed by the SQL tool |
+
+**How it works:**
+- After a configurable number of consecutive failures (`circuit_breaker_failure_threshold`, default 5),
+  the breaker **opens** and immediately rejects further calls with an error
+- After a recovery timeout (`circuit_breaker_recovery_seconds`, default 60s), the breaker enters
+  **half-open** state and allows one attempt through
+- On success, the breaker **closes** and normal operation resumes
+- On failure in half-open state, the breaker opens again for another recovery period
+
+This prevents a failing LLM provider or overloaded database from stalling the entire agent
+graph with slow timeouts on every request.
+
+---
+
+## 🛡️ Output Guardrails
+
+Before an agent answer is returned, it passes through **output guardrails** that catch two
+categories of problems:
+
+**1. Prompt injection neutralization:**
+The guardrail scans retrieved document content for known injection patterns (e.g.,
+`"ignore all prior instructions"`, `"you are now"`, `"system prompt:"`) and replaces them
+with `[filtered]`. This is a defense-in-depth measure on top of the `UNTRUSTED DATA`
+prefix already applied during retrieval.
+
+**2. Numeric grounding validation:**
+The guardrail compares numeric values cited in the generated answer against numeric values
+present in the retrieved source data. If the answer cites numbers that do not appear in any
+retrieved document or SQL result, it appends a note:
+> *(Note: some numeric values in this answer could not be verified against retrieved data.)*
+
+This helps surface potential hallucinations without suppressing the answer entirely.
+
+---
+
+## 🗺️ Architecture Map
+
+| Area | Responsibility | Documentation |
+|---|---|---|
+| **Agent** | Reasoning, planning, tool selection, question decomposition, answer synthesis | [app/agent/README.md](app/agent/README.md) |
+| **RAG** | Document ingestion, semantic chunking, hybrid retrieval, re-ranking | [app/rag/README.md](app/rag/README.md) |
+| **Memory** | Short-term, episodic, and semantic memory; extraction and pruning | [app/memory/README.md](app/memory/README.md) |
+| **API Routes** | Request routing, authentication, rate limiting, SSE streaming | [app/routes/README.md](app/routes/README.md) |
+| **Services** | Auth, invitations, tenant registration, MLflow, email, recommended Q&A | [app/services/README.md](app/services/README.md) |
+| **Data Models** | Tenant, User, Episode, CostLog, Runs, TrackedFile ORM schemas | [app/models/README.md](app/models/README.md) |
+| **Infrastructure** | Config, database session, Prometheus monitors, rate limiter | [app/core/README.md](app/core/README.md) |
+| **Background Workers** | Celery queues, task routing, Beat scheduler | [app/celery/README.md](app/celery/README.md) |
+| **Controllers** | Thin coordination layer between routes and services | [app/controllers/README.md](app/controllers/README.md) |
+| **SQL Engine** | NL-to-SQL generation, AST validation, tenant enforcement, cost estimation | [app/agent/tools/sql_engine/](app/agent/tools/sql_engine/) |
+| **Evaluation** | RAG quality metrics + Agent routing evaluation | [app/rag/evaluation/](app/rag/evaluation/) · [app/agent/eval/](app/agent/eval/) |
+
+---
+
+## 🧭 Documentation Navigation
+
+### 🏗️ Architecture
+- [High-Level Architecture](#high-level-architecture) — System overview diagram
+- [Request Lifecycle](#how-it-works-a-request-end-to-end) — End-to-end request walkthrough
+- [Multi-Tenancy](#multi-tenancy) — Isolation model and enforcement points
+- [Knowledge Ingestion](#knowledge-ingestion-flow) — How documents enter the system
+- [Why Components Exist Together](#why-these-components-exist-together) — Architectural rationale
+
+### 🤖 AI System
+- [Agent Architecture](app/agent/README.md) — LangGraph graph, nodes, routing, tools
+- [RAG Architecture](app/rag/README.md) — Ingestion pipeline, retrieval, re-ranking
+- [Memory Architecture](app/memory/README.md) — All three memory layers, extraction, pruning
+- [Memory vs. RAG](#memory-vs-rag-understanding-the-distinction) — Key distinction explained
+- [SQL Engine](#-sql-engine-and-security) — NL-to-SQL, AST validation, tenant safety
+- [Output Guardrails](#-output-guardrails) — Injection neutralization, grounding validation
+- [Circuit Breakers](#-llm-circuit-breakers) — LLM and DB failure protection
+
+### ⚙️ Platform
+- [API Reference](app/routes/README.md) — Endpoints, request/response schemas
+- [Direct RAG Query Pipeline](#-direct-rag-query-pipeline) — Lightweight query mode
+- [Services](app/services/README.md) — Auth, tenant management, MLflow, email
+- [Recommended Q&A](#-recommended-qa) — Pre-cached answers for common questions
+- [Invitation System](#-invitation-and-user-approval-system) — Onboarding workflow
+- [Rate Limiting](#-role-based-rate-limiting) — Role-based and IP-based controls
+- [Background Workers](app/celery/README.md) — Task queues, routing, scheduler
+- [Infrastructure](app/core/README.md) — Config, database, Prometheus metrics, rate limiting
+
+### 📊 Evaluation and Quality
+- [RAG Evaluation](#-evaluation-system) — Precision, Recall, F1, MRR, stability metrics
+- [Agent Evaluation](#agent-evaluation) — Routing accuracy and parsing correctness
+- [Cost Tracking](#-cost-and-run-tracking) — Per-run, per-call LLM cost attribution
+
+### 🚦 Operations
+- [Operational Overview](#-operational-overview) — Required services and configuration
+- [Security and Isolation](#-security-and-isolation) — Auth, tenant boundaries, secret management
+- [Observability](#-observability) — Prometheus, MLflow, Sentry, structured logging
+- [Design Principles](#-design-principles) — Architectural decisions and their rationale
+
+---
+
+*Atlas AI Platform — Version 3.0.0*
