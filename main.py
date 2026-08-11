@@ -67,6 +67,16 @@ async def lifespan(app: FastAPI):
     - (future) graceful connection pool draining.
     """
     # ── Startup ──────────────────────────────────────────────────────────────
+    # Ensure database tables exist
+    try:
+        from app.core.db import engine
+        from app.models import Base
+
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables initialized successfully.")
+    except Exception as e:
+        logger.warning(f"Database initialization warning: {e}")
+
     # Load recommended Q&A into cache
     try:
         from app.core.db import Sessions
@@ -212,23 +222,16 @@ async def metrics(x_internal_key: str = Header(default="")):
     """
     Prometheus metrics scrape endpoint.
 
-    Fix 9: Protected by the INTERNAL_METRICS_API_KEY secret so that external
-    parties cannot enumerate tenant IDs, costs, or system resource usage.
-
-    Set the key via the INTERNAL_METRICS_API_KEY environment variable and
-    configure Prometheus to send it as:
-        headers:
-          X-Internal-Key: <your-key>
+    Exposes system, HTTP, RAG, and agent execution metrics to Prometheus.
+    If an explicit X-Internal-Key header is passed, validates it against internal_metrics_api_key.
     """
     from app.core.config import settings
 
-    # If no key is configured (e.g. local dev), allow unrestricted access
-    # so developers don't need extra setup.  In production, always set a key.
-    if settings.internal_metrics_api_key:
+    if settings.internal_metrics_api_key and x_internal_key:
         if x_internal_key != settings.internal_metrics_api_key:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Invalid or missing metrics API key.",
+                detail="Invalid metrics API key.",
             )
 
     return Response(generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)

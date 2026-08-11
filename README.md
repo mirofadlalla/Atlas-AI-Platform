@@ -784,10 +784,29 @@ cp .env.example .env   # fill in required secrets
 docker compose up -d
 ```
 
+### 📦 Public Docker Image (GHCR)
+
+The Atlas AI container image is automatically built, scanned with Trivy, and published to GitHub Container Registry (GHCR) on every push to `main`:
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/mirofadlalla/atlas-ai:latest
+
+# Or pull a specific commit SHA tag
+docker pull ghcr.io/mirofadlalla/atlas-ai:sha-<commit-sha>
+```
+
+To run Atlas AI using the published GHCR image with `docker-compose.yml`:
+
+```bash
+ATLAS_IMAGE=ghcr.io/mirofadlalla/atlas-ai:latest docker compose up -d
+```
+
 **Start the monitoring stack separately:**
 
 ```bash
 docker compose -f docker-compose.monitoring.yml up -d
+
 ```
 
 Database migrations run automatically on API startup when `RUN_MIGRATIONS=true` is set (the

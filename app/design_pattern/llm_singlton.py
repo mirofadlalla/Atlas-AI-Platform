@@ -13,15 +13,24 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+import os
+
+
 class LLMService:
     _instance = None
 
     def __new__(cls):
-        if cls._instance is None:
+        if (
+            cls._instance is None
+            or not hasattr(cls._instance, "client")
+            or cls._instance.client is None
+        ):
             logger.info("Initializing Groq LLM client (llama-3.3-70b-versatile)...")
-            cls._instance = super().__new__(cls)
-            cls._instance.client = Groq(api_key=settings.groq_api_key)
-            cls._instance.model = "llama-3.3-70b-versatile"
+            api_key = settings.groq_api_key or os.getenv("GROQ_API_KEY", "")
+            instance = super().__new__(cls)
+            instance.client = Groq(api_key=api_key)
+            instance.model = "llama-3.3-70b-versatile"
+            cls._instance = instance
         return cls._instance
 
     def generate(

@@ -91,11 +91,15 @@ celery_app.conf.update(
 )
 
 celery_app.autodiscover_tasks(["app.services"])
-# This module is not named ``tasks.py``, so register it explicitly in workers.
+# Explicitly register all task modules so Celery workers discover and register them
 celery_app.conf.imports = (
     "app.services.semantic_memory_service",
     "app.services.episodic_memory_service",
+    "app.services.rag_services.query_logging_service",
+    "app.services.rag_services.eval_pipline",
+    "app.services.rag_services.ingest_rag_service",
 )
+
 celery_app.conf.beat_schedule = {
     "prune-low-importance-semantic-memories-nightly": {
         "task": "app.services.semantic_memory_service.prune_low_importance_semantic_memories",

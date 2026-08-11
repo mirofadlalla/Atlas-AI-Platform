@@ -63,3 +63,4 @@ README.md
 tmp/
 .system_generated/
 scratch/
+write_readme.py

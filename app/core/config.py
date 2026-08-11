@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     jina_api_key: str = ""
     remote_embed_url: str = ""
 
+    # ── General Settings ──────────────────────────────────────────────────
+    debug: bool = False
+
     # ── Internal service-to-service auth (Celery → FastAPI metrics) ───────
     internal_metrics_api_key: str = ""
 

@@ -4,6 +4,9 @@ import hashlib
 import time
 from cachetools import TTLCache
 
+create_retrieval_chain = None
+create_stuff_documents_chain = None
+
 try:
     from langchain.chains import create_retrieval_chain
     from langchain.chains.combine_documents import create_stuff_documents_chain
@@ -12,9 +15,69 @@ except (ImportError, ModuleNotFoundError):
         from langchain.chains.retrieval import create_retrieval_chain
         from langchain.chains.combine_documents import create_stuff_documents_chain
     except (ImportError, ModuleNotFoundError):
-        create_retrieval_chain = None
-        create_stuff_documents_chain = None
-from langchain.prompts import ChatPromptTemplate
+        try:
+            from langchain_classic.chains import create_retrieval_chain
+            from langchain_classic.chains.combine_documents.stuff import (
+                create_stuff_documents_chain,
+            )
+        except (ImportError, ModuleNotFoundError):
+            pass
+
+if create_stuff_documents_chain is None:
+
+    def create_stuff_documents_chain(llm, prompt):
+        class _StuffChain:
+            def __init__(self, llm, prompt):
+                self.llm = llm
+                self.prompt = prompt
+
+            def invoke(self, input_dict):
+                docs = input_dict.get("context", [])
+                if isinstance(docs, list):
+                    context_str = "\n\n".join(
+                        doc.page_content if hasattr(doc, "page_content") else str(doc)
+                        for doc in docs
+                    )
+                else:
+                    context_str = str(docs)
+                user_input = input_dict.get("input", "")
+                if hasattr(self.prompt, "format_messages"):
+                    messages = self.prompt.format_messages(
+                        context=context_str, input=user_input
+                    )
+                    return self.llm.invoke(messages)
+                elif hasattr(self.prompt, "format"):
+                    text = self.prompt.format(context=context_str, input=user_input)
+                    return self.llm.invoke(text)
+                return self.llm.invoke(
+                    f"Context:\n{context_str}\n\nQuestion: {user_input}\nAnswer:"
+                )
+
+        return _StuffChain(llm, prompt)
+
+
+if create_retrieval_chain is None:
+
+    def create_retrieval_chain(retriever, document_chain):
+        class _RetrievalChain:
+            def __init__(self, retriever, doc_chain):
+                self.retriever = retriever
+                self.doc_chain = doc_chain
+
+            def invoke(self, input_dict):
+                query = input_dict.get("input", "")
+                docs = self.retriever.invoke(query)
+                res = self.doc_chain.invoke({"context": docs, "input": query})
+                ans = res.content if hasattr(res, "content") else str(res)
+                return {"input": query, "context": docs, "answer": ans}
+
+        return _RetrievalChain(retriever, document_chain)
+
+
+try:
+    from langchain_core.prompts import ChatPromptTemplate
+except (ImportError, ModuleNotFoundError):
+    from langchain.prompts import ChatPromptTemplate
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
