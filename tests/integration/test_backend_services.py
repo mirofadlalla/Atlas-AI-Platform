@@ -7,7 +7,6 @@ import pytest
 import redis
 from qdrant_client import QdrantClient
 
-
 pytestmark = pytest.mark.integration
 
 

@@ -44,9 +44,9 @@ class RecommendedQAService:
                             "id": str(rec.id),
                             "question": rec.question,
                             "answer": rec.answer,
-                            "created_at": rec.created_at.isoformat()
-                            if rec.created_at
-                            else None,
+                            "created_at": (
+                                rec.created_at.isoformat() if rec.created_at else None
+                            ),
                         }
                     )
 
@@ -57,7 +57,9 @@ class RecommendedQAService:
                 f"✅ Successfully loaded recommended Q&A in-memory cache for {len(new_cache)} tenants"
             )
         except Exception as exc:
-            logger.error(f"❌ Error loading recommended Q&A into in-memory cache: {exc}")
+            logger.error(
+                f"❌ Error loading recommended Q&A into in-memory cache: {exc}"
+            )
 
     @classmethod
     def _load_tenant(cls, tenant_id: str, db: Session) -> List[Dict[str, Any]]:
@@ -78,9 +80,9 @@ class RecommendedQAService:
                     "id": str(rec.id),
                     "question": rec.question,
                     "answer": rec.answer,
-                    "created_at": rec.created_at.isoformat()
-                    if rec.created_at
-                    else None,
+                    "created_at": (
+                        rec.created_at.isoformat() if rec.created_at else None
+                    ),
                 }
                 for rec in records
             ]

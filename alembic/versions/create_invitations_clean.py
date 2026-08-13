@@ -8,7 +8,6 @@ Create Date: 2026-02-24 16:00:00.000000
 
 from typing import Sequence, Union
 
-
 # revision identifiers, used by Alembic.
 revision: str = "create_invitations_clean"
 down_revision: Union[str, None] = "add_invitations"

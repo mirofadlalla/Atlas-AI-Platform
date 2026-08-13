@@ -11,7 +11,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision: str = "84d6c8d986ec"
 down_revision: Union[str, None] = "3c409934de50"

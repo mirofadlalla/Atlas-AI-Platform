@@ -29,9 +29,9 @@ class EvalPipeline:
         )
         self.retriever = self.pipeline.retriever
         if hasattr(self.retriever, "search_kwargs"):
-            self.retriever.search_kwargs[
-                "k"
-            ] = 10  # Limit to top-2 for evaluation consistency
+            self.retriever.search_kwargs["k"] = (
+                10  # Limit to top-2 for evaluation consistency
+            )
 
     def _get_json_file(self, path: Path) -> List[Dict]:
         try:

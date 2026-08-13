@@ -60,12 +60,12 @@ class InvitationManagementService:
                 "invited_email": invitation.invited_email,
                 "token": invitation.token,
                 "status": invitation.status,
-                "created_at": invitation.created_at.isoformat()
-                if invitation.created_at
-                else None,
-                "expires_at": invitation.expires_at.isoformat()
-                if invitation.expires_at
-                else None,
+                "created_at": (
+                    invitation.created_at.isoformat() if invitation.created_at else None
+                ),
+                "expires_at": (
+                    invitation.expires_at.isoformat() if invitation.expires_at else None
+                ),
                 "message": "Invitation sent successfully",
             }
         except ValueError as e:
@@ -234,12 +234,12 @@ class InvitationManagementService:
                             "invited_email": inv.invited_email,
                             "token": getattr(inv, "token", None),
                             "status": inv.status,
-                            "created_at": inv.created_at.isoformat()
-                            if inv.created_at
-                            else None,
-                            "expires_at": inv.expires_at.isoformat()
-                            if inv.expires_at
-                            else None,
+                            "created_at": (
+                                inv.created_at.isoformat() if inv.created_at else None
+                            ),
+                            "expires_at": (
+                                inv.expires_at.isoformat() if inv.expires_at else None
+                            ),
                         }
                     )
                 except Exception as e:

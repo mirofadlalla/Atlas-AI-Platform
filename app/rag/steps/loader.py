@@ -13,7 +13,6 @@ from langchain_community.document_loaders import (
 )
 from langchain_core.documents import Document
 
-
 # Maps file extension → (loader class, human-readable file_type label)
 # file_type is stored as a Qdrant payload field and indexed for fast filtering.
 _EXTENSION_MAP: dict[str, tuple] = {

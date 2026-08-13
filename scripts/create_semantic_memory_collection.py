@@ -2,7 +2,6 @@
 
 from app.memory.semantic_memory import SemanticMemory
 
-
 if __name__ == "__main__":
     memory = SemanticMemory()
     # Reuse the configured embedding model so vector size always matches it.
