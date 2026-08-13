@@ -9,9 +9,9 @@ import logging
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy.orm import Session
 
-from app.services.mlflow_service import MLflowService
+# MLflowService imported lazily inside methods to avoid pulling mlflow
+# (and its pkg_resources dep) at module import time — breaks CI environments.
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ class EvalController:
         Uploads the dataset file, logs to MLflow, and submits a Celery task.
         """
         from app.services.rag_services.eval_pipline import evaluate_task
+        from app.services.mlflow_service import MLflowService
 
         tenant_id = str(current_admin.tenant_id)
 
@@ -99,7 +100,12 @@ class EvalController:
                 detail="An unexpected error occurred while starting the evaluation. Please try again.",
             )
         finally:
-            MLflowService.end_run(status="FINISHED")
+            try:
+                from app.services.mlflow_service import MLflowService
+
+                MLflowService.end_run(status="FINISHED")
+            except Exception as e:
+                logger.error(f"Error ending MLflow run: {e}")
 
     # ── /eval/generate_dataset ────────────────────────────────────────────────
 

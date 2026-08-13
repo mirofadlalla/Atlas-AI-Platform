@@ -9,7 +9,6 @@ import json
 import logging
 import time
 
-from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 

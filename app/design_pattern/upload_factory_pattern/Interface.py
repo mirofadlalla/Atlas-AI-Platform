@@ -11,11 +11,9 @@ class PathProcessor(ABC):
     @abstractmethod
     def can_handle(self, path: Path) -> bool:
         """Check if this processor can handle the given path"""
-        pass
 
     @abstractmethod
     def process(
         self, path: Path, tenant_id: str, source: str, author: str, db: Session
     ) -> Dict[str, Any]:
         """Process the path and return results"""
-        pass

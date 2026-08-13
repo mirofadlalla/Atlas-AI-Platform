@@ -8,14 +8,12 @@ document retrieval, LLM streaming, MLflow tracking, and Prometheus metrics.
 import logging
 import time
 import json
-from typing import AsyncGenerator
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.monitors import cache_hits_total
-from app.services.mlflow_service import MLflowService
 from app.services.rag_services.query_logging_service import trigger_query_logging
 from app.memory.short_term_memory import ConversationTurn, ShortTermMemory
 from app.memory.semantic_memory import SemanticMemory
@@ -28,6 +26,9 @@ from app.rag.retrivel_data_pipline import (
     get_local_query_cache,
     serialize_retrieved_documents,
 )
+
+# MLflowService is imported lazily inside ask() to avoid mlflow → pkg_resources
+# at module import time, which breaks CI environments without optional deps.
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,9 @@ class QueryController:
         records metrics to MLflow, Prometheus, and the database.
         """
         tenant_id: str = str(current_user.tenant_id)
+
+        # Lazy import to avoid mlflow → pkg_resources at module import time
+        from app.services.mlflow_service import MLflowService
 
         # End any stale MLflow run from a previous request
         try:

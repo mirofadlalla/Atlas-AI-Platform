@@ -10,7 +10,9 @@ import uuid
 from pathlib import Path
 from fastapi import HTTPException, UploadFile
 
-from app.services.mlflow_service import MLflowService
+# MLflowService is imported lazily inside upload_file() to avoid pulling
+# mlflow (and its pkg_resources dependency) at module import time, which
+# breaks test environments that do not have all optional dependencies installed.
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +129,9 @@ class IngestController:
                 f"stored='{unique_name}' size={total_bytes}B tenant={tenant_id}"
             )
 
-            # MLflow tracking
+            # MLflow tracking (lazy import to avoid pkg_resources at module load time)
+            from app.services.mlflow_service import MLflowService
+
             mlflow_run_id = MLflowService.start_run(
                 experiment_name=MLflowService.DEFAULT_EXPERIMENT_INGEST,
                 run_name=f"ingest_{tenant_id}_{__import__('time').time()}",
@@ -200,6 +204,8 @@ class IngestController:
             )
         finally:
             try:
+                from app.services.mlflow_service import MLflowService
+
                 MLflowService.end_run(status="FINISHED")
             except Exception as e:
                 logger.error(f"Error ending MLflow run: {e}")

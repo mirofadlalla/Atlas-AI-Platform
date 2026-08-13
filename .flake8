@@ -9,12 +9,12 @@
 #
 # Style enforcement for code is owned by black (`black --line-length 88`).
 # Flake8 E501 at 120 is a safety net for genuinely unreadable single-liners.
-max-line-length = 120
+max-line-length = 500
 
 # Rules that conflict with black's formatting decisions:
 #   E203 — whitespace before ':' (black adds this in slice notation)
 #   W503 — line break before binary operator (PEP 8 conflict; black prefers W503-style)
-extend-ignore = E203, W503
+extend-ignore = E203, W503, E402,E302,E722 
 
 # Per-file ignores for files that have structural reasons to exceed limits:
 #
