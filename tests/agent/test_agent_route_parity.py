@@ -43,13 +43,15 @@ def test_ask_agent_passes_run_id_and_emits_degraded_fields():
             },
         }
 
+    import app.controllers.agent_controller as agent_controller
+
     with (
         patch.object(
-            agent_route.agent_app.__class__,
+            agent_controller.agent_app.__class__,
             "astream_events",
             side_effect=mock_astream_events,
         ),
-        patch("app.routes.agent_route.trigger_agent_logging"),
+        patch("app.controllers.agent_controller.trigger_agent_logging"),
     ):
         response = client.post(
             "/agent/ask-agent",
@@ -87,7 +89,8 @@ def test_ask_agent_returns_cached_run():
     }
 
     with patch(
-        "app.routes.agent_route.get_cached_run_result", return_value=cached_data
+        "app.controllers.agent_controller.get_cached_run_result",
+        return_value=cached_data,
     ):
         response = client.post(
             "/agent/ask-agent",
