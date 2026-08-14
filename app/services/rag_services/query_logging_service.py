@@ -15,7 +15,14 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# أنا عندي task reusable، ومش عايز أربطها مباشرة بـ celery_app object معينة؛ هستخدم @shared_task، وكل مشروع يعمل import/autodiscovery للـ task ويربطها بالـ Celery app الخاصة به.
 
+# وده بالضبط سبب إن shared_task مناسبة للـ reusable modules/packages.
+
+
+# لكن خد بالك: autodiscover_tasks() نفسها موضوع منفصل عن shared_task.
+# shared_task = طريقة تعريف task بدون coupling للـ app.
+# autodiscover_tasks = طريقة العثور/import للـ task modules.
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def log_query_run_and_cost(
     self,

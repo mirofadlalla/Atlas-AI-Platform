@@ -101,28 +101,37 @@ class SemanticMemory:
         user_id: str | int,
         tenant_id: str | int,
         top_k: int | None = None,
+        memory_type: str | None = None,
     ) -> list[str]:
         """Recall relevant memories only from the requesting user's tenant scope."""
         if not query.strip():
             return []
+        if memory_type is not None and memory_type not in _ALLOWED_TYPES:
+            raise ValueError(f"Unsupported semantic memory type: {memory_type}")
         try:
             if not self.client.collection_exists(self.collection_name):
                 return []
+
+            must_conditions = [
+                models.FieldCondition(
+                    key="tenant_id", match=models.MatchValue(value=str(tenant_id))
+                ),
+                models.FieldCondition(
+                    key="user_id", match=models.MatchValue(value=str(user_id))
+                ),
+            ]
+            if memory_type is not None:
+                must_conditions.append(
+                    models.FieldCondition(
+                        key="memory_type", match=models.MatchValue(value=memory_type)
+                    )
+                )
+
             response = self.client.query_points(
                 collection_name=self.collection_name,
                 query=self.embedding_model.embed_query(query),
                 using="dense",
-                query_filter=models.Filter(
-                    must=[
-                        models.FieldCondition(
-                            key="tenant_id",
-                            match=models.MatchValue(value=str(tenant_id)),
-                        ),
-                        models.FieldCondition(
-                            key="user_id", match=models.MatchValue(value=str(user_id))
-                        ),
-                    ]
-                ),
+                query_filter=models.Filter(must=must_conditions),
                 limit=top_k or settings.semantic_memory_top_k,
                 with_payload=True,
             )
@@ -139,8 +148,9 @@ class SemanticMemory:
             )
             memories = [point.payload["content"] for point in ranked]
             logger.info(
-                "Recalled %s semantic memories for tenant=%s user=%s",
+                "Recalled %s semantic memories (type=%s) for tenant=%s user=%s",
                 len(memories),
+                memory_type or "any",
                 tenant_id,
                 user_id,
             )

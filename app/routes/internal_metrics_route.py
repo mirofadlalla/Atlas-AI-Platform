@@ -1,5 +1,11 @@
 """
-Internal metrics route.
+Internal metrics route for recording Prometheus metrics from background Celery workers.
+Service-to-Service communication (from celery service to fastapi) is secured with an internal API key.
+
+the problem is that all metrics are recorded in the FastAPI process's Prometheus registry,
+so fastapi is a proccess and celery is another process, and prometheus can only scrape the fastapi process.
+which is only scraped by Prometheus. Celery workers cannot be scraped directly, so they must send their metrics to this internal endpoint.
+which is then recorded in the FastAPI process's Prometheus registry and exposed on /metrics.
 
 Thin HTTP adapter — all business logic lives in InternalMetricsController.
 Celery workers post metric payloads here so they land in the FastAPI

@@ -1,4 +1,4 @@
-"""Helpers for sub-question answering and final synthesis."""
+"""Helpers for sub-question answering and final synthesis with real-time streaming."""
 
 from __future__ import annotations
 
@@ -13,8 +13,7 @@ from app.agent.utils.guardrails import (
     sanitize_untrusted_block,
     validate_answer_grounding,
 )
-from app.agent.utils.llm import call_agent_llm
-from app.agent.utils.retry import with_retry
+from app.agent.utils.llm import async_call_agent_llm_stream, call_agent_llm
 from app.agent.utils.state_helpers import get_current_question
 from app.memory.working_memory import WorkingMemory
 
@@ -79,9 +78,10 @@ def build_data_summary(
     return text, data_sources
 
 
-def answer_subquestion(
+async def async_answer_subquestion(
     state: AgentState,
 ) -> tuple[str, list[str], dict, int, list[str]]:
+    """Answer a sub-question with word-by-word streaming of generated tokens."""
     current_question = get_current_question(state)
     data_summary_text, data_sources = build_data_summary(state, current_question)
 
@@ -113,9 +113,62 @@ def answer_subquestion(
     prompt = prompt_registry.answer_subquestion(
         current_question, assembled_context, degraded_note
     )
-    response_dict = with_retry(
-        call_agent_llm,
-        prompt,
+    response_dict = await async_call_agent_llm_stream(
+        prompt=prompt,
+        tier="generation",
+        tenant_id=state.get("tenant_id"),
+        event_type="stream_answer_chunk",
+    )
+    answer, _ = validate_answer_grounding(
+        response_dict["content"].strip(),
+        data_summary_text,
+    )
+    return (
+        answer,
+        data_sources,
+        response_dict,
+        working_memory.tokens_used,
+        working_memory.context_sources,
+    )
+
+
+def answer_subquestion(
+    state: AgentState,
+) -> tuple[str, list[str], dict, int, list[str]]:
+    """Synchronous fallback wrapper for answer_subquestion."""
+    current_question = get_current_question(state)
+    data_summary_text, data_sources = build_data_summary(state, current_question)
+
+    degraded_note = ""
+    if state.get("degraded"):
+        reason = state.get("degraded_reason") or "unknown"
+        degraded_note = _DEGRADED_NOTE.format(reason=reason) + "\n\n"
+
+    working_memory = WorkingMemory(agent_settings.prompt_max_tokens)
+    assembled_context = (
+        working_memory.add(
+            "conversation history", _format_history(state), priority=2, max_tokens=1600
+        )
+        .add(
+            "episodic memory",
+            state.get("episode_context", ""),
+            priority=3,
+            max_tokens=800,
+        )
+        .add("semantic memory", _format_memories(state), priority=4, max_tokens=1200)
+        .add(
+            "retrieved data",
+            data_summary_text,
+            priority=5,
+            max_tokens=agent_settings.prompt_max_tokens // 2,
+        )
+        .assemble()
+    )
+    prompt = prompt_registry.answer_subquestion(
+        current_question, assembled_context, degraded_note
+    )
+    response_dict = call_agent_llm(
+        prompt=prompt,
         tier="generation",
         tenant_id=state.get("tenant_id"),
     )
@@ -132,11 +185,12 @@ def answer_subquestion(
     )
 
 
-def synthesize_final_answer(
+async def async_synthesize_final_answer(
     original_question: str,
     sub_answers: list[SubAnswer],
     tenant_id: str | None = None,
 ) -> tuple[str, dict]:
+    """Synthesize final answer with word-by-word streaming of generated tokens."""
     combined_text = "\n\n".join(
         [f"Q: {sa['question']}\nA: {sa['answer']}" for sa in sub_answers]
     )
@@ -144,9 +198,34 @@ def synthesize_final_answer(
         combined_text, agent_settings.prompt_max_tokens // 2
     )
     prompt = prompt_registry.synthesize_final(original_question, combined_text)
-    response_dict = with_retry(
-        call_agent_llm,
-        prompt,
+    response_dict = await async_call_agent_llm_stream(
+        prompt=prompt,
+        tier="generation",
+        tenant_id=tenant_id,
+        event_type="stream_answer_chunk",
+    )
+    answer, _ = validate_answer_grounding(
+        response_dict["content"].strip(),
+        combined_text,
+    )
+    return answer, response_dict
+
+
+def synthesize_final_answer(
+    original_question: str,
+    sub_answers: list[SubAnswer],
+    tenant_id: str | None = None,
+) -> tuple[str, dict]:
+    """Synchronous fallback wrapper for synthesize_final_answer."""
+    combined_text = "\n\n".join(
+        [f"Q: {sa['question']}\nA: {sa['answer']}" for sa in sub_answers]
+    )
+    combined_text = truncate_to_token_budget(
+        combined_text, agent_settings.prompt_max_tokens // 2
+    )
+    prompt = prompt_registry.synthesize_final(original_question, combined_text)
+    response_dict = call_agent_llm(
+        prompt=prompt,
         tier="generation",
         tenant_id=tenant_id,
     )

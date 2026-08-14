@@ -35,7 +35,7 @@ class UserApprovalService:
                 detail="Only admins can perform this action",
             )
 
-    def get_pending_approvals(self) -> list:
+    def get_pending_approvals(self, tenant_id: str = None) -> list:
         """
         Get all users pending approval.
 
@@ -49,7 +49,11 @@ class UserApprovalService:
             from app.models.user import Users
 
             pending_users = (
-                self.db.query(Users).filter(Users.approval_status == "pending").all()
+                self.db.query(Users)
+                .filter(
+                    Users.approval_status == "pending", Users.tenant_id == tenant_id
+                )
+                .all()
             )
             return pending_users
         except Exception as e:

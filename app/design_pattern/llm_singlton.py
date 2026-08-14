@@ -68,6 +68,7 @@ class LLMService:
         prompt: str,
         system_prompt: str = "You are a helpful assistant.",
         max_new_tokens: int = 2048,
+        model: str | None = None,
     ):
         """
         Streaming generation. Yields (content_chunk, None) for text chunks
@@ -76,7 +77,7 @@ class LLMService:
         Groq streams usage in the final chunk via x_groq.usage.
         """
         stream = self.client.chat.completions.create(
-            model=self.model,
+            model=model or self.model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},

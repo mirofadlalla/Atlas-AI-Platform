@@ -389,6 +389,7 @@ class RetrievalPipeline:
         if not self.db:
             return
         try:
+            # Trigger background logging task without blocking.
             trigger_query_logging(
                 tenant_id=self.tenant_id,
                 query=query,

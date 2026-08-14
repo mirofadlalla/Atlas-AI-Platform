@@ -87,20 +87,15 @@ class QueryController:
                 )
 
             user_id = str(current_user.id)
-            memory = ShortTermMemory()
-            history = memory.load(tenant_id, user_id, request.session_id)
-            short_term_history = "\n".join(
-                f"{turn.get('role', 'user').title()}: {turn.get('content', '')}"
-                for turn in history
-            )
+
             start_time = time.time()
 
             cache_key = build_query_cache_key(
                 tenant_id,
                 request.query,
-                short_term_history,
-                user_id,
-                request.session_id,
+                # short_term_history,
+                # user_id,
+                # request.session_id,
             )
             cached_result = get_local_query_cache(cache_key)
             cache_hit = cached_result is not None
@@ -111,7 +106,7 @@ class QueryController:
                     "[CACHE HIT - LOCAL MEMORY] Returning cached result for: %s...",
                     request.query[:50],
                 )
-                chat_history = short_term_history
+                # chat_history = short_term_history
                 pipeline = None
                 retrieved_documents = cached_result.get("documents", [])
             else:
@@ -119,10 +114,19 @@ class QueryController:
                     "[CACHE MISS - LOCAL MEMORY] Generating new answer for: %s...",
                     request.query[:50],
                 )
+
+                memory = ShortTermMemory()
+                history = memory.load(tenant_id, user_id, request.session_id)
+                short_term_history = "\n".join(
+                    f"{turn.get('role', 'user').title()}: {turn.get('content', '')}"
+                    for turn in history
+                )
+
                 recalled_memories = SemanticMemory().recall(
                     request.query, user_id, tenant_id
                 )
                 semantic_context = "\n".join(f"- {m}" for m in recalled_memories)
+
                 episode_context = "\n".join(
                     f"- {summary}"
                     for summary in EpisodicMemory().get_recent(
@@ -146,6 +150,7 @@ class QueryController:
                     ]
                     if part
                 )
+
                 pipeline = RetrievalPipeline(tenant_id=tenant_id, db=db)
                 retrieved_documents = pipeline.retrieve(request.query)
 

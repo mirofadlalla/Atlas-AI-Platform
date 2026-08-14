@@ -100,6 +100,7 @@ celery_app.conf.imports = (
     "app.services.rag_services.ingest_rag_service",
 )
 
+# scheduled task like every 24 hours do that
 celery_app.conf.beat_schedule = {
     "prune-low-importance-semantic-memories-nightly": {
         "task": "app.services.semantic_memory_service.prune_low_importance_semantic_memories",

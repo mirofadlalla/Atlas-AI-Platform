@@ -66,20 +66,38 @@ class AgentController:
                     return
 
             try:
+                node_display_names = {
+                    "memory_read": "Short-Term Memory",
+                    "episodic_recall": "Episodic Memory",
+                    "semantic_recall": "Semantic Memory",
+                    "decompose": "Question Decomposition",
+                    "think": "Thinking",
+                    "sql_tool": "SQL Query",
+                    "retrieval_tool": "Document Retrieval",
+                    "finish": "Answer Synthesis",
+                    "memory_write": "Persisting Memory",
+                }
+
                 async for event in agent_app.astream_events(inputs, version="v2"):
                     event_type = event.get("event", "")
                     event_name = event.get("name", "")
+                    data = event.get("data", {})
 
-                    if event_type == "on_chain_start":
-                        if event_name == "thought":
-                            yield f"data: {json.dumps({'type': 'tool_start', 'tool': 'Thinking', 'name': event_name})}\n\n"
-                        elif event_name == "sql_tool":
-                            yield f"data: {json.dumps({'type': 'tool_start', 'tool': 'SQL Query', 'name': event_name})}\n\n"
-                        elif event_name == "retrieval_tool":
-                            yield f"data: {json.dumps({'type': 'tool_start', 'tool': 'Document Retrieval', 'name': event_name})}\n\n"
+                    # Handle custom real-time streaming events dispatched from graph nodes
+                    if event_type == "on_custom_event":
+                        if event_name == "stream_node_status":
+                            yield f"data: {json.dumps({'type': 'tool_start', 'tool': data.get('tool', 'Node'), 'name': data.get('node', ''), 'message': data.get('message', '')})}\n\n"
+                        elif event_name == "stream_thought_chunk":
+                            yield f"data: {json.dumps({'type': 'thought', 'content': data.get('content', '')})}\n\n"
+                        elif event_name == "stream_answer_chunk":
+                            yield f"data: {json.dumps({'type': 'answer', 'content': data.get('content', '')})}\n\n"
+
+                    elif event_type == "on_chain_start":
+                        if event_name in node_display_names:
+                            display = node_display_names[event_name]
+                            yield f"data: {json.dumps({'type': 'tool_start', 'tool': display, 'name': event_name})}\n\n"
 
                     elif event_type == "on_chain_end":
-                        data = event.get("data", {})
                         output = data.get("output", {})
                         if isinstance(output, dict):
                             if output.get("degraded"):
@@ -87,26 +105,17 @@ class AgentController:
                                 if output.get("degraded_reason"):
                                     degraded_reason = output.get("degraded_reason")
 
-                        if event_name == "think" and "thought" in output:
-                            thought_content = output.get("thought", "")
-                            if thought_content:
-                                yield f"data: {json.dumps({'type': 'thought', 'content': thought_content})}\n\n"
+                        if event_name in node_display_names:
+                            display = node_display_names[event_name]
+                            yield f"data: {json.dumps({'type': 'tool_end', 'tool': display, 'name': event_name})}\n\n"
 
-                        elif event_name == "finish" and "final_answer" in output:
+                        if event_name == "finish" and isinstance(output, dict):
                             final_answer = output.get("final_answer", "")
                             if final_answer:
                                 yield f"data: {json.dumps({'type': 'answer', 'content': final_answer})}\n\n"
-                                yield f"data: {json.dumps({'type': 'complete', 'final_answer': final_answer, 'degraded': degraded, 'degraded_reason': degraded_reason})}\n\n"
-                                final_result = output
-                                step_count = output.get("step_count", 0)
-
-                        elif event_name in ["sql_tool", "retrieval_tool", "think"]:
-                            node_display = {
-                                "sql_tool": "SQL Query",
-                                "retrieval_tool": "Document Retrieval",
-                                "think": "Thinking",
-                            }.get(event_name, event_name)
-                            yield f"data: {json.dumps({'type': 'tool_end', 'tool': node_display})}\n\n"
+                            yield f"data: {json.dumps({'type': 'complete', 'final_answer': final_answer, 'degraded': degraded, 'degraded_reason': degraded_reason})}\n\n"
+                            final_result = output
+                            step_count = output.get("step_count", 0)
 
                 yield f"data: {json.dumps({'type': 'done', 'status': 'success', 'degraded': degraded, 'degraded_reason': degraded_reason})}\n\n"
 

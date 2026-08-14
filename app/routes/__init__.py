@@ -1,4 +1,6 @@
-"""Routes module."""
+"""Routes module.
+lazy-loads route modules to avoid circular imports and improve startup time.
+"""
 
 from typing import Any
 
@@ -13,6 +15,7 @@ _ROUTE_MAP = {
 }
 
 
+# This is a lazy-loading mechanism for route modules. When an attribute is accessed on this module, it checks if the attribute name exists in the _ROUTE_MAP. If it does, it dynamically imports the corresponding module and returns it. This helps to avoid circular imports and can improve startup time by only loading route modules when they are actually needed.
 def __getattr__(name: str) -> Any:
     if name in _ROUTE_MAP:
         import importlib

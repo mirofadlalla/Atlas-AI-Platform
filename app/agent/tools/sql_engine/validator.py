@@ -1,4 +1,44 @@
-"""AST-based SQL validation and tenant isolation."""
+"""AST-based SQL validation and tenant isolation.
+
+                        LLM generates SQL
+                            │
+                            ▼
+                        validate_and_enforce_tenant()
+                            │
+                            ├── Empty?
+                            ├── Multiple statements?
+                            ├── SELECT only?
+                            ├── Forbidden operations?
+                            ├── Allowed tables?
+                            ├── Allowed columns?
+                            └── Inject tenant_id
+                            │
+                            ▼
+                        secured SQL + params
+                            │
+                            ▼
+                        EXPLAIN query
+                            │
+                            ├── Cost acceptable?
+                            │
+                            ▼
+                        Execute query
+                            │
+                            ▼
+                        Rows
+
+Why sql Glot
+sqlglot يحول SQL إلى AST — Abstract Syntax Tree.
+SELECT name FROM users WHERE age > 20
+Select
+├── Column(name)
+├── From
+│   └── Table(users)
+└── Where
+    └── GT
+        ├── Column(age)
+        └── Literal(20)
+"""
 
 from __future__ import annotations
 
@@ -55,10 +95,16 @@ class SQLValidator:
         except sqlglot.errors.ParseError as exc:
             raise ValueError(f"Invalid SQL: {exc}") from exc
 
-        if not isinstance(parsed, (exp.Select, exp.Union)):
+        if not isinstance(
+            parsed, (exp.Select, exp.Union)
+        ):  # root must be select or union
             raise ValueError("Security violation: only SELECT queries are allowed")
 
-        for node in parsed.walk():
+        for (
+            node
+        ) in (
+            parsed.walk()
+        ):  # امشي داخل الشجرة كلها، ولو لقيت أي operation خطيرة ارفضها.
             if isinstance(node, _FORBIDDEN_EXPRESSIONS):
                 raise ValueError("Security violation: only SELECT queries are allowed")
 
