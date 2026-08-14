@@ -20,22 +20,31 @@ logger = logging.getLogger(__name__)
 
 async def emit_node_status(node_name: str, display_name: str, message: str):
     """Dispatch node status event for real-time streaming to client."""
-    await adispatch_custom_event(
-        "stream_node_status",
-        {"node": node_name, "tool": display_name, "message": message},
-    )
+    try:
+        await adispatch_custom_event(
+            "stream_node_status",
+            {"node": node_name, "tool": display_name, "message": message},
+        )
+    except (RuntimeError, Exception):
+        pass
 
 
 async def emit_thought_chunk(chunk: str):
     """Dispatch word-by-word thought stream chunk."""
     if chunk:
-        await adispatch_custom_event("stream_thought_chunk", {"content": chunk})
+        try:
+            await adispatch_custom_event("stream_thought_chunk", {"content": chunk})
+        except (RuntimeError, Exception):
+            pass
 
 
 async def emit_answer_chunk(chunk: str):
     """Dispatch word-by-word answer stream chunk."""
     if chunk:
-        await adispatch_custom_event("stream_answer_chunk", {"content": chunk})
+        try:
+            await adispatch_custom_event("stream_answer_chunk", {"content": chunk})
+        except (RuntimeError, Exception):
+            pass
 
 
 def format_history(history: list[dict[str, str]]) -> str:

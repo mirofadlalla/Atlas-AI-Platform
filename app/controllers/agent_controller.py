@@ -67,9 +67,12 @@ class AgentController:
 
             try:
                 node_display_names = {
+                    "fast_router": "Hybrid Router",
+                    "memory_loader": "Memory Loader",
                     "memory_read": "Short-Term Memory",
                     "episodic_recall": "Episodic Memory",
                     "semantic_recall": "Semantic Memory",
+                    "direct_answer": "Direct Answer",
                     "decompose": "Question Decomposition",
                     "think": "Thinking",
                     "sql_tool": "SQL Query",
@@ -109,7 +112,9 @@ class AgentController:
                             display = node_display_names[event_name]
                             yield f"data: {json.dumps({'type': 'tool_end', 'tool': display, 'name': event_name})}\n\n"
 
-                        if event_name == "finish" and isinstance(output, dict):
+                        if event_name in ("finish", "direct_answer") and isinstance(
+                            output, dict
+                        ):
                             final_answer = output.get("final_answer", "")
                             if final_answer:
                                 yield f"data: {json.dumps({'type': 'answer', 'content': final_answer})}\n\n"

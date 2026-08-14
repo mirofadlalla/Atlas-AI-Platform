@@ -21,6 +21,13 @@ class AgentState(TypedDict, total=False):
     run_id: str
     start_time: float
 
+    # Fast Hybrid Routing & Memory Flags
+    intent: str | None
+    needs_short_term: bool
+    needs_semantic: bool
+    needs_episodic: bool
+    direct_response: str | None
+
     thought: str | None
     thoughts: list[str]
     last_action: str | None
