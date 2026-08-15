@@ -17,7 +17,8 @@ def test_postgresql_connection():
         host=os.environ["POSTGRES_HOST"],
         port=os.environ["POSTGRES_PORT"],
         user=os.environ.get("POSTGRES_USER", "postgres"),
-        password=os.environ.get("POSTGRES_PASS") or os.environ.get("POSTGRES_PASSWORD", ""),
+        password=os.environ.get("POSTGRES_PASS")
+        or os.environ.get("POSTGRES_PASSWORD", ""),
         dbname=os.environ.get("POSTGRES_DB", "postgres"),
     )
     try:

@@ -149,7 +149,9 @@ class SQLValidator:
         ):  # root must be select or union
             raise ValueError("Security violation: only SELECT queries are allowed")
 
-        for node in (
+        for (
+            node
+        ) in (
             parsed.walk()
         ):  # امشي داخل الشجرة كلها، ولو لقيت أي operation خطيرة ارفضها.
             if isinstance(node, _FORBIDDEN_EXPRESSIONS):

@@ -42,6 +42,9 @@ frontend/build/
 frontend/dist/
 frontend/.next/
 frontend/out/
+.pnpm-store/
+.pnpm-store
+frontend/.pnpm-store/
 
 # ==================== Git & IDE Files ====================
 .git/

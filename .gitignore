@@ -36,6 +36,9 @@ frontend/build/
 frontend/dist/
 frontend/.next/
 frontend/out/
+.pnpm-store/
+.pnpm-store
+frontend/.pnpm-store/
 
 # IDE & OS Files
 .vscode/
