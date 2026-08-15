@@ -1,6 +1,7 @@
 from app.repositories.qdrant import QdrantRepository
 from app.rag.steps.semantic_chunking_function import SemanticChunkingFunction
 from app.core.config import settings
+from app.rag.steps.structure_detector import structured_chunks
 
 
 def main(text: str, my_metadata: dict):
@@ -23,9 +24,9 @@ def main(text: str, my_metadata: dict):
     logger.info("Initializing embedding model for semantic chunking...")
 
     try:
-        chunks_with_metadata = SemanticChunkingFunction.process_document(
-            text, my_metadata
-        )
+        chunks_with_metadata = structured_chunks(text, my_metadata)
+        if chunks_with_metadata is None:
+            chunks_with_metadata = SemanticChunkingFunction.process_document(text, my_metadata)
     except Exception as e:
         logger.error(f"Chunking failed: {e}")
         import traceback

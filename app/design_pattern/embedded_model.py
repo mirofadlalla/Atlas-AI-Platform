@@ -1,15 +1,10 @@
-"""
-Embedding Model — priority chain:
-  1. Jina AI API  (jina-embeddings-v5-text-small) — primary, cloud
-  2. ngrok vLLM   (fine-tuned model on remote device) — secondary, local net
-  3. SentenceTransformers (BGE-M3 / MiniLM) — final local fallback
+"""Environment-aware dense embedding provider."""
 
-All configuration is read from settings / .env.
-"""
+from __future__ import annotations
 
+import logging
 import os
 import threading
-import logging
 from typing import List
 
 import requests
@@ -25,24 +20,14 @@ _JINA_MODEL = "jina-embeddings-v5-text-small"
 
 
 def _to_list(vec) -> List[float]:
-    if hasattr(vec, "tolist"):
-        return vec.tolist()
-    return list(vec)
+    return vec.tolist() if hasattr(vec, "tolist") else list(vec)
 
 
 class EmbeddedModel(Embeddings):
-    """
-    Singleton embedding model with three-tier fallback:
-      1. Jina AI REST API
-      2. ngrok-served fine-tuned vLLM endpoint  (REMOTE_EMBED_URL / settings)
-      3. Local SentenceTransformers model
-    """
+    """Use Jina in development, BGE-M3 then Jina in production."""
 
     _instance = None
     _lock = threading.Lock()
-    # Semantic-memory recall and hybrid document retrieval both request the
-    # same dense `retrieval.query` vector during one /ask request.  Keep a
-    # small, exact, short-lived cache so the second caller reuses it.
     _query_embedding_cache = TTLCache(maxsize=4_096, ttl=60)
     _query_embedding_cache_lock = threading.Lock()
 
@@ -54,137 +39,103 @@ class EmbeddedModel(Embeddings):
                     cls._instance._initialized = False
         return cls._instance
 
-    # ------------------------------------------------------------------ #
-    #  Initialisation                                                       #
-    # ------------------------------------------------------------------ #
-
     def _ensure_initialized(self):
         if self._initialized:
             return
-        # Jina AI
+
+        self.is_production = settings.is_production
+        self.bge_model_name = settings.embedding_model_name
         self.jina_api_key = settings.jina_api_key
         self.jina_enabled = bool(self.jina_api_key)
-
-        # ngrok / vLLM fine-tuned model (secondary)
-        self.remote_url = settings.remote_embed_url  # e.g. https://xxx.ngrok-free.dev
-        self.remote_enabled = bool(self.remote_url)
-
+        self.bge_enabled = self.is_production
         self.batch_size = int(os.environ.get("EMBED_BATCH_SIZE", "32"))
         self.timeout = float(os.environ.get("EMBED_TIMEOUT", "30"))
         self.local_model = None
         self._initialized = True
 
         logger.info(
-            "EmbeddedModel init — Jina: %s | ngrok: %s | local fallback: enabled",
-            "✓" if self.jina_enabled else "✗",
-            self.remote_url if self.remote_enabled else "✗",
+            "Embedding provider initialized: environment=%s provider=%s jina_fallback=%s",
+            "production" if self.is_production else "development",
+            self.bge_model_name if self.is_production else _JINA_MODEL,
+            "enabled" if self.jina_enabled else "unavailable",
         )
-
-    # ------------------------------------------------------------------ #
-    #  Tier 1 — Jina AI                                                     #
-    # ------------------------------------------------------------------ #
 
     def _call_jina(
         self, texts: List[str], task: str = "retrieval.passage"
     ) -> List[List[float]]:
-        """Call Jina AI embeddings API."""
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.jina_api_key}",
-        }
-        payload = {
-            "model": _JINA_MODEL,
-            "task": task,
-            "normalized": True,
-            "input": texts,
-        }
-        resp = requests.post(
-            _JINA_URL, headers=headers, json=payload, timeout=self.timeout
+        """Call Jina's embedding API."""
+        response = requests.post(
+            _JINA_URL,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.jina_api_key}",
+            },
+            json={
+                "model": _JINA_MODEL,
+                "task": task,
+                "normalized": True,
+                "input": texts,
+            },
+            timeout=self.timeout,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        # Jina returns: {"data": [{"embedding": [...], "index": 0}, ...]}
-        sorted_items = sorted(data["data"], key=lambda x: x["index"])
-        return [item["embedding"] for item in sorted_items]
+        response.raise_for_status()
+        items = sorted(response.json()["data"], key=lambda item: item["index"])
+        return [item["embedding"] for item in items]
 
-    # ------------------------------------------------------------------ #
-    #  Tier 2 — ngrok vLLM endpoint                                         #
-    # ------------------------------------------------------------------ #
+    def _load_bge_model(self) -> None:
+        if self.local_model is not None:
+            return
 
-    def _call_remote_embed(self, texts: List[str]) -> List[List[float]]:
-        """Call the ngrok-served fine-tuned vLLM /embed endpoint."""
-        url = self.remote_url.rstrip("/") + "/embed"
-        resp = requests.post(url, json={"texts": texts}, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.json().get("embeddings", [])
+        from sentence_transformers import SentenceTransformer
+        import torch
 
-    # ------------------------------------------------------------------ #
-    #  Tier 3 — Local SentenceTransformers fallback                         #
-    # ------------------------------------------------------------------ #
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.local_model = SentenceTransformer(self.bge_model_name, device=device)
+        logger.info("Loaded Hugging Face embedding model %s on %s", self.bge_model_name, device)
 
-    def _load_local_model(self):
-        if self.local_model is None:
-            from sentence_transformers import SentenceTransformer
-            import torch
-
-            try:
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                self.local_model = SentenceTransformer("BAAI/bge-m3", device=device)
-                logger.info("Loaded local embedding model (BGE-M3) on %s", device)
-            except Exception:
-                logger.exception("BGE-M3 failed, falling back to all-MiniLM-L6-v2")
-                self.local_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
-
-    def _call_local(self, texts: List[str]) -> List[List[float]]:
-        self._load_local_model()
-        emb = self.local_model.encode(
-            texts, normalize_embeddings=True, batch_size=self.batch_size
+    def _call_bge_m3(self, texts: List[str]) -> List[List[float]]:
+        self._load_bge_model()
+        embeddings = self.local_model.encode(
+            texts,
+            normalize_embeddings=True,
+            batch_size=self.batch_size,
         )
-        return _to_list(emb)
-
-    # ------------------------------------------------------------------ #
-    #  Core batch embedding with fallback chain                             #
-    # ------------------------------------------------------------------ #
+        return _to_list(embeddings)
 
     def _embed_batch(
         self, texts: List[str], task: str = "retrieval.passage"
     ) -> List[List[float]]:
-        """Try Jina → ngrok → local, in order."""
-        # --- Tier 1: Jina ---
+        """Embed with the configured provider and its allowed fallback."""
+        if self.is_production and self.bge_enabled:
+            try:
+                return self._call_bge_m3(texts)
+            except Exception:
+                logger.exception("BGE-M3 failed; falling back to Jina AI")
+                self.bge_enabled = False
+
         if self.jina_enabled:
             try:
                 return self._call_jina(texts, task=task)
             except Exception:
-                logger.exception("Jina AI embedding failed, trying ngrok vLLM...")
-                self.jina_enabled = (
-                    False  # disable for this session to avoid repeated failures
-                )
+                logger.exception("Jina AI embedding failed")
+                self.jina_enabled = False
 
-        # --- Tier 2: ngrok vLLM ---
-        if self.remote_enabled:
-            try:
-                return self._call_remote_embed(texts)
-            except Exception:
-                logger.exception(
-                    "ngrok vLLM embedding failed, falling back to local model..."
-                )
-                self.remote_enabled = False
-
-        # --- Tier 3: Local model ---
-        return self._call_local(texts)
-
-    # ------------------------------------------------------------------ #
-    #  LangChain interface                                                  #
-    # ------------------------------------------------------------------ #
+        provider = "BGE-M3 and Jina AI" if self.is_production else "Jina AI"
+        raise RuntimeError(f"No embedding provider is available: {provider}")
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         self._ensure_initialized()
         if not texts:
             return []
+
         results: List[List[float]] = []
-        for i in range(0, len(texts), self.batch_size):
-            batch = texts[i : i + self.batch_size]
-            results.extend(self._embed_batch(batch, task="retrieval.passage"))
+        for start in range(0, len(texts), self.batch_size):
+            results.extend(
+                self._embed_batch(
+                    texts[start : start + self.batch_size],
+                    task="retrieval.passage",
+                )
+            )
         return results
 
     def embed_query(self, text: str) -> List[float]:
@@ -201,7 +152,5 @@ class EmbeddedModel(Embeddings):
         vector = result[0] if result else []
         if cache_key and vector:
             with self._query_embedding_cache_lock:
-                # Store an immutable copy so callers cannot mutate the cached
-                # vector before Qdrant consumes it.
                 self._query_embedding_cache[cache_key] = tuple(vector)
         return vector

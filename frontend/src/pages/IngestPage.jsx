@@ -11,6 +11,7 @@ function IngestPage({ user }) {
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [taskId, setTaskId] = useState('');
+  const [chunkSuggestion, setChunkSuggestion] = useState('');
 
   // Status check state
   const [statusTaskId, setStatusTaskId] = useState('');
@@ -20,6 +21,16 @@ function IngestPage({ user }) {
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
+    setChunkSuggestion('');
+  };
+
+  const suggestChunking = () => {
+    if (!file) return;
+    const extension = file.name.split('.').pop().toLowerCase();
+    const structured = ['csv', 'xlsx', 'xls', 'json'];
+    setChunkSuggestion(structured.includes(extension)
+      ? 'Suggested: structured chunks. Headers are preserved and rows/records stay together with overlap.'
+      : 'Suggested: semantic chunks. Atlas will use embeddings to split unstructured prose by meaning.');
   };
 
   const handleSubmit = async (e) => {
@@ -89,6 +100,10 @@ function IngestPage({ user }) {
               required
             />
             <small>Select a document to upload and process</small>
+            <button type="button" className="btn-primary" disabled={!file} onClick={suggestChunking} style={{ marginTop: '10px' }}>
+              Suggest chunking strategy
+            </button>
+            {chunkSuggestion && <small style={{ display: 'block', marginTop: '8px' }}>{chunkSuggestion}</small>}
             {file && <div className="file-selected">✅ Selected: {file.name}</div>}
           </div>
 

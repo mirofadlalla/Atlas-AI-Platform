@@ -123,6 +123,8 @@ class SQLValidator:
         tenant_id: str,
         allowed_tables: set[str] | None = None,
         allowed_columns: set[str] | None = None,
+        inject_tenant_filter: bool = True,
+        dialect: str = "postgres",
     ) -> tuple[str, dict[str, Any]]:
         """
         Parse SQL with sqlglot, enforce SELECT-only + allow-lists, inject
@@ -138,7 +140,7 @@ class SQLValidator:
             )
 
         try:
-            parsed = sqlglot.parse_one(cleaned, read="postgres")
+            parsed = sqlglot.parse_one(cleaned, read=dialect)
         except sqlglot.errors.ParseError as exc:
             raise ValueError(f"Invalid SQL: {exc}") from exc
 
@@ -190,9 +192,12 @@ class SQLValidator:
         # recursing into derived-table subqueries — which would add a WHERE on a
         # tenant_id column that the subquery result-set may not expose, causing a
         # runtime SQL error.  Both branches of any UNION/UNION ALL are covered.
-        SQLValidator._inject_tenant_top_level(parsed)
-        sql = parsed.sql(dialect="postgres")
-        params = {"tenant_id": tenant_id}
+        if inject_tenant_filter:
+            SQLValidator._inject_tenant_top_level(parsed)
+        if not parsed.args.get("limit"):
+            parsed.set("limit", exp.Limit(expression=exp.Literal.number(agent_settings.sql_max_rows)))
+        sql = parsed.sql(dialect=dialect)
+        params = {"tenant_id": tenant_id} if inject_tenant_filter else {}
         logger.debug("Tenant-enforced SQL prepared")
         return sql, params
 

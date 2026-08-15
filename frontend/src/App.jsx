@@ -13,6 +13,7 @@ import IngestPage from './pages/IngestPage';
 import AdminPanel from './pages/AdminPanel';
 import EvaluationPage from './pages/EvaluationPage';
 import CostAnalyticsPage from './pages/CostAnalyticsPage';
+import TenantDatabasePage from './pages/TenantDatabasePage';
 
 // Import components
 import Navigation from './components/Navigation';
@@ -170,6 +171,7 @@ function App() {
               </AdminRoute>
             }
           />
+          <Route path="/admin/database" element={<AdminRoute isAuthenticated={isAuthenticated} user={user}><TenantDatabasePage /></AdminRoute>} />
 
           {/* Catch all */}
           <Route path="*" element={<Navigate to="/" />} />

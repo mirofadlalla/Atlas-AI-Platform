@@ -1,10 +1,20 @@
 import smtplib
 import logging
+from celery import shared_task
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def send_email_task(self, to_email: str, subject: str, body_html: str, body_text: str | None = None) -> bool:
+    """Durable SMTP delivery outside the FastAPI process."""
+    try:
+        return EmailService._send_email_sync(to_email, subject, body_html, body_text)
+    except Exception as exc:
+        raise self.retry(exc=exc)
 
 
 class EmailService:
@@ -18,13 +28,23 @@ class EmailService:
         Send an email via SMTP server. If credentials are not configured,
         logs the email content so tokens are visible in development logs.
         """
+        try:
+            send_email_task.apply_async(args=(to_email, subject, body_html, body_text), queue="logging_queue", routing_key="logging", retry=False)
+        except Exception:
+            logger.exception("Could not queue email delivery")
+            return False
+        return True
+
+    @staticmethod
+    def _send_email_sync(to_email: str, subject: str, body_html: str, body_text: str = None) -> bool:
+        """SMTP worker invoked by Celery."""
         if not settings.smtp_username or not settings.smtp_password:
             logger.warning(
                 f"[DEV EMAIL LOG] SMTP credentials not set. "
                 f"Email to '{to_email}' with subject '{subject}' NOT sent over SMTP.\n"
                 f"Body content:\n{body_text or body_html}"
             )
-            return False
+            raise RuntimeError("SMTP_NOT_CONFIGURED")
 
         try:
             msg = MIMEMultipart("alternative")
@@ -45,7 +65,7 @@ class EmailService:
             return True
         except Exception as e:
             logger.error(f"Failed to send email to {to_email}: {e}")
-            return False
+            raise
 
     @staticmethod
     def send_invitation_email(to_email: str, token: str, tenant_id: str) -> bool:

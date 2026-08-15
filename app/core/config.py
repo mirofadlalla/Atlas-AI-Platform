@@ -27,10 +27,20 @@ class Settings(BaseSettings):
     hf_api: str = ""
     groq_api_key: str = ""
     jina_api_key: str = ""
-    remote_embed_url: str = ""
 
     # ── General Settings ──────────────────────────────────────────────────
     debug: bool = False
+    environment: str = "development"
+    embedding_model_name: str = "BAAI/bge-m3"
+    credential_encryption_key: str = ""
+    tenant_db_pool_size: int = 5
+    tenant_db_max_overflow: int = 5
+    tenant_db_query_timeout_seconds: int = 15
+
+    @property
+    def is_production(self) -> bool:
+        """Whether production-only infrastructure should be enabled."""
+        return self.environment.strip().lower() == "production"
 
     # ── Internal service-to-service auth (Celery → FastAPI metrics) ───────
     internal_metrics_api_key: str = ""

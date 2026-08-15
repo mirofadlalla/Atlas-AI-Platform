@@ -74,7 +74,10 @@ RULES:
 - Only generate SELECT queries.
 - NEVER use UPDATE, DELETE, INSERT, DROP, or ALTER.
 - Do not hallucinate tables or columns.
-- do not add tenant_id filtering so it's added automatically in valdiation step.;
+- Use the complete schema and foreign-key relationships below to choose valid JOIN paths.
+- Join only tables connected by the declared relationships; never invent keys or columns.
+- This is an isolated external tenant database. Do not add an assumed tenant_id filter.
+- Think through the necessary joins privately, then return only the JSON result.
 - Return ONLY JSON matching this schema: {{"sql": "SELECT ... FROM ... WHERE ..."}}
 
 DATABASE SCHEMA:

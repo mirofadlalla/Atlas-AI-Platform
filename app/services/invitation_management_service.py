@@ -137,14 +137,11 @@ class InvitationManagementService:
                     detail="Invalid or expired invitation token",
                 )
 
-            # Extract tenant_id from invitation if not provided
+            # Never trust tenant_id from the request/link; the invitation token
+            # is the authoritative tenant binding.
+            tenant_id = details.get("tenant_id")
             if not tenant_id:
-                tenant_id = details.get("tenant_id")
-                if not tenant_id:
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail="Could not determine tenant from invitation",
-                    )
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not determine tenant from invitation")
 
             # Extract name from invitation or use email prefix if not provided
             if not name:

@@ -7,6 +7,7 @@ from .runs import Runs
 from .costLog import CostLog
 from .recommended_qa import RecommendedQA
 from .memory_episode import MemoryEpisode
+from .tenant_database import TenantDatabase
 
 __all__ = [
     "Base",
@@ -18,4 +19,5 @@ __all__ = [
     "CostLog",
     "RecommendedQA",
     "MemoryEpisode",
+    "TenantDatabase",
 ]

@@ -377,6 +377,31 @@ class ApiService {
     return this.handleResponse(response);
   }
 
+  async getTenantDatabaseStatus() {
+    const response = await fetch(`${this.baseURL}/tenant/database/status`, { headers: this.getHeaders() });
+    return this.handleResponse(response);
+  }
+
+  async connectTenantDatabase(payload) {
+    const response = await fetch(`${this.baseURL}/tenant/database/connect`, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify(payload) });
+    return this.handleResponse(response);
+  }
+
+  async testTenantDatabase() {
+    const response = await fetch(`${this.baseURL}/tenant/database/test`, { method: 'POST', headers: this.getHeaders() });
+    return this.handleResponse(response);
+  }
+
+  async getTenantDatabaseSchema(refresh = false) {
+    const response = await fetch(`${this.baseURL}/tenant/database/schema${refresh ? '/refresh' : ''}`, { method: refresh ? 'POST' : 'GET', headers: this.getHeaders() });
+    return this.handleResponse(response);
+  }
+
+  async disconnectTenantDatabase() {
+    const response = await fetch(`${this.baseURL}/tenant/database`, { method: 'DELETE', headers: this.getHeaders() });
+    return this.handleResponse(response);
+  }
+
   // Recommended Q&A Endpoints
   async getRecommendedQuestions() {
     const response = await fetch(`${this.baseURL}/recommended-qa`, {
