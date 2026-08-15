@@ -5,7 +5,6 @@ from app.agent.core.router import (
     fast_hybrid_router,
     route_action,
     route_after_finish,
-    route_initial_intent,
     route_target_path,
 )
 from app.agent.core.state import AgentState
@@ -13,7 +12,6 @@ from app.agent.nodes import (
     decompose_node,
     direct_answer_node,
     finish_node,
-    memory_loader_node,
     memory_write_node,
     retrieval_node,
     sql_node,
@@ -23,7 +21,6 @@ from app.agent.nodes import (
 builder = StateGraph(AgentState)
 
 builder.add_node("fast_router", fast_hybrid_router)
-builder.add_node("memory_loader", memory_loader_node)
 builder.add_node("direct_answer", direct_answer_node)
 builder.add_node("sql_tool", sql_node)
 builder.add_node("retrieval_tool", retrieval_node)
@@ -34,22 +31,9 @@ builder.add_node("memory_write", memory_write_node)
 
 builder.set_entry_point("fast_router")
 
-# Router initial branch: check if memory loading is needed or go to target path
+# Router branch: maps classified intent directly to target node
 builder.add_conditional_edges(
     "fast_router",
-    route_initial_intent,
-    {
-        "memory_loader": "memory_loader",
-        "direct_answer": "direct_answer",
-        "sql_tool": "sql_tool",
-        "retrieval_tool": "retrieval_tool",
-        "decompose": "decompose",
-    },
-)
-
-# Memory loader branch: transition directly to target path (No Router Re-evaluation)
-builder.add_conditional_edges(
-    "memory_loader",
     route_target_path,
     {
         "direct_answer": "direct_answer",

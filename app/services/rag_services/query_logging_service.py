@@ -6,23 +6,18 @@ Records both database logs and Prometheus metrics for monitoring and analytics.
 """
 
 import logging
+import threading
+
+import requests
 from celery import shared_task
 
-from app.core.db import get_db
-from app.repositories.runs_repository import RunsRepository
 from app.repositories.cost_log_repository import CostLogRepository
-import requests
+from app.repositories.runs_repository import RunsRepository
+from app.core.db import get_db
 
 logger = logging.getLogger(__name__)
 
-# أنا عندي task reusable، ومش عايز أربطها مباشرة بـ celery_app object معينة؛ هستخدم @shared_task، وكل مشروع يعمل import/autodiscovery للـ task ويربطها بالـ Celery app الخاصة به.
 
-# وده بالضبط سبب إن shared_task مناسبة للـ reusable modules/packages.
-
-
-# لكن خد بالك: autodiscover_tasks() نفسها موضوع منفصل عن shared_task.
-# shared_task = طريقة تعريف task بدون coupling للـ app.
-# autodiscover_tasks = طريقة العثور/import للـ task modules.
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def log_query_run_and_cost(
     self,
@@ -36,35 +31,14 @@ def log_query_run_and_cost(
     output_tokens: float,
     model_name: str = "Qwen2.5-1.5B",
 ):
-    """
-    Background task to log query runs and costs to the database.
-
-    Also records Prometheus metrics via internal API webhook for monitoring.
-    Runs asynchronously to avoid blocking the response stream.
-    Retries up to 3 times on failure.
-
-    Args:
-        tenant_id: Tenant identifier
-        query: Original user query
-        answer: Generated answer
-        latency: Query processing latency in seconds
-        cache_hit: Whether response was cached
-        retrieved_docs_ids: Comma-separated document IDs used
-        input_tokens: Number of input tokens used
-        output_tokens: Number of output tokens used
-        model_name: LLM model name used
-    """
     try:
-        # Get a fresh database session for this task
         db = next(get_db())
 
         runs_repo = RunsRepository(db)
         cost_repo = CostLogRepository(db)
 
-        # Calculate cost
         cost_usd = (input_tokens * 0.0000001) + (output_tokens * 0.0000002)
 
-        # Save run record
         run = runs_repo.create(
             tenant_id=tenant_id,
             query=query,
@@ -74,7 +48,6 @@ def log_query_run_and_cost(
             retrieved_docs_ids=retrieved_docs_ids,
         )
 
-        # Save cost log if tokens were used
         if input_tokens > 0 or output_tokens > 0:
             cost_repo.create(
                 run_id=run.run_id,
@@ -92,18 +65,14 @@ def log_query_run_and_cost(
                 f"Logged run {run.run_id} - Tenant: {tenant_id} (no token usage)"
             )
 
-        # Record Prometheus metrics via internal webhook so they register on the API server
         try:
             import os
-
-            # For standalone monitoring: Prometheus in Docker reaches host via host.docker.internal
             from app.core.config import settings
 
             api_host = os.environ.get("API_HOST", "http://localhost:8000")
             if not api_host.startswith("http"):
                 api_host = f"http://{api_host}"
 
-            # Send metrics to FastAPI so Prometheus can scrape them
             webhook_url = f"{api_host}/api/internal/metrics/record"
 
             payload = {
@@ -120,7 +89,6 @@ def log_query_run_and_cost(
             if settings.internal_metrics_api_key:
                 headers["X-Internal-Token"] = settings.internal_metrics_api_key
 
-            # Fire and forget with short timeout so Celery task doesn't hang
             response = requests.post(
                 webhook_url, json=payload, headers=headers, timeout=2.0
             )
@@ -137,14 +105,11 @@ def log_query_run_and_cost(
             logger.error(
                 f"Error recording Prometheus metrics via webhook: {metric_error}"
             )
-            # Don't fail the entire task if metrics recording fails
 
-        # Clean up database session
         db.close()
 
     except Exception as exc:
         logger.error(f"Error logging query run and cost: {exc}")
-        # Retry with exponential backoff
         raise self.retry(exc=exc, countdown=min(60 * (2**self.request.retries), 600))
 
 
@@ -161,39 +126,29 @@ def trigger_query_logging(
 ) -> None:
     """
     Trigger background logging task without blocking.
-
-    This function returns immediately, allowing the response to stream
-    while logging happens in the background.
-
-    Args:
-        tenant_id: Tenant identifier
-        query: Original user query
-        answer: Generated answer
-        latency: Query processing latency in seconds
-        cache_hit: Whether response was cached
-        retrieved_docs_ids: Comma-separated document IDs used
-        input_tokens: Number of input tokens used
-        output_tokens: Number of output tokens used
-        model_name: LLM model name used
+    Dispatches task queueing in a daemon thread so broker outages never delay HTTP responses.
     """
-    try:
-        # Queue the logging task to run in background
-        log_query_run_and_cost.apply_async(
-            args=(
-                tenant_id,
-                query,
-                answer,
-                latency,
-                cache_hit,
-                retrieved_docs_ids,
-                input_tokens,
-                output_tokens,
-                model_name,
-            ),
-            queue="logging_queue",
-            routing_key="logging",
-        )
-        logger.debug(f"Queued logging task for query: {query[:50]}...")
-    except Exception as e:
-        logger.error(f"Failed to queue logging task: {e}")
-        # Log error but don't fail the response
+
+    def _enqueue():
+        try:
+            log_query_run_and_cost.apply_async(
+                args=(
+                    tenant_id,
+                    query,
+                    answer,
+                    latency,
+                    cache_hit,
+                    retrieved_docs_ids,
+                    input_tokens,
+                    output_tokens,
+                    model_name,
+                ),
+                queue="logging_queue",
+                routing_key="logging",
+                retry=False,
+            )
+            logger.debug(f"Queued logging task for query: {query[:50]}...")
+        except Exception as e:
+            logger.warning(f"Failed to queue logging task: {e}")
+
+    threading.Thread(target=_enqueue, daemon=True).start()

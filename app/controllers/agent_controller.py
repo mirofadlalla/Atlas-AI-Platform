@@ -16,6 +16,7 @@ from app.agent.core.graph import agent_app
 from app.agent.observability.metrics import agent_executions_total
 from app.agent.utils.run_cache import cache_run_result, get_cached_run_result
 from app.agent.utils.state_helpers import create_initial_state
+from app.memory.memory_manager import memory_manager
 from app.services.rag_services.agent_logging_service import trigger_agent_logging
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,15 @@ class AgentController:
                 user_id=current_user.id,
                 session_id=request.session_id,
             )
+
+            # Parallel non-blocking fast memory loading (Short-Term + Cached Semantic)
+            fast_context = await memory_manager.load_fast_context(
+                str(current_user.tenant_id),
+                str(current_user.id),
+                request.session_id,
+                request.question,
+            )
+            inputs.update(fast_context)
 
             # Cache hit — skip graph execution
             if request.run_id:

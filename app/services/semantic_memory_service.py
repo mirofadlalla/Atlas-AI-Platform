@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 from celery import shared_task
 
@@ -16,9 +17,6 @@ def extract_semantic_memory(
     self, question: str, answer: str, user_id: str, tenant_id: str
 ) -> list[str]:
     try:
-        # Import only in the worker task.  The extractor uses agent LLM helpers,
-        # whose package initialization builds the agent graph; importing it at
-        # module load time creates a route → task → agent → task cycle.
         from app.memory.memory_extractor import MemoryExtractor
 
         memory_ids = MemoryExtractor().extract_and_store(
@@ -42,17 +40,24 @@ def trigger_semantic_memory_extraction(
     """Dispatch extraction without adding latency to the user response."""
     if not question.strip() or not answer.strip():
         return
-    try:
-        extract_semantic_memory.apply_async(
-            args=(question, answer, str(user_id), str(tenant_id)),
-            queue="logging_queue",
-            routing_key="logging",
-        )
-        logger.info(
-            "Queued semantic memory extraction tenant=%s user=%s", tenant_id, user_id
-        )
-    except Exception as exc:
-        logger.warning("Could not queue semantic memory extraction: %s", exc)
+
+    def _enqueue():
+        try:
+            extract_semantic_memory.apply_async(
+                args=(question, answer, str(user_id), str(tenant_id)),
+                queue="logging_queue",
+                routing_key="logging",
+                retry=False,
+            )
+            logger.info(
+                "Queued semantic memory extraction tenant=%s user=%s",
+                tenant_id,
+                user_id,
+            )
+        except Exception as exc:
+            logger.warning("Could not queue semantic memory extraction: %s", exc)
+
+    threading.Thread(target=_enqueue, daemon=True).start()
 
 
 @shared_task

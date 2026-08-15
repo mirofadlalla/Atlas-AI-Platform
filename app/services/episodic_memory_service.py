@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 from celery import shared_task
 
@@ -41,17 +42,22 @@ def trigger_episode_write(
 ) -> None:
     if not session_id or not turns:
         return
-    try:
-        write_episode.apply_async(
-            args=(session_id, turns, str(user_id), str(tenant_id)),
-            queue="logging_queue",
-            routing_key="logging",
-        )
-        logger.info(
-            "Queued episodic memory write tenant=%s user=%s session=%s",
-            tenant_id,
-            user_id,
-            session_id,
-        )
-    except Exception as exc:
-        logger.warning("Could not queue episodic memory write: %s", exc)
+
+    def _enqueue():
+        try:
+            write_episode.apply_async(
+                args=(session_id, turns, str(user_id), str(tenant_id)),
+                queue="logging_queue",
+                routing_key="logging",
+                retry=False,
+            )
+            logger.info(
+                "Queued episodic memory write tenant=%s user=%s session=%s",
+                tenant_id,
+                user_id,
+                session_id,
+            )
+        except Exception as exc:
+            logger.warning("Could not queue episodic memory write: %s", exc)
+
+    threading.Thread(target=_enqueue, daemon=True).start()

@@ -7,12 +7,14 @@ Similar to query_logging_service but for agent-based interactions.
 """
 
 import logging
+import threading
+
+import requests
 from celery import shared_task
 
-from app.core.db import get_db
-from app.repositories.runs_repository import RunsRepository
 from app.repositories.cost_log_repository import CostLogRepository
-import requests
+from app.repositories.runs_repository import RunsRepository
+from app.core.db import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -32,28 +34,7 @@ def log_agent_run_and_cost(
     retrieved_docs: str = "",
     model_name: str = "Qwen2.5-1.5B",
 ):
-    """
-    Background task to log agent runs and costs to the database.
-
-    Also records Prometheus metrics via internal API webhook for monitoring.
-    Runs asynchronously to avoid blocking the response stream.
-    Retries up to 3 times on failure.
-
-    Args:
-        tenant_id: Tenant identifier
-        question: Original user question
-        final_answer: Generated final answer
-        latency: Total agent execution time in seconds
-        step_count: Number of reasoning steps taken
-        total_cost: Total cost accumulated
-        input_tokens: Total input tokens used
-        output_tokens: Total output tokens used
-        sql_queries: Executed SQL queries (comma-separated or JSON)
-        retrieved_docs: Retrieved document IDs (comma-separated)
-        model_name: LLM model name used
-    """
     try:
-        # Get a fresh database session for this task
         db = next(get_db())
 
         runs_repo = RunsRepository(db)
@@ -64,14 +45,12 @@ def log_agent_run_and_cost(
             query=question,
             answer=final_answer,
             latency=latency,
-            cache_hit=False,  # Agent runs are not cached
+            cache_hit=False,
             retrieved_docs_ids=retrieved_docs,
         )
 
-        # Calculate total cost from tokens
         cost_usd = (input_tokens * 0.0000001) + (output_tokens * 0.0000002)
 
-        # Save cost log if tokens were used
         if input_tokens > 0 or output_tokens > 0:
             cost_repo.create(
                 run_id=run.run_id,
@@ -89,7 +68,6 @@ def log_agent_run_and_cost(
                 f"Logged agent run {run.run_id} - Tenant: {tenant_id} (no token usage)"
             )
 
-        # Record Prometheus metrics via internal webhook so they register on the API server
         try:
             import os
             from app.core.config import settings
@@ -115,7 +93,6 @@ def log_agent_run_and_cost(
             if settings.internal_metrics_api_key:
                 headers["X-Internal-Token"] = settings.internal_metrics_api_key
 
-            # Fire and forget with short timeout
             response = requests.post(
                 webhook_url, json=payload, headers=headers, timeout=2.0
             )
@@ -132,14 +109,11 @@ def log_agent_run_and_cost(
             logger.error(
                 f"Error recording Prometheus agent metrics via webhook: {metric_error}"
             )
-            # Don't fail the entire task if metrics recording fails
 
-        # Clean up database session
         db.close()
 
     except Exception as exc:
         logger.error(f"Error logging agent run and cost: {exc}")
-        # Retry with exponential backoff
         raise self.retry(exc=exc, countdown=min(60 * (2**self.request.retries), 600))
 
 
@@ -158,43 +132,31 @@ def trigger_agent_logging(
 ) -> None:
     """
     Trigger background logging task for agent without blocking.
-
-    This function returns immediately, allowing the response to stream
-    while logging happens in the background.
-
-    Args:
-        tenant_id: Tenant identifier
-        question: Original user question
-        final_answer: Generated final answer
-        latency: Total agent execution time in seconds
-        step_count: Number of reasoning steps taken
-        total_cost: Total cost accumulated
-        input_tokens: Total input tokens used
-        output_tokens: Total output tokens used
-        sql_queries: Executed SQL queries (comma-separated or JSON)
-        retrieved_docs: Retrieved document IDs (comma-separated)
-        model_name: LLM model name used
+    Dispatches task queueing in a daemon thread so broker outages never delay HTTP responses.
     """
-    try:
-        # Queue the logging task to run in background
-        log_agent_run_and_cost.apply_async(
-            args=(
-                tenant_id,
-                question,
-                final_answer,
-                latency,
-                step_count,
-                total_cost,
-                input_tokens,
-                output_tokens,
-                sql_queries,
-                retrieved_docs,
-                model_name,
-            ),
-            queue="default",
-            routing_key="default",
-        )
-        logger.debug(f"Queued agent logging task for question: {question[:50]}...")
-    except Exception as e:
-        logger.error(f"Failed to queue agent logging task: {e}")
-        # Log error but don't fail the response
+
+    def _enqueue():
+        try:
+            log_agent_run_and_cost.apply_async(
+                args=(
+                    tenant_id,
+                    question,
+                    final_answer,
+                    latency,
+                    step_count,
+                    total_cost,
+                    input_tokens,
+                    output_tokens,
+                    sql_queries,
+                    retrieved_docs,
+                    model_name,
+                ),
+                queue="default",
+                routing_key="default",
+                retry=False,
+            )
+            logger.debug(f"Queued agent logging task for question: {question[:50]}...")
+        except Exception as e:
+            logger.warning(f"Failed to queue agent logging task: {e}")
+
+    threading.Thread(target=_enqueue, daemon=True).start()

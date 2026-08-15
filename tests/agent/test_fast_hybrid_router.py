@@ -1,10 +1,47 @@
 import pytest
+from app.agent.core.intent_regex_pattern import calculate_deterministic_route
 from app.agent.core.router import (
     evaluate_tool_sufficiency,
     fast_hybrid_router,
-    route_initial_intent,
+    route_target_path,
 )
 from app.agent.utils.state_helpers import create_initial_state
+
+
+def test_calculate_deterministic_route_greetings():
+    assert calculate_deterministic_route("Hello!") == "GREETING"
+    assert calculate_deterministic_route("السلام عليكم") == "GREETING"
+
+
+def test_calculate_deterministic_route_obvious_sql():
+    assert (
+        calculate_deterministic_route("How many users signed up last month?")
+        == "OBVIOUS_SQL"
+    )
+    assert (
+        calculate_deterministic_route("كم عدد المستخدمين المسجلين الشهر الماضي؟")
+        == "OBVIOUS_SQL"
+    )
+
+
+def test_calculate_deterministic_route_obvious_retrieval():
+    assert (
+        calculate_deterministic_route("What is our refund policy document?")
+        == "OBVIOUS_RETRIEVAL"
+    )
+    assert (
+        calculate_deterministic_route("ما هي سياسة الاسترجاع الخاصة بالشركة؟")
+        == "OBVIOUS_RETRIEVAL"
+    )
+
+
+def test_calculate_deterministic_route_conflicting_ambiguous():
+    assert (
+        calculate_deterministic_route(
+            "What is the policy for users who signed up last month?"
+        )
+        == "AMBIGUOUS"
+    )
 
 
 @pytest.mark.asyncio
@@ -13,7 +50,6 @@ async def test_fast_hybrid_router_greetings_zero_llm_calls():
     res = await fast_hybrid_router(state)
     assert res["intent"] == "GREETING"
     assert res["direct_response"] is not None
-    assert res["needs_short_term"] is False
 
 
 @pytest.mark.asyncio
@@ -34,24 +70,11 @@ async def test_fast_hybrid_router_obvious_retrieval():
     assert res["direct_response"] is None
 
 
-def test_route_initial_intent_without_memory():
-    state = {
-        "intent": "SIMPLE_SQL",
-        "needs_short_term": False,
-        "needs_semantic": False,
-        "needs_episodic": False,
-    }
-    assert route_initial_intent(state) == "sql_tool"
-
-
-def test_route_initial_intent_with_memory():
-    state = {
-        "intent": "SIMPLE_SQL",
-        "needs_short_term": True,
-        "needs_semantic": False,
-        "needs_episodic": False,
-    }
-    assert route_initial_intent(state) == "memory_loader"
+def test_route_target_path_direct_mapping():
+    assert route_target_path({"intent": "SIMPLE_SQL"}) == "sql_tool"
+    assert route_target_path({"intent": "SIMPLE_RETRIEVAL"}) == "retrieval_tool"
+    assert route_target_path({"intent": "GREETING"}) == "direct_answer"
+    assert route_target_path({"intent": "COMPLEX"}) == "decompose"
 
 
 def test_evaluate_tool_sufficiency_single_sql():

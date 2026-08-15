@@ -2,19 +2,20 @@
 Fast Hybrid Router and Deterministic Sufficiency Evaluator.
 
 Implements a 2-stage Hybrid Router:
-  Stage 1: Pure Deterministic Heuristics (Regex & Keywords, 0 LLM Calls)
+  Stage 1: Pure Deterministic Heuristics (Weighted Keyword Scoring Engine, 0 LLM Calls)
   Stage 2: Fallback LLM Intent Classifier (Invoked ONLY if Stage 1 is ambiguous)
 
-Also provides deterministic sufficiency rules to evaluate tool outputs without LLM calls.
+The Intent Router is strictly responsible for routing (intent classification).
+Context management is decoupled into MemoryManager.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import re
 
 from app.agent.core.config import agent_settings
+from app.agent.core.intent_regex_pattern import calculate_deterministic_route
 from app.agent.core.state import AgentState
 from app.agent.nodes.base import emit_node_status, emit_thought_chunk
 from app.agent.tools.base import tool_registry
@@ -23,95 +24,77 @@ from app.agent.utils.parsing import extract_first_json_block
 
 logger = logging.getLogger(__name__)
 
-# Regex Patterns for Stage 1 Deterministic Router
-_RE_GREETING = re.compile(
-    r"^(hi|hello|hey|good morning|good evening|thanks|thank you|who are you|what can you do)[\s!.]*$",
-    re.IGNORECASE,
-)
 
-_SQL_KEYWORDS = re.compile(
-    r"\b(how many|count of|total number|signed up|active users|table rows|database|sum of|average|list users|show users)\b",
-    re.IGNORECASE,
-)
+def _extract_action_history(state: AgentState) -> list[str]:
+    stored = state.get("action_history")
+    if stored:
+        return list(stored)
 
-_RETRIEVAL_KEYWORDS = re.compile(
-    r"\b(policy|documentation|manual|how to|guide|terms|contract|pdf|document|file)\b",
-    re.IGNORECASE,
-)
+    actions: list[str] = []
+    for obs in state.get("observation_history", []):
+        if obs.startswith("Decision = "):
+            action = obs.replace("Decision = ", "").split(" ")[0].strip()
+            if action:
+                actions.append(action)
+    return actions
 
 
-def _detect_memory_needs(question: str, session_id: str | None) -> dict[str, bool]:
-    """Calculate memory flags based on question content and session presence."""
-    q_lower = question.lower()
+def _detect_action_loop(actions: list[str]) -> bool:
+    window = agent_settings.loop_detection_window
+    recent = actions[-window:]
+    if len(recent) >= 2 and recent[-1] == recent[-2]:
+        return True
 
-    # Pronoun / conversational references require short-term memory
-    has_conversational_ref = bool(
-        re.search(r"\b(it|this|that|they|them|previous|above|before)\b", q_lower)
-    )
-    needs_short_term = bool(session_id) and has_conversational_ref
+    if len(recent) >= 4:
+        a, b, c, d = recent[-4], recent[-3], recent[-2], recent[-1]
+        if a == c and b == d and a != b:
+            return True
 
-    # User profile/preference references require semantic memory
-    needs_semantic = bool(
-        re.search(r"\b(my|i|favorite|prefer|my name|my role)\b", q_lower)
-    )
+    if len(recent) >= 6:
+        pattern = recent[-3:]
+        prev = recent[-6:-3]
+        if pattern == prev:
+            return True
 
-    # Past session references require episodic memory
-    needs_episodic = bool(
-        re.search(r"\b(last time|yesterday|past session|earlier chat)\b", q_lower)
-    )
-
-    return {
-        "needs_short_term": needs_short_term,
-        "needs_semantic": needs_semantic,
-        "needs_episodic": needs_episodic,
-    }
+    return False
 
 
 async def fast_hybrid_router(state: AgentState) -> dict:
     """
-    Stage 1: Pure Deterministic Check (0 LLM Calls).
-    Stage 2: Fallback LLM Classifier (1 Fast LLM Call ONLY if Stage 1 is Ambiguous).
+    Classify query intent using Weighted Scoring (Stage 1) or Fallback LLM Classifier (Stage 2).
     """
     question = state.get("question", "").strip()
-    session_id = state.get("session_id")
     tenant_id = state.get("tenant_id")
 
     await emit_node_status("fast_router", "Hybrid Router", "Analyzing query intent...")
 
-    # Stage 1: Deterministic Heuristic Engine
-    if _RE_GREETING.match(question):
+    det_route = calculate_deterministic_route(question)
+
+    if det_route == "GREETING":
         await emit_thought_chunk("[Router] Direct greeting match -> GREETING path.\n")
         return {
             "intent": "GREETING",
-            "needs_short_term": False,
-            "needs_semantic": False,
-            "needs_episodic": False,
             "direct_response": "Hello! I am your AI assistant. How can I help you today?",
         }
 
-    mem_flags = _detect_memory_needs(question, session_id)
-
-    if _SQL_KEYWORDS.search(question) and not _RETRIEVAL_KEYWORDS.search(question):
+    if det_route == "OBVIOUS_SQL":
         await emit_thought_chunk(
-            "[Router] Deterministic metric/SQL match -> SIMPLE_SQL path.\n"
+            "[Router] High-confidence weighted scoring match -> SIMPLE_SQL path.\n"
         )
         return {
             "intent": "SIMPLE_SQL",
             "direct_response": None,
-            **mem_flags,
         }
 
-    if _RETRIEVAL_KEYWORDS.search(question) and not _SQL_KEYWORDS.search(question):
+    if det_route == "OBVIOUS_RETRIEVAL":
         await emit_thought_chunk(
-            "[Router] Deterministic document match -> SIMPLE_RETRIEVAL path.\n"
+            "[Router] High-confidence weighted scoring match -> SIMPLE_RETRIEVAL path.\n"
         )
         return {
             "intent": "SIMPLE_RETRIEVAL",
             "direct_response": None,
-            **mem_flags,
         }
 
-    # Stage 2: Fallback LLM Classifier (For Ambiguous / Unknown Prompts ONLY)
     await emit_thought_chunk(
         "[Router] Ambiguous prompt -> Invoking Fallback Intent Classifier...\n"
     )
@@ -138,38 +121,14 @@ async def fast_hybrid_router(state: AgentState) -> dict:
         logger.warning("Fallback classifier failed: %s, defaulting to DIRECT_QA", exc)
         intent = "DIRECT_QA"
 
-    if intent == "COMPLEX":
-        mem_flags = {
-            "needs_short_term": True,
-            "needs_semantic": True,
-            "needs_episodic": True,
-        }
-
     return {
         "intent": intent,
         "direct_response": None,
-        **mem_flags,
     }
 
 
-# Routing Condition Functions for LangGraph Edges
-
-
-def route_initial_intent(state: AgentState) -> str:
-    """Decide whether to load memory first or go straight to target node."""
-    needs_mem = (
-        state.get("needs_short_term")
-        or state.get("needs_semantic")
-        or state.get("needs_episodic")
-    )
-    if needs_mem:
-        return "memory_loader"
-
-    return route_target_path(state)
-
-
 def route_target_path(state: AgentState) -> str:
-    """Map state intent directly to target processing node (No Router Re-evaluation)."""
+    """Map state intent directly to target processing node."""
     intent = state.get("intent", "DIRECT_QA")
     if intent in ("GREETING", "DIRECT_QA"):
         return "direct_answer"
@@ -183,13 +142,8 @@ def route_target_path(state: AgentState) -> str:
 
 
 def evaluate_tool_sufficiency(state: AgentState) -> str:
-    """
-    Deterministic Sufficiency Evaluator (Python Code Only — 0 LLM Calls).
-    Determines if single-pass tool output is sufficient to jump to synthesis.
-    """
     intent = state.get("intent", "DIRECT_QA")
 
-    # If in multi-step complex mode, pass to agent planner
     if intent == "COMPLEX":
         return "INSUFFICIENT"
 
@@ -207,7 +161,6 @@ def evaluate_tool_sufficiency(state: AgentState) -> str:
 
 
 def route_action(state: AgentState) -> str:
-    """Agentic Re-Act Planner routing for complex / escalated queries."""
     last_action = state.get("last_action", "finish")
     step_count = state.get("step_count", 0)
 
@@ -215,6 +168,10 @@ def route_action(state: AgentState) -> str:
         return "finish"
 
     if last_action not in tool_registry.list_tools() + ["finish"]:
+        return "finish"
+
+    if _detect_action_loop(_extract_action_history(state)):
+        logger.info("Action loop detected → finish")
         return "finish"
 
     if last_action == "sql":
