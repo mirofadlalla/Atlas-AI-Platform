@@ -6,6 +6,7 @@ route handlers stay thin HTTP adapters.
 """
 
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 from app.services.auth_services.auth_admin_service import AuthService
 from app.schema.auth_admin import UserCreate, UserLogin
 
@@ -93,13 +94,25 @@ class AuthController:
 
         return InvitationManagementService(db).resend_invitation(token)
 
+    @staticmethod
+    def delete_invitation(invitation_id: str, tenant_id: str, db: Session):
+        from app.repositories.invitation_repository import InvitationRepository
+
+        invitation = InvitationRepository(db).get_by_id(invitation_id)
+        # Tenant admins may revoke any invitation in their own tenant, even if
+        # another tenant admin originally created it.
+        if not invitation or str(invitation.tenant_id) != str(tenant_id):
+            raise HTTPException(status_code=404, detail="Invitation not found")
+        InvitationRepository(db).delete(invitation_id)
+        return {"status": "deleted"}
+
     # ── Admin approval workflow ─────────────────────────────────────────────
 
     @staticmethod
-    def get_pending_approvals(db: Session):
+    def get_pending_approvals(tenant_id: str, db: Session):
         from app.services.user_approval_service import UserApprovalService
 
-        pending_users = UserApprovalService(db).get_pending_approvals()
+        pending_users = UserApprovalService(db).get_pending_approvals(str(tenant_id))
         return {
             "total": len(pending_users),
             "pending_users": [

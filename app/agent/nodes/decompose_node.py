@@ -80,7 +80,7 @@ async def decompose_node(state: AgentState) -> dict:
 
         await emit_thought_chunk(
             f"\n[Decompose] Sub-question(s) created ({len(sub_questions)}):\n"
-            + "\n".join(f"  {i+1}. {sq}" for i, sq in enumerate(sub_questions))
+            + "\n".join(f"  {i + 1}. {sq}" for i, sq in enumerate(sub_questions))
             + "\n"
         )
 

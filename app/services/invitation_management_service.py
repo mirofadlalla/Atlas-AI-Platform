@@ -141,7 +141,10 @@ class InvitationManagementService:
             # is the authoritative tenant binding.
             tenant_id = details.get("tenant_id")
             if not tenant_id:
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not determine tenant from invitation")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Could not determine tenant from invitation",
+                )
 
             # Extract name from invitation or use email prefix if not provided
             if not name:

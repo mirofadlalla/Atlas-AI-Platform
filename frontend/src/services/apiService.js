@@ -402,6 +402,11 @@ class ApiService {
     return this.handleResponse(response);
   }
 
+  async deleteInvitation(invitationId) {
+    const response = await fetch(`${this.baseURL}/auth/invitations/${invitationId}`, { method: 'DELETE', headers: this.getHeaders() });
+    return this.handleResponse(response);
+  }
+
   // Recommended Q&A Endpoints
   async getRecommendedQuestions() {
     const response = await fetch(`${this.baseURL}/recommended-qa`, {

@@ -13,7 +13,10 @@ from app.agent.tools.sql_engine.validator import SQLValidator
 from app.agent.utils.result_formatting import format_sql_results
 from app.agent.utils.state_helpers import get_current_question
 from app.core.db import get_db_session
-from app.services.tenant_database_service import TenantDatabaseError, tenant_database_manager
+from app.services.tenant_database_service import (
+    TenantDatabaseError,
+    tenant_database_manager,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,37 +30,89 @@ class SQLTool(AgentTool):
         question = get_current_question(state)
         try:
             # The tenant id is populated from the authenticated controller, never LLM output.
-            tenant_id = state["tenant_id"]
-            with get_db_session() as atlas_db:
-                metadata = tenant_database_manager.schema(atlas_db, tenant_id)
-                tables = metadata["tables"]
-                schema_text = "\n".join(
-                    f"{name}(" + ", ".join(f"{c['name']} {c['type']}" for c in value["columns"]) + ")"
-                    for name, value in tables.items()
-                )
-                relationships = metadata.get("relationships", [])
-                if relationships:
-                    schema_text += "\n\nRELATIONSHIPS:\n" + "\n".join(
-                        f"{r['from_table']}.{', '.join(r['from_columns'])} -> "
-                        f"{r['to_table']}.{', '.join(r['to_columns'])}"
-                        for r in relationships
+            tenant_id = state.get("tenant_id", "")
+            has_tenant_db = False
+            tables = None
+            allowed_columns = None
+            dialect = "postgres"
+
+            try:
+                with get_db_session() as atlas_db:
+                    config = tenant_database_manager._configuration(atlas_db, tenant_id)
+                    metadata = tenant_database_manager.schema(atlas_db, tenant_id)
+                    tables = metadata["tables"]
+                    schema_text = "\n".join(
+                        f"{name}("
+                        + ", ".join(
+                            f"{c['name']} {c['type']}" for c in value["columns"]
+                        )
+                        + ")"
+                        for name, value in tables.items()
                     )
-                allowed_columns = {column["name"] for value in tables.values() for column in value["columns"]}
-                raw_sql = generate_sql(question, tenant_id=tenant_id, schema=schema_text)
-                config = tenant_database_manager._configuration(atlas_db, tenant_id)
-                dialect = "mysql" if config.database_type == "mysql" else "postgres"
+                    relationships = metadata.get("relationships", [])
+                    if relationships:
+                        schema_text += "\n\nRELATIONSHIPS:\n" + "\n".join(
+                            f"{r['from_table']}.{', '.join(r['from_columns'])} -> "
+                            f"{r['to_table']}.{', '.join(r['to_columns'])}"
+                            for r in relationships
+                        )
+                    allowed_columns = {
+                        column["name"]
+                        for value in tables.values()
+                        for column in value["columns"]
+                    }
+                    raw_sql = generate_sql(
+                        question, tenant_id=tenant_id, schema=schema_text
+                    )
+                    dialect = "mysql" if config.database_type == "mysql" else "postgres"
+                    has_tenant_db = True
+            except Exception:
+                raw_sql = generate_sql(question, tenant_id=tenant_id)
+
             safe_sql, params = SQLValidator.validate_and_enforce_tenant(
                 raw_sql,
                 tenant_id,
-                allowed_tables=set(tables),
+                allowed_tables=set(tables) if tables is not None else None,
                 allowed_columns=allowed_columns,
-                inject_tenant_filter=False,
+                inject_tenant_filter=not has_tenant_db,
                 dialect=dialect,
             )
-            with get_db_session() as atlas_db, tenant_database_manager.get_connection(atlas_db, tenant_id) as connection:
-                if config.database_type == "postgresql":
-                    connection.execute(text(f"SET LOCAL statement_timeout = '{int(agent_settings.sql_query_timeout_seconds * 1000)}'"))
-                rows = list(connection.execute(text(safe_sql), params).fetchall())
+
+            # Pre-execution cost gate
+            cost, _ = SQLValidator.explain_and_execute(safe_sql, params, execute=False)
+            if cost > agent_settings.sql_max_allowed_cost:
+                msg = (
+                    f"Error: Query is too expensive (cost={cost}). "
+                    "Please ask a more specific question."
+                )
+                return ToolResult(
+                    observation=msg,
+                    state_updates={
+                        "sql_attempted": True,
+                        "sql_has_results": False,
+                    },
+                )
+
+            if has_tenant_db:
+                with (
+                    get_db_session() as atlas_db,
+                    tenant_database_manager.get_connection(
+                        atlas_db, tenant_id
+                    ) as connection,
+                ):
+                    if dialect == "postgres":
+                        connection.execute(
+                            text(
+                                f"SET LOCAL statement_timeout = '{int(agent_settings.sql_query_timeout_seconds * 1000)}'"
+                            )
+                        )
+                    rows = list(connection.execute(text(safe_sql), params).fetchall())
+            else:
+                _, rows = SQLValidator.explain_and_execute(
+                    safe_sql, params, execute=True
+                )
+
+            rows = rows[: agent_settings.sql_max_rows]
             result_str, has_data = format_sql_results(rows)
             observation = f"[DATABASE] SQL executed:\n{result_str}"
 
@@ -69,12 +124,18 @@ class SQLTool(AgentTool):
                     "sql_result": result_str if has_data else None,
                     "sql_attempted": True,
                     "sql_has_results": has_data,
-                    "total_cost": state.get("total_cost", 0.0),
+                    "total_cost": state.get("total_cost", 0.0)
+                    + (
+                        cost if cost != agent_settings.sql_cost_unknown_default else 0.0
+                    ),
                 },
             )
         except TenantDatabaseError as exc:
             logger.warning("Tenant SQL tool unavailable: %s", exc.code)
-            return ToolResult(observation=f"Error: {exc.code}", state_updates={"sql_attempted": True, "sql_has_results": False})
+            return ToolResult(
+                observation=f"Error: {exc.code}",
+                state_updates={"sql_attempted": True, "sql_has_results": False},
+            )
         except ValueError as exc:
             logger.error("SQL validation error: %s", exc)
             return ToolResult(

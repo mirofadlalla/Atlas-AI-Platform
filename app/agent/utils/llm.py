@@ -8,7 +8,13 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from typing import Literal
 
-from langchain_core.callbacks import adispatch_custom_event
+try:
+    from langchain_core.callbacks import adispatch_custom_event
+except ImportError:  # langchain-core < 0.2 has no custom-event API
+
+    async def adispatch_custom_event(*_args, **_kwargs):
+        return None
+
 
 from app.agent.core.config import agent_settings
 from app.agent.observability.metrics import (

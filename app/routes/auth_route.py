@@ -118,6 +118,16 @@ def resend_invitation(
     return AuthController.resend_invitation(request.token, db)
 
 
+@router.delete("/invitations/{invitation_id}")
+def delete_invitation(
+    invitation_id: str,
+    current_admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Permanently invalidate and delete an invitation owned by this admin."""
+    return AuthController.delete_invitation(invitation_id, current_admin.tenant_id, db)
+
+
 # ==================== Admin Approval Workflow ====================
 
 
@@ -126,7 +136,7 @@ def get_pending_approvals(
     current_admin=Depends(require_admin), db: Session = Depends(get_db)
 ):
     """Get list of pending user approvals (admin only)."""
-    return AuthController.get_pending_approvals(db)
+    return AuthController.get_pending_approvals(current_admin.tenant_id, db)
 
 
 @router.post("/approve-user/{user_id}")

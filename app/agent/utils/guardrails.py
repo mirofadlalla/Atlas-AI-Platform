@@ -67,15 +67,15 @@ _INJECTION_PATTERNS = (
     r"<\|?\s*system\s*\|?>",
     r"\[INST\]",
     r"###\s*(system|instruction|prompt|human|assistant)",
-    r"</?s>",                     # SentencePiece boundary tokens
-    r"<\|im_start\|>",           # ChatML tokens
+    r"</?s>",  # SentencePiece boundary tokens
+    r"<\|im_start\|>",  # ChatML tokens
     r"<\|im_end\|>",
     # ── New task / instruction injection ─────────────────────────────────────
     r"new\s+(task|instruction|command|directive)\s*:",
     r"(your|the)\s+(real|actual|true|primary)\s+(task|goal|purpose|objective|job)\s+is",
     r"instead\s*,?\s*(please\s+)?(do|say|write|generate|produce|output)",
     # ── Jailbreak openers ────────────────────────────────────────────────────
-    r"DAN\b",                     # "Do Anything Now"
+    r"DAN\b",  # "Do Anything Now"
     r"jailbreak",
     r"developer\s+mode",
     r"no\s+restrictions?\s+(mode|enabled|on)",

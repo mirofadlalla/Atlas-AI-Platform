@@ -47,6 +47,7 @@ except ImportError:  # pragma: no cover — tiktoken not installed
 # Char / token budget helpers
 # ---------------------------------------------------------------------------
 
+
 def truncate_to_char_budget(
     text: str, max_chars: int, suffix: str = "\n...[truncated]"
 ) -> str:

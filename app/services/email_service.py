@@ -9,7 +9,9 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def send_email_task(self, to_email: str, subject: str, body_html: str, body_text: str | None = None) -> bool:
+def send_email_task(
+    self, to_email: str, subject: str, body_html: str, body_text: str | None = None
+) -> bool:
     """Durable SMTP delivery outside the FastAPI process."""
     try:
         return EmailService._send_email_sync(to_email, subject, body_html, body_text)
@@ -29,14 +31,21 @@ class EmailService:
         logs the email content so tokens are visible in development logs.
         """
         try:
-            send_email_task.apply_async(args=(to_email, subject, body_html, body_text), queue="logging_queue", routing_key="logging", retry=False)
+            send_email_task.apply_async(
+                args=(to_email, subject, body_html, body_text),
+                queue="logging_queue",
+                routing_key="logging",
+                retry=False,
+            )
         except Exception:
             logger.exception("Could not queue email delivery")
             return False
         return True
 
     @staticmethod
-    def _send_email_sync(to_email: str, subject: str, body_html: str, body_text: str = None) -> bool:
+    def _send_email_sync(
+        to_email: str, subject: str, body_html: str, body_text: str = None
+    ) -> bool:
         """SMTP worker invoked by Celery."""
         if not settings.smtp_username or not settings.smtp_password:
             logger.warning(

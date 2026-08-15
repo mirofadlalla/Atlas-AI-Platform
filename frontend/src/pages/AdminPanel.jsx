@@ -97,6 +97,12 @@ function AdminPanel({ user }) {
     }
   };
 
+  const handleDeleteInvitation = async (id) => {
+    if (!window.confirm('Delete this invitation token? The link will stop working immediately.')) return;
+    try { await apiService.deleteInvitation(id); loadData(); }
+    catch (err) { alert('Could not delete invitation: ' + getErrorMessage(err)); }
+  };
+
   const handleSendInvitation = async (e) => {
     e.preventDefault();
     if (!email.trim()) return;
@@ -236,6 +242,9 @@ function AdminPanel({ user }) {
                           </button>
                         </p>
                       )}
+                      <button className="btn-danger" onClick={() => handleDeleteInvitation(inv.invitation_id)}>
+                        Delete invitation
+                      </button>
                     </div>
                   </div>
                 ))}

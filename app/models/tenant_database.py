@@ -11,7 +11,9 @@ class TenantDatabase(Base):
     __tablename__ = "tenant_databases"
 
     id = Column(String(36), primary_key=True)
-    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, unique=True, index=True)
+    tenant_id = Column(
+        String(36), ForeignKey("tenants.id"), nullable=False, unique=True, index=True
+    )
     database_type = Column(String(32), nullable=False)
     host = Column(String(255), nullable=False)
     port = Column(Integer, nullable=False)
@@ -27,4 +29,6 @@ class TenantDatabase(Base):
     schema_metadata = Column(Text, nullable=True)
     schema_updated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )

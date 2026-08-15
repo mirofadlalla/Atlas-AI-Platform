@@ -26,11 +26,11 @@ _DATA_KEYWORDS = (
     "sales",
     "statistics",
     "database",
-    "كم",          # Arabic: "how many"
-    "عدد",         # Arabic: "count/number"
-    "مجموع",       # Arabic: "total/sum"
-    "متوسط",       # Arabic: "average"
-    "إجمالي",      # Arabic: "total"
+    "كم",  # Arabic: "how many"
+    "عدد",  # Arabic: "count/number"
+    "مجموع",  # Arabic: "total/sum"
+    "متوسط",  # Arabic: "average"
+    "إجمالي",  # Arabic: "total"
 )
 
 _KNOWLEDGE_KEYWORDS = (
@@ -42,11 +42,11 @@ _KNOWLEDGE_KEYWORDS = (
     "definition",
     "information",
     "policy",
-    "ما هو",       # Arabic: "what is"
-    "اشرح",        # Arabic: "explain"
-    "وصف",         # Arabic: "describe"
-    "لماذا",       # Arabic: "why"
-    "تعريف",       # Arabic: "definition"
+    "ما هو",  # Arabic: "what is"
+    "اشرح",  # Arabic: "explain"
+    "وصف",  # Arabic: "describe"
+    "لماذا",  # Arabic: "why"
+    "تعريف",  # Arabic: "definition"
 )
 
 # Router routes that unambiguously signal SQL intent.

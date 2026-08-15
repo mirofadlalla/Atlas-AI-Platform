@@ -25,7 +25,9 @@ async def test_memory_write_queues_a_fact_as_the_completed_turn():
         patch("app.agent.nodes.memory_nodes.ShortTermMemory", return_value=memory),
         patch("app.agent.nodes.memory_nodes.emit_node_status", new=AsyncMock()),
         patch("app.agent.nodes.memory_nodes.emit_thought_chunk", new=AsyncMock()),
-        patch("app.agent.nodes.memory_nodes.trigger_semantic_memory_extraction") as semantic,
+        patch(
+            "app.agent.nodes.memory_nodes.trigger_semantic_memory_extraction"
+        ) as semantic,
         patch("app.agent.nodes.memory_nodes.trigger_episode_write") as episodic,
     ):
         await memory_write_node(state)
@@ -65,7 +67,9 @@ async def test_memory_write_does_not_queue_long_term_writes_for_a_normal_turn():
         patch("app.agent.nodes.memory_nodes.ShortTermMemory", return_value=memory),
         patch("app.agent.nodes.memory_nodes.emit_node_status", new=AsyncMock()),
         patch("app.agent.nodes.memory_nodes.emit_thought_chunk", new=AsyncMock()),
-        patch("app.agent.nodes.memory_nodes.trigger_semantic_memory_extraction") as semantic,
+        patch(
+            "app.agent.nodes.memory_nodes.trigger_semantic_memory_extraction"
+        ) as semantic,
         patch("app.agent.nodes.memory_nodes.trigger_episode_write") as episodic,
     ):
         await memory_write_node(state)

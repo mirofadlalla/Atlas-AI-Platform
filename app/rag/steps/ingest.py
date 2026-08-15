@@ -26,7 +26,9 @@ def main(text: str, my_metadata: dict):
     try:
         chunks_with_metadata = structured_chunks(text, my_metadata)
         if chunks_with_metadata is None:
-            chunks_with_metadata = SemanticChunkingFunction.process_document(text, my_metadata)
+            chunks_with_metadata = SemanticChunkingFunction.process_document(
+                text, my_metadata
+            )
     except Exception as e:
         logger.error(f"Chunking failed: {e}")
         import traceback

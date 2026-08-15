@@ -7,8 +7,6 @@ Create Date: 2026-08-08 23:10:00.000000
 """
 
 from typing import Sequence, Union
-from alembic import op
-import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "merge_episodes_and_tracker_uuid"

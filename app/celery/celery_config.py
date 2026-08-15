@@ -54,6 +54,10 @@ celery_app.conf.task_routes = {
         "queue": "logging_queue",
         "routing_key": "logging",
     },
+    "app.services.email_service.send_email_task": {
+        "queue": "logging_queue",
+        "routing_key": "logging",
+    },
 }
 
 # =========================
@@ -98,6 +102,7 @@ celery_app.conf.imports = (
     "app.services.rag_services.query_logging_service",
     "app.services.rag_services.eval_pipline",
     "app.services.rag_services.ingest_rag_service",
+    "app.services.email_service",
 )
 
 # scheduled task like every 24 hours do that

@@ -149,9 +149,7 @@ class SQLValidator:
         ):  # root must be select or union
             raise ValueError("Security violation: only SELECT queries are allowed")
 
-        for (
-            node
-        ) in (
+        for node in (
             parsed.walk()
         ):  # امشي داخل الشجرة كلها، ولو لقيت أي operation خطيرة ارفضها.
             if isinstance(node, _FORBIDDEN_EXPRESSIONS):
@@ -195,7 +193,10 @@ class SQLValidator:
         if inject_tenant_filter:
             SQLValidator._inject_tenant_top_level(parsed)
         if not parsed.args.get("limit"):
-            parsed.set("limit", exp.Limit(expression=exp.Literal.number(agent_settings.sql_max_rows)))
+            parsed.set(
+                "limit",
+                exp.Limit(expression=exp.Literal.number(agent_settings.sql_max_rows)),
+            )
         sql = parsed.sql(dialect=dialect)
         params = {"tenant_id": tenant_id} if inject_tenant_filter else {}
         logger.debug("Tenant-enforced SQL prepared")

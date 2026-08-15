@@ -44,9 +44,7 @@ def get_schema_description(
     # Build a cache key that is tenant-specific so tenants with different table
     # configurations never share a cached schema description.
     tenant_label = tenant_id or "__global__"
-    tables_label = (
-        ",".join(sorted(effective_tables)) if effective_tables else "__all__"
-    )
+    tables_label = ",".join(sorted(effective_tables)) if effective_tables else "__all__"
     cache_key = f"{tenant_label}:{tables_label}"
 
     now = time.time()

@@ -5,7 +5,13 @@ from __future__ import annotations
 import logging
 import time
 
-from langchain_core.callbacks import adispatch_custom_event
+try:
+    from langchain_core.callbacks import adispatch_custom_event
+except ImportError:  # CI pins langchain-core 0.1.x
+
+    async def adispatch_custom_event(*_args, **_kwargs):
+        return None
+
 
 from app.agent.core.state import AgentState
 from app.agent.observability.metrics import (

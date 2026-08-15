@@ -38,7 +38,10 @@ class TokenCounter:
             raise ValueError("token_size must be greater than overlap")
         if self._encoding:
             tokens = self._encoding.encode(text)
-            return [self._encoding.decode(tokens[start : start + token_size]) for start in range(0, len(tokens), token_size - overlap)]
+            return [
+                self._encoding.decode(tokens[start : start + token_size])
+                for start in range(0, len(tokens), token_size - overlap)
+            ]
         # Only used when tiktoken is unavailable; preserves the same bounded-window contract.
         width, step = token_size * 4, (token_size - overlap) * 4
         return [text[start : start + width] for start in range(0, len(text), step)]

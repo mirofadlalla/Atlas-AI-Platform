@@ -25,14 +25,18 @@ async def test_short_term_reloads_while_long_term_context_is_cached(monkeypatch)
     manager.short_term.load = lambda *_: short_term_calls.append(1) or [
         {"role": "user", "content": f"turn {len(short_term_calls)}"}
     ]
-    manager.semantic.recall = lambda *args: semantic_calls.append(args) or ["Prefers Arabic"]
+    manager.semantic.recall = lambda *args: semantic_calls.append(args) or [
+        "Prefers Arabic"
+    ]
     manager.episodic.get_recent = lambda *args, **kwargs: episodic_calls.append(
         (args, kwargs)
     ) or ["Previous session summary"]
     monkeypatch.setattr(manager, "_redis_client", lambda: redis)
 
     first = await manager.load_fast_context("tenant-1", "user-1", "session-1", "first")
-    second = await manager.load_fast_context("tenant-1", "user-1", "session-1", "second")
+    second = await manager.load_fast_context(
+        "tenant-1", "user-1", "session-1", "second"
+    )
 
     assert first["conversation_history"] != second["conversation_history"]
     assert len(short_term_calls) == 2

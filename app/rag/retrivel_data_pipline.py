@@ -1,8 +1,35 @@
-import threading
-import logging
 import hashlib
+import logging
+import threading
 import time
+
 from cachetools import TTLCache
+from sqlalchemy.orm import Session
+
+try:
+    from langchain_core.prompts import ChatPromptTemplate
+except (ImportError, ModuleNotFoundError):
+    from langchain.prompts import ChatPromptTemplate
+
+from app.core.config import settings
+from app.core.monitors import (
+    cache_hits_total,
+    reranking_duration_seconds,
+    reranking_queries_total,
+    retrieved_chunks_count,
+    vector_search_duration_seconds,
+    vector_search_queries_total,
+)
+from app.design_pattern.embedded_model import EmbeddedModel
+from app.memory.working_memory import WorkingMemory
+from app.rag.rerankers import RankingService
+from app.rag.steps.retriever import get_retriever
+from app.repositories.cost_log_repository import CostLogRepository
+from app.repositories.runs_repository import RunsRepository
+from app.services.llm_runner import CustomLocalLLM
+from app.services.rag_services.query_logging_service import trigger_query_logging
+
+logger = logging.getLogger(__name__)
 
 create_retrieval_chain = None
 create_stuff_documents_chain = None
@@ -73,32 +100,6 @@ if create_retrieval_chain is None:
 
         return _RetrievalChain(retriever, document_chain)
 
-
-try:
-    from langchain_core.prompts import ChatPromptTemplate
-except (ImportError, ModuleNotFoundError):
-    from langchain.prompts import ChatPromptTemplate
-from sqlalchemy.orm import Session
-
-from app.core.config import settings
-from app.core.monitors import (
-    cache_hits_total,
-    reranking_duration_seconds,
-    reranking_queries_total,
-    retrieved_chunks_count,
-    vector_search_duration_seconds,
-    vector_search_queries_total,
-)
-from app.design_pattern.embedded_model import EmbeddedModel
-from app.memory.working_memory import WorkingMemory
-from app.rag.rerankers import RankingService
-from app.repositories.cost_log_repository import CostLogRepository
-from app.repositories.runs_repository import RunsRepository
-from app.rag.steps.retriever import get_retriever
-from app.services.llm_runner import CustomLocalLLM
-from app.services.rag_services.query_logging_service import trigger_query_logging
-
-logger = logging.getLogger(__name__)
 
 # Initialize the embedding model singleton once at module load time
 _embedding_model = EmbeddedModel()

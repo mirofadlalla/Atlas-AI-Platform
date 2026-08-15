@@ -91,7 +91,9 @@ class EmbeddedModel(Embeddings):
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         self.local_model = SentenceTransformer(self.bge_model_name, device=device)
-        logger.info("Loaded Hugging Face embedding model %s on %s", self.bge_model_name, device)
+        logger.info(
+            "Loaded Hugging Face embedding model %s on %s", self.bge_model_name, device
+        )
 
     def _call_bge_m3(self, texts: List[str]) -> List[List[float]]:
         self._load_bge_model()

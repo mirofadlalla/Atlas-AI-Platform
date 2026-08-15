@@ -14,7 +14,7 @@ from app.services.semantic_memory_service import trigger_semantic_memory_extract
 logger = logging.getLogger(__name__)
 
 _IMPORTANT_FACT_PATTERN = re.compile(
-    r"\b(my\s+name\s+is|i\s+prefer|my\s+favorite|remember\s+that|i\s+live\s+in|اسمي|أنا\s+أفضل|فضلاً\s+احفظ|تذكر\s+أن)\b",
+    r"\b(my\s+name\s+is|i\s+prefer|my\s+preferred|my\s+favorite|remember\s+that|i\s+live\s+in|اسمي|أنا\s+أفضل|فضلاً\s+احفظ|تذكر\s+أن)\b",
     re.IGNORECASE,
 )
 
@@ -46,9 +46,9 @@ def should_trigger_memory_extraction(
     user_turns = turn_count // 2
     if user_turns > 0 and user_turns % 10 == 0 and (turn_count % 2 == 0):
         return True
-    if _IMPORTANT_FACT_PATTERN.search(question) or _ARABIC_IMPORTANT_FACT_PATTERN.search(
+    if _IMPORTANT_FACT_PATTERN.search(
         question
-    ):
+    ) or _ARABIC_IMPORTANT_FACT_PATTERN.search(question):
         return True
     return False
 
