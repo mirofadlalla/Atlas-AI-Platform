@@ -18,6 +18,15 @@ _IMPORTANT_FACT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Keep Arabic trigger phrases as Unicode escapes so this source remains
+# encoding-safe on Windows shells and in background workers.
+_ARABIC_IMPORTANT_FACT_PATTERN = re.compile(
+    r"(?:\u0627\u0633\u0645\u064a|\u0623\u0646\u0627\s+\u0623\u0641\u0636\u0644|"
+    r"\u0623\u0639\u064a\u0634\s+\u0641\u064a|\u0627\u062d\u0641\u0638\s+\u0623\u0646|"
+    r"\u062a\u0630\u0643\u0631\s+\u0623\u0646)",
+    re.IGNORECASE,
+)
+
 
 def should_trigger_memory_extraction(
     question: str,
@@ -37,7 +46,9 @@ def should_trigger_memory_extraction(
     user_turns = turn_count // 2
     if user_turns > 0 and user_turns % 10 == 0 and (turn_count % 2 == 0):
         return True
-    if _IMPORTANT_FACT_PATTERN.search(question):
+    if _IMPORTANT_FACT_PATTERN.search(question) or _ARABIC_IMPORTANT_FACT_PATTERN.search(
+        question
+    ):
         return True
     return False
 
@@ -127,13 +138,21 @@ async def memory_write_node(state: AgentState) -> dict:
             session_id,
         )
 
-    history = memory.load(*args)
-    turn_count = len(history)
+    # Short-term memory is the live, per-request conversational source.  Give
+    # the long-term writers only the just-completed exchange so they do not
+    # repeatedly process the whole session when a long-term write is needed.
+    completed_turn = [
+        {"role": "user", "content": question},
+        {"role": "assistant", "content": answer},
+    ]
+    turn_count = len(state.get("conversation_history", [])) + 1 + int(bool(answer))
     session_ended = bool(state.get("session_ended", False))
 
-    if should_trigger_memory_extraction(question, answer, turn_count, session_ended):
+    if answer and should_trigger_memory_extraction(
+        question, answer, turn_count, session_ended
+    ):
         await emit_thought_chunk(
-            "[Memory Write] Milestone reached -> Triggering background semantic fact & episodic summary extraction.\n"
+            "[Memory Write] Long-term memory trigger matched -> Queuing semantic fact and episodic writes for this completed turn.\n"
         )
         trigger_semantic_memory_extraction(
             question,
@@ -143,17 +162,13 @@ async def memory_write_node(state: AgentState) -> dict:
         )
         trigger_episode_write(
             session_id,
-            state.get("conversation_history", [])
-            + [
-                {"role": "user", "content": question},
-                {"role": "assistant", "content": answer},
-            ],
+            completed_turn,
             user_id,
             tenant_id,
         )
     else:
         await emit_thought_chunk(
-            "[Memory Write] Short-term turn saved to Redis. (Background extraction deferred to milestone/fact trigger).\n"
+            "[Memory Write] Short-term turn saved; long-term extraction deferred until an explicit fact, session end, or 10-turn milestone.\n"
         )
 
     return {}

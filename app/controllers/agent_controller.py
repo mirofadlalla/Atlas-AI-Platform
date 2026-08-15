@@ -243,6 +243,17 @@ class AgentController:
             user_id=current_user.id,
             session_id=request.session_id,
         )
+        # Match the streaming path: short-term history is refreshed for every
+        # request; semantic and episodic memories are read from the session
+        # cache after the first request.
+        inputs.update(
+            await memory_manager.load_fast_context(
+                str(current_user.tenant_id),
+                str(current_user.id),
+                request.session_id,
+                request.question,
+            )
+        )
         if request.run_id:
             inputs["run_id"] = request.run_id
             cached = get_cached_run_result(request.run_id, tenant_id=str(current_user.tenant_id))

@@ -91,6 +91,13 @@ const AgentPage = () => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      // State setters are asynchronous, so values captured by this streaming
+      // function become stale while answer chunks arrive. Keep the current
+      // request's aggregates locally to avoid adding the same thought once for
+      // every answer chunk.
+      let streamedThought = '';
+      let streamedAnswer = '';
+      let thoughtCommitted = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -115,7 +122,8 @@ const AgentPage = () => {
 
               switch (data.type) {
                 case 'thought':
-                  setCurrentThought((prev) => prev + toString(data.content));
+                  streamedThought += toString(data.content);
+                  setCurrentThought(streamedThought);
                   break;
 
                 case 'tool_start':
@@ -135,15 +143,18 @@ const AgentPage = () => {
                   break;
 
                 case 'answer':
-                  if (currentThought && thoughts.length === 0) {
-                    setThoughts((prev) => [...prev, currentThought]);
+                  if (streamedThought && !thoughtCommitted) {
+                    setThoughts((prev) => [...prev, streamedThought]);
                     setCurrentThought('');
+                    thoughtCommitted = true;
                   }
-                  setFinalAnswer((prev) => prev + toString(data.content));
+                  streamedAnswer += toString(data.content);
+                  setFinalAnswer(streamedAnswer);
                   break;
 
                 case 'complete':
-                  setFinalAnswer(toString(data.final_answer) || finalAnswer);
+                  streamedAnswer = toString(data.final_answer) || streamedAnswer;
+                  setFinalAnswer(streamedAnswer);
                   break;
 
                 case 'node_complete':
@@ -169,8 +180,8 @@ const AgentPage = () => {
       }
 
       // Add final thought to history if not already added
-      if (currentThought && thoughts.length === 0) {
-        setThoughts((prev) => [...prev, currentThought]);
+      if (streamedThought && !thoughtCommitted) {
+        setThoughts((prev) => [...prev, streamedThought]);
       }
     } catch (err) {
       setError(`Error: ${err.message}`);

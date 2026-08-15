@@ -12,6 +12,7 @@ from app.agent.utils.state_helpers import create_initial_state
 def test_calculate_deterministic_route_greetings():
     assert calculate_deterministic_route("Hello!") == "GREETING"
     assert calculate_deterministic_route("السلام عليكم") == "GREETING"
+    assert calculate_deterministic_route("Who is Omar?") != "GREETING"
 
 
 def test_calculate_deterministic_route_obvious_sql():
@@ -72,6 +73,7 @@ def test_should_trigger_memory_extraction_rules():
 
     # Explicit user fact pattern in question -> True
     assert should_trigger_memory_extraction("My name is Omar", "Hello Omar!", 2) is True
+    assert should_trigger_memory_extraction("اسمي عمر", "أهلاً عمر", 2) is True
 
     # Session ended -> True
     assert (
