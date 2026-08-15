@@ -3,6 +3,7 @@
 import asyncio
 import logging
 
+from app.agent.core.config import agent_settings
 from app.agent.core.state import AgentState
 from app.agent.nodes.base import (
     apply_tool_result,
@@ -12,7 +13,7 @@ from app.agent.nodes.base import (
 )
 from app.agent.observability.logging import log_node_event
 from app.agent.observability.metrics import agent_sql_rows_returned
-from app.agent.tools.base import tool_registry
+from app.agent.tools.base import ToolResult, tool_registry
 from app.agent.tools.sql_tool import SQLTool
 
 logger = logging.getLogger(__name__)
@@ -24,17 +25,10 @@ async def sql_node(state: AgentState) -> dict:
     """
     Execute SQL queries against the database using the SQLTool.
 
-    Args:
-        state (AgentState): State containing question, tenant_id, and history context.
-
-    Returns:
-        dict: State update dictionary containing SQL execution observations and state updates.
-
-    Example:
-        >>> state = {"question": "How many rows in users?", "tenant_id": "tenant-1"}
-        >>> res = await sql_node(state)
-        >>> res["observation"]
-        'SQL query returned 1 rows'
+    A hard ``asyncio.wait_for`` timeout wraps the blocking ``tool.run`` call so
+    the event loop is never held indefinitely even when the DB hangs before the
+    ``SET LOCAL statement_timeout`` is applied (e.g. during lock contention or
+    connection-pool exhaustion).
     """
     await emit_node_status(
         "sql_tool",
@@ -44,8 +38,31 @@ async def sql_node(state: AgentState) -> dict:
 
     async def _inner(s: AgentState):
         tool = tool_registry.get("sql")
-        assert tool is not None
-        result = await asyncio.to_thread(tool.run, s)
+        if tool is None:
+            raise RuntimeError("SQL tool is not registered in the tool registry")
+
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(tool.run, s),
+                timeout=agent_settings.sql_query_timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            timeout_s = agent_settings.sql_query_timeout_seconds
+            logger.error("SQL tool timed out after %.1fs", timeout_s)
+            result = ToolResult(
+                observation=(
+                    f"Error: SQL query timed out after {timeout_s:.0f}s. "
+                    "The database may be under heavy load."
+                ),
+                has_data=False,
+                state_updates={
+                    "sql_attempted": True,
+                    "sql_has_results": False,
+                    "degraded": True,
+                    "degraded_reason": f"SQL query timed out after {timeout_s:.0f}s",
+                },
+            )
+
         update = apply_tool_result(s, result, "sql")
         if result.has_data:
             agent_sql_rows_returned.observe(1)

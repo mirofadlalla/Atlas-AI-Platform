@@ -22,7 +22,7 @@ class SQLQuery(BaseModel):
 
 
 def generate_sql(question: str, tenant_id: str | None = None) -> str:
-    schema = get_schema_description()
+    schema = get_schema_description(tenant_id=tenant_id)
     schema = truncate_to_token_budget(schema, agent_settings.prompt_max_tokens // 2)
     prompt = prompt_registry.sql_generation(schema, question)
 

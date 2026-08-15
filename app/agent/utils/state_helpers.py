@@ -19,6 +19,9 @@ PER_SUBQUESTION_RESET: dict[str, Any] = {
     "step_count": 0,
     "degraded": False,
     "degraded_reason": None,
+    # Reset per-subquestion so the loop detector's sliding window only sees
+    # actions from the *current* sub-question — not a mix of prior ones.
+    "action_history": [],
 }
 
 

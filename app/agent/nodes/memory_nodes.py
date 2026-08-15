@@ -107,10 +107,25 @@ async def memory_write_node(state: AgentState) -> dict:
     args = (tenant_id, user_id, session_id)
 
     question = state.get("question", "")
-    answer = state.get("final_answer", "")
+    # Use explicit None check — an empty string is also considered no answer.
+    answer = state.get("final_answer") or ""
 
+    # Always save the user turn so the question is recorded in history even on
+    # degraded runs.  Without this, the conversation history would have gaps.
     memory.save(*args, ConversationTurn("user", question, ""))
-    memory.save(*args, ConversationTurn("assistant", answer, ""))
+
+    if answer:
+        memory.save(*args, ConversationTurn("assistant", answer, ""))
+    else:
+        # Skip the empty assistant turn to avoid polluting future context windows
+        # with blank turns.  This happens when the agent degrades before
+        # finish_node runs and final_answer was never set.
+        logger.warning(
+            "memory_write: skipping empty assistant turn for tenant=%s session=%s "
+            "(agent degraded before finish_node — final_answer is None/empty)",
+            tenant_id,
+            session_id,
+        )
 
     history = memory.load(*args)
     turn_count = len(history)

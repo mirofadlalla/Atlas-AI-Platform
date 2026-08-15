@@ -27,6 +27,7 @@ class AgentSettings(BaseSettings):
     retrieval_cache_ttl_seconds: int = (
         300  # مدة صلاحية الكاش بالثواني (هنا 300 ثانية = 5 دقائق).
     )
+    retrieval_timeout_seconds: float = 30.0
     retrieval_top_k: int = 5
     retrieval_doc_preview_chars: int = 300
     llm_retry_attempts: int = 3
