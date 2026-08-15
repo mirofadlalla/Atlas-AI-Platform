@@ -6,7 +6,6 @@ from app.agent.nodes.direct_answer_node import direct_answer_node
 from app.agent.nodes.finish_node import finish_node
 from app.agent.nodes.memory_nodes import (
     episodic_recall_node,
-    memory_loader_node,
     memory_read_node,
     memory_write_node,
     semantic_recall_node,
@@ -19,7 +18,6 @@ from app.agent.tools.base import tool_registry
 __all__ = [
     "run_node",
     "apply_tool_result",
-    "memory_loader_node",
     "memory_read_node",
     "semantic_recall_node",
     "episodic_recall_node",

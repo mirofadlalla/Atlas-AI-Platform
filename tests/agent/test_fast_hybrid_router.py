@@ -5,6 +5,7 @@ from app.agent.core.router import (
     fast_hybrid_router,
     route_target_path,
 )
+from app.agent.nodes.memory_nodes import should_trigger_memory_extraction
 from app.agent.utils.state_helpers import create_initial_state
 
 
@@ -41,6 +42,33 @@ def test_calculate_deterministic_route_conflicting_ambiguous():
             "What is the policy for users who signed up last month?"
         )
         == "AMBIGUOUS"
+    )
+
+
+def test_should_trigger_memory_extraction_rules():
+    # Normal turn 1 -> False
+    assert (
+        should_trigger_memory_extraction(
+            "What is SQL?", "SQL is structured query language", 1
+        )
+        is False
+    )
+
+    # Turn 10 -> True
+    assert (
+        should_trigger_memory_extraction(
+            "What is SQL?", "SQL is structured query language", 10
+        )
+        is True
+    )
+
+    # Explicit fact pattern -> True
+    assert should_trigger_memory_extraction("My name is Omar", "Hello Omar!", 1) is True
+
+    # Session ended -> True
+    assert (
+        should_trigger_memory_extraction("Bye", "Goodbye!", 1, session_ended=True)
+        is True
     )
 
 

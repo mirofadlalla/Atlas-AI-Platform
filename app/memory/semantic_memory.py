@@ -58,8 +58,9 @@ class SemanticMemory:
         tenant_id: str | int,
         memory_type: str = "fact",
         importance: float = 0.5,
+        dedup_similarity_threshold: float = 0.88,
     ) -> str | None:
-        """Embed and persist a fact, preference, or reusable tool hint."""
+        """Embed and persist a fact, preference, or reusable tool hint with deduplication."""
         fact = fact.strip()
         if not fact:
             return None
@@ -67,6 +68,49 @@ class SemanticMemory:
             raise ValueError(f"Unsupported semantic memory type: {memory_type}")
         vector = self.embedding_model.embed_documents([fact])[0]
         self._ensure_collection(len(vector))
+
+        # Perform deduplication check against existing user memories
+        try:
+            existing = self.client.query_points(
+                collection_name=self.collection_name,
+                query=vector,
+                using="dense",
+                query_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="tenant_id",
+                            match=models.MatchValue(value=str(tenant_id)),
+                        ),
+                        models.FieldCondition(
+                            key="user_id", match=models.MatchValue(value=str(user_id))
+                        ),
+                    ]
+                ),
+                limit=1,
+                with_payload=True,
+            )
+            points = getattr(existing, "points", existing)
+            if points:
+                top_match = points[0]
+                score = float(getattr(top_match, "score", 0.0))
+                existing_content = (
+                    (top_match.payload or {}).get("content", "").strip().lower()
+                )
+                if (
+                    score >= dedup_similarity_threshold
+                    or existing_content == fact.lower()
+                ):
+                    logger.info(
+                        "Deduplicated semantic memory tenant=%s user=%s match_id=%s score=%.2f -> Skipping insert",
+                        tenant_id,
+                        user_id,
+                        top_match.id,
+                        score,
+                    )
+                    return str(top_match.id)
+        except Exception as exc:
+            logger.debug("Semantic memory deduplication lookup skipped: %s", exc)
+
         memory_id = str(uuid4())
         self.client.upsert(
             collection_name=self.collection_name,

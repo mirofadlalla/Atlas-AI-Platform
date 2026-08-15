@@ -18,11 +18,15 @@ class MemoryExtractor:
     ) -> list[str]:
         if not question.strip() or not answer.strip():
             return []
-        prompt = f"""Extract durable memory from this completed interaction. Keep only user preferences,
-stable facts, or reusable database/tool hints. Never store secrets, credentials, transient requests,
-unsupported claims, or chain-of-thought. Return ONLY JSON:
+        prompt = f"""Extract durable memory from this completed interaction. Keep ONLY genuine, permanent user preferences,
+stable personal facts, or reusable database/tool hints.
+
+CRITICAL INSTRUCTIONS:
+- Do NOT extract meta-questions or hypothetical examples (e.g., 'What does my name is mean?').
+- Do NOT extract transient statements, negative choices without context, secrets, credentials, or chain-of-thought.
+- Return ONLY JSON:
 {{"memories":[{{"content":"...","memory_type":"fact|preference|tool_hint","importance":0.0}}]}}
-Use an empty list if nothing is worth retaining.
+- Return an EMPTY list if no durable, personal fact is stated.
 
 USER QUESTION: {question}
 ASSISTANT ANSWER: {answer}"""

@@ -1,6 +1,7 @@
 """Memory read, write, recall, and lazy loader graph nodes for conversational state management."""
 
 import logging
+import re
 
 from app.agent.core.state import AgentState
 from app.agent.nodes.base import emit_node_status, emit_thought_chunk
@@ -12,52 +13,33 @@ from app.services.semantic_memory_service import trigger_semantic_memory_extract
 
 logger = logging.getLogger(__name__)
 
+_IMPORTANT_FACT_PATTERN = re.compile(
+    r"\b(my\s+name\s+is|i\s+prefer|my\s+favorite|remember\s+that|i\s+live\s+in|اسمي|أنا\s+أفضل|تذكر\s+أن|أفضل|بياناتي)\b",
+    re.IGNORECASE,
+)
 
-async def memory_loader_node(state: AgentState) -> dict:
+
+def should_trigger_memory_extraction(
+    question: str,
+    answer: str,
+    turn_count: int,
+    session_ended: bool = False,
+) -> bool:
     """
-    Lazy memory loader node.
-    Evaluates needs_short_term, needs_semantic, and needs_episodic flags,
-    and loads ONLY the requested memory layers.
+    Evaluates whether semantic & episodic extraction background jobs should run.
+    Triggers ONLY if:
+      - Every 10 turns (turn_count % 10 == 0)
+      - OR explicit important fact detected (e.g., 'my name is', 'i prefer')
+      - OR session ended
     """
-    await emit_node_status(
-        "memory_loader",
-        "Memory Loader",
-        "Loading required memory layers...",
-    )
-    update = {}
-    tenant_id = state.get("tenant_id", "")
-    user_id = state.get("user_id", "")
-    session_id = state.get("session_id")
-    question = state.get("question", "")
-
-    if state.get("needs_short_term") and session_id:
-        history = ShortTermMemory().load(tenant_id, user_id, session_id)
-        update["conversation_history"] = history
-        await emit_thought_chunk(
-            f"[Memory Loader] Loaded {len(history)} short-term turn(s).\n"
-        )
-
-    if state.get("needs_semantic"):
-        memories = SemanticMemory().recall(question, user_id, tenant_id)
-        update["recalled_memories"] = memories
-        await emit_thought_chunk(
-            f"[Memory Loader] Recalled {len(memories)} semantic memory(ies).\n"
-        )
-
-    if state.get("needs_episodic"):
-        try:
-            summaries = EpisodicMemory().get_recent(
-                user_id, tenant_id, exclude_session_id=session_id
-            )
-            update["episode_context"] = "\n".join(f"- {s}" for s in summaries)
-            await emit_thought_chunk(
-                f"[Memory Loader] Recalled {len(summaries)} episodic summary(ies).\n"
-            )
-        except Exception as exc:
-            logger.warning("Episodic memory read skipped: %s", exc)
-            update["episode_context"] = ""
-
-    return update
+    if session_ended:
+        return True
+    if turn_count > 0 and turn_count % 10 == 0:
+        return True
+    text = f"{question} {answer}"
+    if _IMPORTANT_FACT_PATTERN.search(text):
+        return True
+    return False
 
 
 async def memory_read_node(state: AgentState) -> dict:
@@ -116,33 +98,47 @@ async def memory_write_node(state: AgentState) -> dict:
     await emit_node_status(
         "memory_write",
         "Persisting Memory",
-        "Saving session state & extracting long-term facts...",
+        "Saving short-term conversation turn...",
     )
     memory = ShortTermMemory()
-    args = (
-        state.get("tenant_id", ""),
-        state.get("user_id", ""),
-        state.get("session_id"),
-    )
-    memory.save(*args, ConversationTurn("user", state.get("question", ""), ""))
-    memory.save(*args, ConversationTurn("assistant", state.get("final_answer", ""), ""))
-    trigger_semantic_memory_extraction(
-        state.get("question", ""),
-        state.get("final_answer", ""),
-        state.get("user_id", ""),
-        state.get("tenant_id", ""),
-    )
-    trigger_episode_write(
-        state.get("session_id"),
-        state.get("conversation_history", [])
-        + [
-            {"role": "user", "content": state.get("question", "")},
-            {"role": "assistant", "content": state.get("final_answer", "")},
-        ],
-        state.get("user_id", ""),
-        state.get("tenant_id", ""),
-    )
-    await emit_thought_chunk(
-        "[Memory Write] Session state and long-term memory updates successfully saved.\n"
-    )
+    tenant_id = state.get("tenant_id", "")
+    user_id = state.get("user_id", "")
+    session_id = state.get("session_id")
+    args = (tenant_id, user_id, session_id)
+
+    question = state.get("question", "")
+    answer = state.get("final_answer", "")
+
+    memory.save(*args, ConversationTurn("user", question, ""))
+    memory.save(*args, ConversationTurn("assistant", answer, ""))
+
+    history = memory.load(*args)
+    turn_count = len(history)
+    session_ended = bool(state.get("session_ended", False))
+
+    if should_trigger_memory_extraction(question, answer, turn_count, session_ended):
+        await emit_thought_chunk(
+            "[Memory Write] Milestone reached -> Triggering background semantic fact & episodic summary extraction.\n"
+        )
+        trigger_semantic_memory_extraction(
+            question,
+            answer,
+            user_id,
+            tenant_id,
+        )
+        trigger_episode_write(
+            session_id,
+            state.get("conversation_history", [])
+            + [
+                {"role": "user", "content": question},
+                {"role": "assistant", "content": answer},
+            ],
+            user_id,
+            tenant_id,
+        )
+    else:
+        await emit_thought_chunk(
+            "[Memory Write] Short-term turn saved to Redis. (Background extraction deferred to milestone/fact trigger).\n"
+        )
+
     return {}
