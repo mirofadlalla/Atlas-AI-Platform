@@ -49,16 +49,57 @@ from __future__ import annotations
 import re
 
 _INJECTION_PATTERNS = (
-    r"ignore\s+(all\s+)?prior\s+instructions",
-    r"disregard\s+(the\s+)?(above|previous)",
+    # ── Instruction forgetting ────────────────────────────────────────────────
+    r"ignore\s+(all\s+)?(prior|previous|above|earlier)\s+(instructions?|prompts?|context)",
+    r"disregard\s+(the\s+)?(above|previous|prior|all)",
+    r"forget\s+(everything|all|what|that|the\s+(above|previous|prior))",
+    r"override\s+(previous|prior|all|the)\s+(instructions?|prompts?|rules?)",
+    r"do\s+not\s+follow\s+(the\s+)?(previous|prior|above|original)\s+(instructions?|prompts?)",
+    # ── Role / persona switching ──────────────────────────────────────────────
     r"you\s+are\s+now\s+",
-    r"system\s+prompt\s*:",
+    r"act\s+as\s+(a\s+|an\s+)?(?!user|customer|assistant)",
+    r"pretend\s+(you\s+are|to\s+be)\s+",
+    r"roleplay\s+as\s+",
+    r"your\s+new\s+(role|persona|identity|name)\s+is",
+    r"from\s+now\s+on\s+(you\s+are|act|behave|respond)",
+    # ── System / prompt delimiter injection ──────────────────────────────────
+    r"system\s*prompt\s*:",
+    r"<\|?\s*system\s*\|?>",
+    r"\[INST\]",
+    r"###\s*(system|instruction|prompt|human|assistant)",
+    r"</?s>",                     # SentencePiece boundary tokens
+    r"<\|im_start\|>",           # ChatML tokens
+    r"<\|im_end\|>",
+    # ── New task / instruction injection ─────────────────────────────────────
+    r"new\s+(task|instruction|command|directive)\s*:",
+    r"(your|the)\s+(real|actual|true|primary)\s+(task|goal|purpose|objective|job)\s+is",
+    r"instead\s*,?\s*(please\s+)?(do|say|write|generate|produce|output)",
+    # ── Jailbreak openers ────────────────────────────────────────────────────
+    r"DAN\b",                     # "Do Anything Now"
+    r"jailbreak",
+    r"developer\s+mode",
+    r"no\s+restrictions?\s+(mode|enabled|on)",
 )
 
 
 def sanitize_untrusted_block(text: str) -> str:
-    """Neutralize obvious instruction-injection phrases in untrusted tool output."""
-    cleaned = text
+    """
+    Neutralize instruction-injection phrases in untrusted retrieved content.
+
+    Steps:
+    1. **Unicode normalization (NFKC)** — collapses homoglyphs (Cyrillic 'о'
+       → Latin 'o') and removes zero-width characters so attackers cannot
+       bypass regex patterns via invisible or look-alike characters.
+    2. **Pattern substitution** — replaces each matched phrase with
+       ``[filtered]``.
+    """
+    import unicodedata
+
+    # NFKC normalization: homoglyph collapse + zero-width removal
+    cleaned = unicodedata.normalize("NFKC", text)
+    # Strip zero-width characters that survive normalization
+    cleaned = "".join(ch for ch in cleaned if unicodedata.category(ch) != "Cf")
+
     for pattern in _INJECTION_PATTERNS:
         cleaned = re.sub(pattern, "[filtered]", cleaned, flags=re.IGNORECASE)
     return cleaned

@@ -96,7 +96,7 @@ async def thought_node(state: AgentState) -> dict:
         try:
             response = await async_call_agent_llm_stream(
                 prompt=prompt,
-                tier="routing",
+                tier="generation",
                 tenant_id=s.get("tenant_id"),
                 event_type="stream_thought_chunk",
             )

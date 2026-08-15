@@ -65,7 +65,12 @@ async def sql_node(state: AgentState) -> dict:
 
         update = apply_tool_result(s, result, "sql")
         if result.has_data:
-            agent_sql_rows_returned.observe(1)
+            # Observe the actual number of rows, not a constant 1.
+            # state_updates["sql_result"] contains the list of rows returned
+            # by SQLValidator.execute_query(); fall back to 1 if absent.
+            rows = result.state_updates.get("sql_result") or []
+            row_count = len(rows) if isinstance(rows, list) else 1
+            agent_sql_rows_returned.observe(row_count)
 
         await emit_thought_chunk(
             f"[SQL Query] Executed database query. Observation: {result.observation[:300]}\n"
