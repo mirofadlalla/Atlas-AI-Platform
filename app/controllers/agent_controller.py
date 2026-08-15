@@ -64,7 +64,7 @@ class AgentController:
 
             # Cache hit — skip graph execution
             if request.run_id:
-                cached = get_cached_run_result(request.run_id)
+                cached = get_cached_run_result(request.run_id, tenant_id=str(current_user.tenant_id))
                 if cached:
                     logger.info(
                         "Returning cached agent result for run_id=%s", request.run_id
@@ -204,7 +204,8 @@ class AgentController:
                         if request.run_id:
                             cache_run_result(
                                 request.run_id,
-                                {
+                                tenant_id=str(current_user.tenant_id),
+                                result={
                                     "success": True,
                                     "run_id": request.run_id,
                                     "question": request.question,
@@ -244,7 +245,7 @@ class AgentController:
         )
         if request.run_id:
             inputs["run_id"] = request.run_id
-            cached = get_cached_run_result(request.run_id)
+            cached = get_cached_run_result(request.run_id, tenant_id=str(current_user.tenant_id))
             if cached:
                 logger.info(
                     "Returning cached agent result for run_id=%s", request.run_id
@@ -311,7 +312,7 @@ class AgentController:
                 "degraded_reason": result.get("degraded_reason"),
             }
             if request.run_id:
-                cache_run_result(request.run_id, response)
+                cache_run_result(request.run_id, tenant_id=str(current_user.tenant_id), result=response)
             return response
 
         except Exception as e:

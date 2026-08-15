@@ -12,18 +12,27 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-def _run_key(run_id: str) -> str:
-    return f"agent:run:complete:{run_id}"
+def _run_key(tenant_id: str, run_id: str) -> str:
+    """
+    Build a tenant-scoped Redis key for completed run results.
+
+    Including tenant_id prevents cross-tenant cache collisions if a run_id
+    is accidentally reused across tenants (e.g. during retry logic).
+    """
+    return f"agent:run:complete:{tenant_id}:{run_id}"
 
 
-def get_cached_run_result(run_id: str) -> dict[str, Any] | None:
+def get_cached_run_result(
+    run_id: str,
+    tenant_id: str,
+) -> dict[str, Any] | None:
     if not agent_settings.run_idempotency_enabled:
         return None
     try:
         import redis
 
         client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        raw = client.get(_run_key(run_id))
+        raw = client.get(_run_key(tenant_id, run_id))
         if raw:
             return json.loads(raw)
     except Exception as exc:
@@ -31,7 +40,11 @@ def get_cached_run_result(run_id: str) -> dict[str, Any] | None:
     return None
 
 
-def cache_run_result(run_id: str, result: dict[str, Any]) -> None:
+def cache_run_result(
+    run_id: str,
+    tenant_id: str,
+    result: dict[str, Any],
+) -> None:
     if not agent_settings.run_idempotency_enabled:
         return
     try:
@@ -39,7 +52,7 @@ def cache_run_result(run_id: str, result: dict[str, Any]) -> None:
 
         client = redis.from_url(settings.REDIS_URL, decode_responses=True)
         client.setex(
-            _run_key(run_id),
+            _run_key(tenant_id, run_id),
             agent_settings.run_idempotency_ttl_seconds,
             json.dumps(result),
         )

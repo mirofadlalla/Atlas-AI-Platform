@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from typing import Literal
 
@@ -104,75 +105,107 @@ async def async_call_agent_llm_stream(
     so the client receives word-by-word / token-by-token streaming in real time.
 
     Returns dict with content, input_tokens, output_tokens, total_tokens, cost_usd.
+
+    Fixes applied:
+    - **Event-loop safety (3.1):** The producer thread is signalled to stop via a
+      ``threading.Event`` and the ``ThreadPoolExecutor`` is shut down with
+      ``wait=False`` — so a streaming error never stalls the event loop.
+    - **Circuit breaker (3.4):** The entire stream is wrapped in
+      ``llm_circuit_breaker.async_call`` so provider failures open the breaker and
+      back-pressure is applied on the async hot path, not just the sync SQL path.
     """
     tenant_label = tenant_id or "unknown"
     llm = LLMService()
     model = _model_for_tier(tier)
 
-    loop = asyncio.get_running_loop()
-    q: asyncio.Queue = asyncio.Queue()
+    async def _do_stream() -> dict:
+        loop = asyncio.get_running_loop()
+        q: asyncio.Queue = asyncio.Queue()
+        stop_event = threading.Event()
 
-    def _producer():
-        try:
-            for delta, usage in llm.generate_stream(
-                prompt=prompt,
-                system_prompt=agent_settings.llm_system_prompt,
-                max_new_tokens=agent_settings.llm_max_tokens,
-                model=model,
-            ):
-                if delta is not None:
-                    loop.call_soon_threadsafe(q.put_nowait, ("delta", delta))
-                if usage is not None:
-                    loop.call_soon_threadsafe(q.put_nowait, ("usage", usage))
-        except Exception as exc:
-            loop.call_soon_threadsafe(q.put_nowait, ("error", exc))
-        finally:
-            loop.call_soon_threadsafe(q.put_nowait, ("end", None))
+        def _producer() -> None:
+            try:
+                for delta, usage in llm.generate_stream(
+                    prompt=prompt,
+                    system_prompt=agent_settings.llm_system_prompt,
+                    max_new_tokens=agent_settings.llm_max_tokens,
+                    model=model,
+                ):
+                    if stop_event.is_set():
+                        break
+                    if delta is not None:
+                        loop.call_soon_threadsafe(q.put_nowait, ("delta", delta))
+                    if usage is not None:
+                        loop.call_soon_threadsafe(q.put_nowait, ("usage", usage))
+            except Exception as exc:
+                loop.call_soon_threadsafe(q.put_nowait, ("error", exc))
+            finally:
+                loop.call_soon_threadsafe(q.put_nowait, ("end", None))
 
-    with ThreadPoolExecutor(max_workers=1) as pool:
+        pool = ThreadPoolExecutor(max_workers=1)
         pool.submit(_producer)
-        full_content = []
-        usage_data = {"input": 0, "output": 0}
 
-        while True:
-            kind, val = await q.get()
-            if kind == "end":
-                break
-            elif kind == "delta":
-                full_content.append(val)
-                await adispatch_custom_event(event_type, {"content": val})
-            elif kind == "usage":
-                usage_data = val
-            elif kind == "error":
-                raise val
+        full_content: list[str] = []
+        usage_data: dict = {"input": 0, "output": 0}
+        _exc: BaseException | None = None
 
-    content = "".join(full_content)
-    input_tokens = int(usage_data.get("input", 0) or usage_data.get("prompt_tokens", 0))
-    output_tokens = int(
-        usage_data.get("output", 0) or usage_data.get("completion_tokens", 0)
-    )
-    if input_tokens == 0:
-        input_tokens = len(prompt) // 4
-    if output_tokens == 0:
-        output_tokens = len(content) // 4
+        try:
+            while True:
+                kind, val = await q.get()
+                if kind == "end":
+                    break
+                elif kind == "delta":
+                    full_content.append(val)
+                    await adispatch_custom_event(event_type, {"content": val})
+                elif kind == "usage":
+                    usage_data = val
+                elif kind == "error":
+                    _exc = val
+                    stop_event.set()  # Signal producer to exit its loop early
+                    break
+        finally:
+            # Always signal the producer and release the pool without blocking
+            # the event loop. The thread will finish on its own shortly after
+            # stop_event is set.
+            stop_event.set()
+            pool.shutdown(wait=False)
 
-    cost_usd = _estimate_cost_usd(input_tokens, output_tokens)
+        if _exc is not None:
+            raise _exc
 
-    agent_llm_tokens_total.labels(tenant_id=tenant_label, direction="input").inc(
-        input_tokens
-    )
-    agent_llm_tokens_total.labels(tenant_id=tenant_label, direction="output").inc(
-        output_tokens
-    )
-    agent_llm_cost_usd_total.labels(tenant_id=tenant_label).inc(cost_usd)
+        content = "".join(full_content)
+        input_tokens = int(
+            usage_data.get("input", 0) or usage_data.get("prompt_tokens", 0)
+        )
+        output_tokens = int(
+            usage_data.get("output", 0) or usage_data.get("completion_tokens", 0)
+        )
+        if input_tokens == 0:
+            input_tokens = len(prompt) // 4
+        if output_tokens == 0:
+            output_tokens = len(content) // 4
 
-    return {
-        "content": content,
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "total_tokens": input_tokens + output_tokens,
-        "cost_usd": cost_usd,
-    }
+        cost_usd = _estimate_cost_usd(input_tokens, output_tokens)
+
+        agent_llm_tokens_total.labels(tenant_id=tenant_label, direction="input").inc(
+            input_tokens
+        )
+        agent_llm_tokens_total.labels(tenant_id=tenant_label, direction="output").inc(
+            output_tokens
+        )
+        agent_llm_cost_usd_total.labels(tenant_id=tenant_label).inc(cost_usd)
+
+        return {
+            "content": content,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+            "cost_usd": cost_usd,
+        }
+
+    # Wrap with circuit breaker so async LLM failures open the breaker exactly
+    # as synchronous failures do in call_agent_llm.
+    return await llm_circuit_breaker.async_call(_do_stream)
 
 
 def llm_usage_updates(result: dict, state: dict) -> dict:

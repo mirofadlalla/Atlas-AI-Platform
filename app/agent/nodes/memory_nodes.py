@@ -14,7 +14,7 @@ from app.services.semantic_memory_service import trigger_semantic_memory_extract
 logger = logging.getLogger(__name__)
 
 _IMPORTANT_FACT_PATTERN = re.compile(
-    r"\b(my\s+name\s+is|i\s+prefer|my\s+favorite|remember\s+that|i\s+live\s+in|اسمي|أنا\s+أفضل|تذكر\s+أن|أفضل|بياناتي)\b",
+    r"\b(my\s+name\s+is|i\s+prefer|my\s+favorite|remember\s+that|i\s+live\s+in|اسمي|أنا\s+أفضل|فضلاً\s+احفظ|تذكر\s+أن)\b",
     re.IGNORECASE,
 )
 
@@ -28,16 +28,16 @@ def should_trigger_memory_extraction(
     """
     Evaluates whether semantic & episodic extraction background jobs should run.
     Triggers ONLY if:
-      - Every 10 turns (turn_count % 10 == 0)
-      - OR explicit important fact detected (e.g., 'my name is', 'i prefer')
+      - Every 10 user turns (user_turn_count % 10 == 0)
+      - OR explicit important user fact detected in question (e.g., 'my name is', 'i prefer')
       - OR session ended
     """
     if session_ended:
         return True
-    if turn_count > 0 and turn_count % 10 == 0:
+    user_turns = turn_count // 2
+    if user_turns > 0 and user_turns % 10 == 0 and (turn_count % 2 == 0):
         return True
-    text = f"{question} {answer}"
-    if _IMPORTANT_FACT_PATTERN.search(text):
+    if _IMPORTANT_FACT_PATTERN.search(question):
         return True
     return False
 

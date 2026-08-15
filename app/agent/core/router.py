@@ -184,6 +184,12 @@ def route_action(state: AgentState) -> str:
     if last_action == "retrieval":
         if state.get("retrieval_has_results") or bool(state.get("retrieval_context")):
             return "finish"
+        # Retrieval found nothing — fall back to SQL if it hasn't been tried yet.
+        # This replaces the previous dead-code branch where both cases returned
+        # "finish", silently producing an empty-data answer instead of trying
+        # an alternative data source.
+        if not state.get("sql_attempted"):
+            return "sql"
         return "finish"
 
     return last_action

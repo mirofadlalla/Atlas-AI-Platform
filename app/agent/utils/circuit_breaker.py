@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Callable, TypeVar
+from typing import Any, Awaitable, Callable, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,49 @@ class CircuitBreaker:
         with self._lock:
             self._failures = 0
             self._opened_at = None
+
+    @property
+    def is_open(self) -> bool:
+        """Public read-only check for whether the circuit is currently open."""
+        with self._lock:
+            return self._is_open()
+
+    async def async_call(
+        self,
+        async_fn: Callable[..., Awaitable[Any]],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Async-aware circuit-breaker wrapper.
+
+        Identical semantics to ``call()`` but awaits ``async_fn`` instead of
+        calling it synchronously, so the event loop is never blocked.
+        """
+        with self._lock:
+            if self._is_open():
+                raise RuntimeError(
+                    f"Circuit breaker '{self.name}' is open; dependency temporarily unavailable"
+                )
+
+        try:
+            result = await async_fn(*args, **kwargs)
+        except Exception:
+            with self._lock:
+                self._failures += 1
+                if self._failures >= self.failure_threshold:
+                    self._opened_at = time.time()
+                    logger.warning(
+                        "Circuit breaker %s opened after %s failures",
+                        self.name,
+                        self._failures,
+                    )
+            raise
+
+        with self._lock:
+            self._failures = 0
+            self._opened_at = None
+        return result
 
 
 llm_circuit_breaker = CircuitBreaker("llm")

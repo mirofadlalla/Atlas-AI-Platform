@@ -71,6 +71,53 @@ _FORBIDDEN_EXPRESSIONS = (
 
 class SQLValidator:
     @staticmethod
+    def _add_tenant_where(select_node: exp.Select) -> None:
+        """
+        Inject ``tenant_id = :tenant_id`` into a SELECT node's WHERE clause in-place.
+
+        If a WHERE clause already exists it is ANDed with the new predicate so
+        existing filters are preserved.
+        """
+        tenant_cond = exp.EQ(
+            this=exp.to_identifier("tenant_id"),
+            expression=exp.Placeholder(this="tenant_id"),  # parameterized — safe
+        )
+        existing = select_node.args.get("where")
+        if existing:
+            select_node.set(
+                "where", exp.Where(this=exp.and_(existing.this, tenant_cond))
+            )
+        else:
+            select_node.set("where", exp.Where(this=tenant_cond))
+
+    @staticmethod
+    def _inject_tenant_top_level(node: exp.Expression) -> None:
+        """
+        Inject the tenant predicate only into the top-level SELECT branch(es).
+
+        - **Simple SELECT** → inject directly.
+        - **UNION / UNION ALL / INTERSECT / EXCEPT** → recurse into each
+          branch (left / right), which are themselves either SELECT or nested
+          set-operation nodes.
+        - **Subqueries inside FROM** are intentionally skipped.  Those inner
+          tables are protected by the ``allowed_tables`` allow-list and the
+          outer branch's injected predicate.  Injecting into a derived-table
+          SELECT would add ``WHERE tenant_id = :tenant_id`` to a result-set
+          that may not expose a ``tenant_id`` column, causing a runtime error.
+        """
+        if isinstance(node, exp.Select):
+            SQLValidator._add_tenant_where(node)
+        elif isinstance(node, exp.Union):
+            # Recurse into left and right branches only — not into their
+            # subquery children.
+            left = node.args.get("this")
+            right = node.args.get("expression")
+            if left is not None:
+                SQLValidator._inject_tenant_top_level(left)
+            if right is not None:
+                SQLValidator._inject_tenant_top_level(right)
+
+    @staticmethod
     def validate_and_enforce_tenant(
         sql_query: str,
         tenant_id: str,
@@ -138,23 +185,13 @@ class SQLValidator:
                             f"Security violation: column not allowed: {col.name}"
                         )
 
-        def _inject_tenant(node: exp.Expression) -> exp.Expression:
-            if isinstance(node, exp.Select):
-                tenant_cond = exp.EQ(
-                    this=exp.to_identifier("tenant_id"),
-                    expression=exp.Placeholder(this="tenant_id"),  # Parameterized Query
-                )
-                existing = node.args.get("where")
-                if existing:
-                    node.set(
-                        "where", exp.Where(this=exp.and_(existing.this, tenant_cond))
-                    )
-                else:
-                    node.set("where", exp.Where(this=tenant_cond))
-            return node
-
-        secured = parsed.transform(_inject_tenant)
-        sql = secured.sql(dialect="postgres")
+        # Inject tenant predicate only into the top-level SELECT branch(es).
+        # Using _inject_tenant_top_level instead of sqlglot's transform() avoids
+        # recursing into derived-table subqueries — which would add a WHERE on a
+        # tenant_id column that the subquery result-set may not expose, causing a
+        # runtime SQL error.  Both branches of any UNION/UNION ALL are covered.
+        SQLValidator._inject_tenant_top_level(parsed)
+        sql = parsed.sql(dialect="postgres")
         params = {"tenant_id": tenant_id}
         logger.debug("Tenant-enforced SQL prepared")
         return sql, params

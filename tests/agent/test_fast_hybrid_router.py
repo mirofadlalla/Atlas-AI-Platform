@@ -46,28 +46,36 @@ def test_calculate_deterministic_route_conflicting_ambiguous():
 
 
 def test_should_trigger_memory_extraction_rules():
-    # Normal turn 1 -> False
+    # Normal turn 1 (2 items in Redis list) -> False
     assert (
         should_trigger_memory_extraction(
-            "What is SQL?", "SQL is structured query language", 1
+            "What is SQL?", "SQL is structured query language", 2
         )
         is False
     )
 
-    # Turn 10 -> True
+    # 10 user turns (20 items in Redis list) -> True
     assert (
         should_trigger_memory_extraction(
-            "What is SQL?", "SQL is structured query language", 10
+            "What is SQL?", "SQL is structured query language", 20
         )
         is True
     )
 
-    # Explicit fact pattern -> True
-    assert should_trigger_memory_extraction("My name is Omar", "Hello Omar!", 1) is True
+    # Assistant answer containing "أفضل" should NOT trigger if user question is normal
+    assert (
+        should_trigger_memory_extraction(
+            "ما هي الحلول المتوفرة؟", "أفضل حل هو استخدام الشبكة الفائقة", 2
+        )
+        is False
+    )
+
+    # Explicit user fact pattern in question -> True
+    assert should_trigger_memory_extraction("My name is Omar", "Hello Omar!", 2) is True
 
     # Session ended -> True
     assert (
-        should_trigger_memory_extraction("Bye", "Goodbye!", 1, session_ended=True)
+        should_trigger_memory_extraction("Bye", "Goodbye!", 2, session_ended=True)
         is True
     )
 
