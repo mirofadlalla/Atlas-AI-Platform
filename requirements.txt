@@ -64,3 +64,5 @@ pytest>=8.0.0
 pytest-asyncio>=0.23.0
 black>=24.3.0
 flake8==6.1.0
+
+python-json-logger==2.0.7
