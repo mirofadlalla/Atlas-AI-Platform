@@ -3,11 +3,16 @@ import { Link } from 'react-router-dom';
 import './DashboardPage.css';
 
 function DashboardPage({ user }) {
+  const displayName =
+    user?.name ||
+    user?.email?.split('@')[0] ||
+    'there';
+
   return (
-    <div className="dashboard-page">
+    <main className="dashboard-page">
       <div className="dashboard-header">
-        <h1>👋 Welcome back, {user?.email}!</h1>
-        <p>Atlas AI - Multi-tenant RAG Platform</p>
+        <h1>Welcome back, {displayName}!</h1>
+        <p>Atlas AI — Multi-tenant RAG Platform</p>
       </div>
 
       <div className="dashboard-grid">
@@ -69,7 +74,7 @@ function DashboardPage({ user }) {
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 

@@ -18,6 +18,7 @@ import TenantDatabasePage from './pages/TenantDatabasePage';
 // Import components
 import Navigation from './components/Navigation';
 import ProtectedRoute, { AdminRoute } from './components/ProtectedRoute';
+import { ToastProvider } from './components/Toast';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -83,13 +84,19 @@ function App() {
   };
 
   if (loading) {
-    return <div className="loading-screen"><div className="loading-spinner">⏳</div> Loading...</div>;
+    return (
+      <div className="loading-screen" role="status">
+        <div className="loading-spinner" aria-hidden="true" />
+        <span>Loading Atlas AI…</span>
+      </div>
+    );
   }
 
   return (
-    <Router>
-      <div className="App">
-        {isAuthenticated && <Navigation user={user} onLogout={handleLogout} />}
+    <ToastProvider>
+      <Router>
+        <div className="App">
+          {isAuthenticated && <Navigation user={user} onLogout={handleLogout} />}
         
         <Routes>
           {/* Public Routes */}
@@ -178,6 +185,7 @@ function App() {
         </Routes>
       </div>
     </Router>
+    </ToastProvider>
   );
 }
 

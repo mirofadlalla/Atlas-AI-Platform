@@ -40,9 +40,16 @@
   margin: 0;
 }
 
-form {
+
+.login-card form {
   padding: 40px 30px;
 }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 
 .form-group {
   margin-bottom: 25px;

@@ -41,11 +41,12 @@
   margin: 0;
 }
 
-form {
+.registration-card form {
   padding: 40px 30px;
-  max-height: 70vh;
-  overflow-y: auto;
+  max-height: none;
+  overflow-y: visible;
 }
+
 
 .form-section {
   margin-bottom: 30px;
@@ -133,59 +134,61 @@ form {
 .submit-button {
   width: 100%;
   padding: 14px;
-  background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
+  background: var(--gradient-primary);
   color: white;
   border: none;
-  border-radius: 8px;
-  font-size: 1.05em;
-  font-weight: 600;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  font-weight: var(--fw-600);
+  font-family: var(--font-primary);
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all var(--transition-base);
   margin-top: 20px;
 }
 
 .submit-button:hover:not(:disabled) {
   transform: translateY(-3px);
-  box-shadow: 0 10px 25px rgba(124, 58, 237, 0.4);
+  box-shadow: var(--shadow-glow);
 }
 
 .submit-button:disabled {
-  opacity: 0.7;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
 .error-message {
-  background-color: #7F1D1D;
-  color: #FECACA;
-  border: 1px solid rgba(220, 38, 38, 0.3);
+  background: var(--bg-error);
+  color: var(--text-error);
+  border: 1px solid rgba(239, 68, 68, 0.4);
   padding: 15px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   margin-bottom: 20px;
-  font-weight: 500;
+  font-weight: var(--fw-500);
 }
 
 .registration-footer {
   padding: 0 30px 30px 30px;
   text-align: center;
-  color: #9CA3AF;
+  color: var(--text-muted);
 }
 
 .registration-footer p {
   margin: 0;
-  font-size: 0.95em;
+  font-size: var(--text-sm);
 }
 
 .registration-footer a {
-  color: #7C3AED;
-  font-weight: 600;
+  color: var(--accent-light);
+  font-weight: var(--fw-600);
   text-decoration: none;
-  transition: color 0.3s;
+  transition: color var(--transition-fast);
 }
 
 .registration-footer a:hover {
-  color: #A855F7;
+  color: var(--accent-bright);
   text-decoration: underline;
 }
+
 
 /* Info Section */
 .registration-info {
@@ -197,29 +200,29 @@ form {
 }
 
 .info-card {
-  background: #111827;
-  border: 1px solid rgba(255,255,255,0.05);
-  border-radius: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
   padding: 25px;
-  transition: all 0.3s;
+  transition: all var(--transition-base);
 }
 
 .info-card:hover {
-  border-color: #7C3AED;
-  background: #1F2937;
+  border-color: var(--accent-primary);
+  background: var(--bg-tertiary);
   transform: translateX(5px);
 }
 
 .info-card h4 {
   margin: 0 0 10px 0;
-  color: #E5E7EB;
-  font-size: 1.1em;
+  color: var(--text-primary);
+  font-size: var(--text-lg);
 }
 
 .info-card p {
   margin: 0;
-  color: #9CA3AF;
-  font-size: 0.95em;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 

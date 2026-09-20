@@ -169,29 +169,30 @@
   justify-content: space-between;
   align-items: center;
   padding: 15px;
-  background-color: #f8f9fa;
-  border-radius: 5px;
-  border-left: 3px solid #00b894;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  border-left: 3px solid var(--status-success);
+  transition: all var(--transition-base);
 }
 
 .metric-row span {
-  color: #666;
-  font-weight: 500;
+  color: var(--text-secondary);
+  font-weight: var(--fw-500);
 }
 
 .metric-row strong {
-  font-size: 1.3em;
-  color: #0984e3;
+  font-size: var(--text-xl);
+  color: var(--status-info);
 }
 
 /* Optimization Tips */
 .tips {
-  background: linear-gradient(135deg, #fffacd 0%, #fff8dc 100%);
+  border-left: 4px solid var(--status-warning);
 }
 
 .tips h2 {
-  color: #d4af37;
-  border-bottom-color: #f0d000;
+  color: var(--status-warning) !important;
+  border-bottom-color: var(--status-warning) !important;
 }
 
 .tips ul {
@@ -202,36 +203,57 @@
 
 .tips li {
   padding: 12px 0;
-  padding-left: 30px;
-  color: #555;
+  padding-left: 32px;
+  color: var(--text-secondary);
   position: relative;
-  font-size: 1.05em;
+  font-size: var(--text-base);
+  border-bottom: 1px solid var(--border-color);
 }
 
-.tips li:before {
-  content: "💡";
+.tips li:last-child {
+  border-bottom: none;
+}
+
+.tips li::before {
+  content: '💡';
   position: absolute;
   left: 0;
-  font-size: 1.2em;
+  font-size: 1rem;
 }
 
 /* Footer */
 .analytics-footer {
   text-align: center;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-muted);
   margin-top: 40px;
-  font-size: 0.95em;
+  font-size: var(--text-sm);
 }
 
-.error-message {
-  background-color: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
-  padding: 15px 20px;
-  border-radius: 5px;
-  margin-bottom: 20px;
-  font-weight: 600;
+.token-info {
+  font-size: 0.9em;
+  color: var(--text-muted);
 }
+
+.analytics-page .error-message {
+  background: var(--bg-error);
+  color: var(--text-error);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  padding: 15px 20px;
+  border-radius: var(--radius-lg);
+  margin-bottom: 20px;
+  font-weight: var(--fw-600);
+}
+
+.analytics-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40vh;
+  color: var(--text-secondary);
+  font-size: var(--text-lg);
+  gap: 12px;
+}
+
 
 @media (max-width: 768px) {
   .analytics-header h1 {

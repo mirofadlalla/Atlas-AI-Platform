@@ -30,18 +30,24 @@ function CostAnalyticsPage({ user }) {
   };
 
   if (loading) {
-    return <div className="analytics-page"><p>⏳ Loading analytics...</p></div>;
+    return (
+      <main className="analytics-page">
+        <div className="analytics-loading" role="status">
+          <span>Loading analytics…</span>
+        </div>
+      </main>
+    );
   }
 
   return (
-    <div className="analytics-page">
+    <main className="analytics-page">
       <div className="analytics-header">
-        <h1>💰 Cost Analytics & Usage</h1>
+        <h1>Cost Analytics &amp; Usage</h1>
         <p>Monitor spending and usage trends</p>
-        <button onClick={loadAnalytics} className="btn-refresh">🔄 Refresh</button>
+        <button onClick={loadAnalytics} className="btn-refresh" aria-label="Refresh analytics">↻ Refresh</button>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className="analytics-page error-message" role="alert">{error}</div>}
 
       <div className="analytics-container">
         {costs && (
@@ -132,9 +138,9 @@ function CostAnalyticsPage({ user }) {
       </div>
 
       <div className="analytics-footer">
-        <small>💬 For detailed cost breakdowns and charts, visit the MLflow dashboard</small>
+        <small>For detailed cost breakdowns and charts, visit the MLflow dashboard</small>
       </div>
-    </div>
+    </main>
   );
 }
 

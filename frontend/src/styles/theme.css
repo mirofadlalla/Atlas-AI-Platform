@@ -27,7 +27,8 @@
   --text-primary: #F3F4F6;
   --text-secondary: #D1D5DB;
   --text-tertiary: #9CA3AF;
-  --text-muted: #6B7280;
+  --text-muted: #9CA3AF;
+  --text-faint: #6B7280;
   --text-inverse: #0B1120;
   
   /* Status Colors */
@@ -35,6 +36,30 @@
   --status-warning: #F59E0B;
   --status-error: #EF4444;
   --status-info: #3B82F6;
+
+  /* Semantic color aliases */
+  --color-error: #EF4444;
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-info: #3B82F6;
+
+  /* Status background tints */
+  --bg-error: rgba(239, 68, 68, 0.15);
+  --bg-success: rgba(16, 185, 129, 0.15);
+  --bg-warning: rgba(245, 158, 11, 0.15);
+  --bg-info: rgba(59, 130, 246, 0.15);
+
+  /* Text on status tints */
+  --text-success: #86EFAC;
+  --text-warning: #FBBF24;
+  --text-error: #FCA5A5;
+  --text-info: #93C5FD;
+
+  /* Quaternary background level */
+  --bg-quaternary: #2D3748;
+
+  /* Text on accent backgrounds */
+  --text-on-accent: #FFFFFF;
   
   /* UI Elements */
   --border-color: rgba(255, 255, 255, 0.08);
@@ -278,6 +303,12 @@ input[type="submit"] {
 .btn-lg {
   padding: var(--space-lg) var(--space-2xl);
   font-size: var(--text-lg);
+}
+
+/* Full-width Button */
+.btn-full {
+  width: 100%;
+  justify-content: center;
 }
 
 /* Disabled State */

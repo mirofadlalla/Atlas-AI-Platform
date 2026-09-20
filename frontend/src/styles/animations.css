@@ -90,12 +90,6 @@ button:active::after {
   box-shadow: var(--shadow-lg);
 }
 
-/* Smooth input focus */
-input:focus,
-textarea:focus,
-select:focus {
-  transform: scale(1.01);
-}
 
 /* Subtle scale on hover for interactive elements */
 .interactive:hover {
@@ -108,9 +102,7 @@ select:focus {
 
 /* Smooth color transitions */
 .color-transition {
-  transition: color var(--transition-base);
-  transition: background-color var(--transition-base);
-  transition: border-color var(--transition-base);
+  transition: color var(--transition-base), background-color var(--transition-base), border-color var(--transition-base);
 }
 
 /* Loading skeleton animation */

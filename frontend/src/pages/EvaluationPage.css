@@ -192,11 +192,11 @@
   font-size: 1.05em;
 }
 
-.evaluation-metrics li:before {
+.evaluation-metrics li::before {
   content: "✓";
   position: absolute;
   left: 0;
-  color: #667eea;
+  color: var(--accent-primary);
   font-weight: bold;
 }
 

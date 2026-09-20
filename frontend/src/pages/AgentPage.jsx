@@ -239,7 +239,7 @@ const AgentPage = () => {
   };
 
   return (
-    <div className="agent-page">
+    <main className="agent-page">
       <div className="agent-container">
         <div className="agent-header">
           <h1>Agent Query</h1>
@@ -255,6 +255,7 @@ const AgentPage = () => {
               checked={isBatchMode}
               onChange={(e) => setIsBatchMode(e.target.checked)}
               disabled={loading}
+              aria-label="Batch mode: get the full response at once instead of streaming"
             />
             Batch Mode (Get full response at once)
           </label>
@@ -264,29 +265,17 @@ const AgentPage = () => {
         </div>
 
         {recommendedQA.length > 0 && (
-          <div className="recommended-section" style={{ marginBottom: '15px' }}>
-            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#94a3b8', marginBottom: '8px' }}>
-              💡 Recommended Questions (Tenant Loaded):
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          <div className="recommended-section">
+            <p className="recommended-label">Suggested Questions</p>
+            <div className="recommended-buttons">
               {recommendedQA.map((qa) => (
                 <button
                   key={qa.id}
                   type="button"
                   onClick={() => handleSelectRecommended(qa)}
-                  style={{
-                    background: 'rgba(99, 102, 241, 0.15)',
-                    border: '1px solid rgba(99, 102, 241, 0.3)',
-                    color: '#c7d2fe',
-                    padding: '6px 12px',
-                    borderRadius: '16px',
-                    fontSize: '0.85rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    textAlign: 'left'
-                  }}
+                  className="recommended-btn"
                 >
-                  ❓ {qa.question}
+                  {qa.question}
                 </button>
               ))}
             </div>
@@ -304,6 +293,7 @@ const AgentPage = () => {
               rows="4"
               disabled={loading}
               className="question-textarea"
+              aria-label="Your question for the AI agent"
             />
           </div>
 
@@ -312,14 +302,20 @@ const AgentPage = () => {
             disabled={loading || !question.trim()}
             className="submit-button"
           >
-            {loading ? 'Processing...' : isBatchMode ? 'Get Answer' : 'Start Streaming'}
+            {loading ? 'Processing…' : isBatchMode ? 'Get Answer' : 'Start Streaming'}
           </button>
         </form>
 
         {error && (
-          <div className="error-message">
+          <div className="error-message" role="alert" aria-live="assertive">
             <strong>Error:</strong> {error}
-            <button onClick={() => setError('')} className="close-error">×</button>
+            <button
+              onClick={() => setError('')}
+              className="close-error"
+              aria-label="Close error message"
+            >
+              ×
+            </button>
           </div>
         )}
 
@@ -391,7 +387,7 @@ const AgentPage = () => {
           <div ref={messagesEndRef} />
         </div>
       </div>
-    </div>
+    </main>
   );
 };
 

@@ -113,38 +113,26 @@ function QueryPage({ user }) {
   };
 
   return (
-    <div className="query-page">
+    <main className="query-page">
       <div className="query-header">
-        <h1>❓ Ask Your Documents</h1>
+        <h1>Ask Your Documents</h1>
         <p>Ask questions about your ingested documents and get AI-powered answers</p>
       </div>
 
       <div className="query-container">
         <div className="query-input-section">
           {recommendedQA.length > 0 && (
-            <div className="recommended-section" style={{ marginBottom: '15px' }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#94a3b8', marginBottom: '8px' }}>
-                💡 Recommended Questions (Tenant Loaded):
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            <div className="recommended-section">
+              <p className="recommended-label">Suggested Questions</p>
+              <div className="recommended-buttons">
                 {recommendedQA.map((qa) => (
                   <button
                     key={qa.id}
                     type="button"
                     onClick={() => handleSelectRecommended(qa)}
-                    style={{
-                      background: 'rgba(99, 102, 241, 0.15)',
-                      border: '1px solid rgba(99, 102, 241, 0.3)',
-                      color: '#c7d2fe',
-                      padding: '6px 12px',
-                      borderRadius: '16px',
-                      fontSize: '0.85rem',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      textAlign: 'left'
-                    }}
+                    className="recommended-btn"
                   >
-                    ❓ {qa.question}
+                    {qa.question}
                   </button>
                 ))}
               </div>
@@ -153,34 +141,38 @@ function QueryPage({ user }) {
 
           <form onSubmit={handleAskQuestion}>
             <div className="query-input-group">
+              <label htmlFor="query-input" className="sr-only">Your question</label>
               <textarea
+                id="query-input"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="What do you want to know? e.g., 'What was the revenue in 2023?'"
                 disabled={loading}
                 rows={4}
+                aria-label="Your question"
               />
               <div className="query-buttons">
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={loading || !query.trim()}
                   className="btn-primary"
                 >
-                  {loading ? '🔄 Searching...' : '🚀 Ask Question'}
+                  {loading ? 'Searching…' : '🚀 Ask Question'}
                 </button>
                 <button
                   type="button"
                   onClick={handleClear}
                   className="btn-secondary"
                   disabled={loading}
+                  aria-label="Clear query and results"
                 >
-                  🔄 Clear
+                  ✕ Clear
                 </button>
               </div>
             </div>
           </form>
 
-          {error && <div className="error-banner">{error}</div>}
+          {error && <div className="error-banner" role="alert" aria-live="assertive">{error}</div>}
         </div>
 
         {answer || retrievedDocs.length > 0 ? (
@@ -222,10 +214,10 @@ function QueryPage({ user }) {
                           <h4>📄 Document {idx + 1}</h4>
                           <div className="doc-scores">
                             <span className="score-badge">
-                              Rerank: {(doc.rerank_score * 100).toFixed(1)}%
+                              Rerank: {((doc.rerank_score ?? 0) * 100).toFixed(1)}%
                             </span>
                             <span className="score-badge">
-                              Combined: {(doc.combined_score * 100).toFixed(1)}%
+                              Combined: {((doc.combined_score ?? 0) * 100).toFixed(1)}%
                             </span>
                           </div>
                         </div>
@@ -248,7 +240,7 @@ function QueryPage({ user }) {
           </div>
         ) : null}
       </div>
-    </div>
+    </main>
   );
 }
 
