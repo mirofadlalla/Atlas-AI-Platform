@@ -99,6 +99,20 @@ const AgentPage = () => {
       let streamedAnswer = '';
       let thoughtCommitted = false;
 
+      // Helper declared outside the loop to prevent ESLint no-loop-func closure warning
+      const commitThought = (thought) => {
+        setThoughts((prev) => [...prev, thought]);
+        setCurrentThought('');
+      };
+
+      // Helper to safely convert SSE payload to string, declared outside loop
+      const toString = (val) => {
+        if (typeof val === 'string') return val;
+        if (typeof val === 'object' && val !== null && val.content) return val.content;
+        if (typeof val === 'object') return JSON.stringify(val);
+        return String(val || '');
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -111,14 +125,6 @@ const AgentPage = () => {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
-
-              // Helper to safely convert to string
-              const toString = (val) => {
-                if (typeof val === 'string') return val;
-                if (typeof val === 'object' && val !== null && val.content) return val.content;
-                if (typeof val === 'object') return JSON.stringify(val);
-                return String(val || '');
-              };
 
               switch (data.type) {
                 case 'thought':
@@ -144,8 +150,7 @@ const AgentPage = () => {
 
                 case 'answer':
                   if (streamedThought && !thoughtCommitted) {
-                    setThoughts((prev) => [...prev, streamedThought]);
-                    setCurrentThought('');
+                    commitThought(streamedThought);
                     thoughtCommitted = true;
                   }
                   streamedAnswer += toString(data.content);
@@ -181,7 +186,7 @@ const AgentPage = () => {
 
       // Add final thought to history if not already added
       if (streamedThought && !thoughtCommitted) {
-        setThoughts((prev) => [...prev, streamedThought]);
+        commitThought(streamedThought);
       }
     } catch (err) {
       setError(`Error: ${err.message}`);

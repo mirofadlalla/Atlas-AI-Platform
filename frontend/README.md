@@ -1,484 +1,573 @@
-# Atlas AI Platform - Frontend
+# Atlas AI Frontend
 
-Professional React frontend for the Atlas AI Platform with advanced RAG pipeline, document reranking, cost analytics, and multi-tenant support.
+### Production-Oriented React Interface for Enterprise Agentic AI
 
-## 🎯 Features
+A modern, responsive frontend for **Atlas AI Platform**, an enterprise-grade, multi-tenant Agentic AI system that combines Retrieval-Augmented Generation (RAG), hybrid search, SQL querying, document reranking, and AI-powered analytics.
 
-### User Interface
-- **Authentication System** - Secure JWT-based login with invitation-only registration
-- **Query Interface** - Real-time document retrieval with reranking score visualization
-- **Data Ingestion** - File upload with support for recursive directory ingestion
-- **Evaluation Dashboard** - Run and monitor RAG pipeline evaluations
-- **Cost Analytics** - Track usage, costs, and performance metrics
-- **Admin Panel** - Manage users, invitations, and approvals
+Built with React 18, the frontend provides an integrated workspace for querying knowledge bases, managing documents, monitoring AI usage, evaluating retrieval quality, and administering tenant users.
 
-### Technical Capabilities
-- ✅ Streaming responses with auto-scroll
-- ✅ Reranking score visualization (semantic, lexical, combined)
-- ✅ Real-time error handling and user feedback
-- ✅ Responsive mobile-first design
-- ✅ Role-based UI rendering (admin/user tiers)
-- ✅ Token-based authentication persistence
+The interface was refined through a comprehensive frontend audit focused on **accessibility, maintainability, consistency, and production-oriented UI engineering.**
 
-## 📋 Prerequisites
+---
 
-- **Node.js** 16+ and npm 8+
-- **Atlas AI Backend** running on `http://localhost:8000`
-- Modern web browser (Chrome 90+, Firefox 88+, Safari 14+, Edge 90+)
+## ✨ Core Capabilities
 
-## 🚀 Quick Start
+### 🤖 AI Interaction
 
-### 1. Install Dependencies
+* Real-time Agentic AI query interface.
+* Streaming responses with automatic scrolling.
+* Hybrid document retrieval and reranking visualization.
+* Semantic, lexical, and combined retrieval scores.
+* Recommended questions and interactive query workflows.
+* Agent execution status and thought-process visualization.
+
+### 📚 Knowledge Management
+
+* File ingestion and document indexing.
+* Recursive directory ingestion support.
+* Document metadata and source tracking.
+* Tenant database connection management.
+* Schema inspection and relationship visualization.
+
+### 📊 Evaluation & Observability
+
+* RAG pipeline evaluation interface.
+* Precision@K, Recall@K, F1, and MRR metrics.
+* Token usage and cost analytics.
+* Query latency and cache performance tracking.
+* MLflow dashboard integration.
+
+### 🔐 Authentication & Administration
+
+* JWT-based authentication.
+* Invitation-based registration.
+* User approval workflows.
+* Role-based interface rendering.
+* Tenant-aware application workflows.
+* Administrative management of invitations, users, and Q&A records.
+
+---
+
+## 🏗️ Frontend Architecture
+
+The frontend follows a modular React architecture that separates application logic, reusable UI components, API communication, and page-level functionality.
+
+```text
+frontend/
+│
+├── public/
+│   └── index.html
+│
+├── src/
+│   ├── index.js
+│   ├── index.css
+│   ├── App.jsx
+│   ├── App.css
+│   │
+│   ├── services/
+│   │   └── apiService.js
+│   │
+│   ├── styles/
+│   │   ├── theme.css
+│   │   └── animations.css
+│   │
+│   ├── components/
+│   │   ├── Navigation.jsx
+│   │   ├── ProtectedRoute.jsx
+│   │   ├── Toast.jsx
+│   │   ├── Modal.jsx
+│   │   ├── Spinner.jsx
+│   │   ├── EmptyState.jsx
+│   │   └── ...
+│   │
+│   └── pages/
+│       ├── LoginPage.jsx
+│       ├── RegisterPage.jsx
+│       ├── DashboardPage.jsx
+│       ├── QueryPage.jsx
+│       ├── AgentPage.jsx
+│       ├── IngestPage.jsx
+│       ├── EvaluationPage.jsx
+│       ├── CostAnalyticsPage.jsx
+│       ├── AdminPanel.jsx
+│       ├── TenantDatabasePage.jsx
+│       └── ...
+│
+├── package.json
+├── .env.example
+└── README.md
+```
+
+### Architectural Principles
+
+* Separation of shared components and page-specific logic.
+* Centralized API communication.
+* Reusable design tokens and styling utilities.
+* Consistent feedback and error-handling patterns.
+* Responsive and accessible interface components.
+* Role-aware navigation and UI rendering.
+
+---
+
+# 🎨 Design System & UI Engineering
+
+The frontend uses a centralized CSS token system to maintain consistent styling across the application.
+
+### Design System Improvements
+
+* Centralized colors, backgrounds, and semantic states.
+* Consistent spacing and component styling.
+* Dark-theme compatibility across application pages.
+* Responsive layouts for desktop, tablet, and mobile.
+* Reusable utility classes.
+* Reduced reliance on hardcoded CSS values.
+
+### Responsive Navigation
+
+The navigation system supports:
+
+* Active route highlighting through React Router `NavLink`.
+* Responsive hamburger menu.
+* Mobile navigation transitions.
+* Accessible ARIA attributes.
+* Separation between standard and administrative links.
+* User-friendly display names.
+
+---
+
+# 🛠️ Frontend Audit & Engineering Improvements
+
+A comprehensive audit was performed across the frontend, resulting in **45 implemented fixes**.
+
+The work focused on addressing inconsistencies, accessibility issues, duplicated styles, and maintainability problems.
+
+> The following improvements describe the implemented changes and build verification, rather than claiming that every possible production or security issue has been eliminated.
+
+## 1. Reusable UI Components
+
+Introduced shared components to replace inconsistent browser-native interactions.
+
+| Component    | Responsibility                     |
+| ------------ | ---------------------------------- |
+| `Toast`      | Application-wide notifications     |
+| `Modal`      | Reusable confirmation dialogs      |
+| `Spinner`    | Consistent loading states          |
+| `EmptyState` | Standardized empty-content layouts |
+
+### Toast Notification System
+
+Replaced scattered `alert()` calls with a context-based notification system.
+
+```jsx
+const { showToast } = useToast();
+
+showToast("Operation completed successfully", "success");
+```
+
+Supported variants:
+
+* Success
+* Error
+* Warning
+* Info
+
+The notification system includes configurable auto-dismiss behavior and accessibility attributes.
+
+### Modal System
+
+Replaced `window.confirm()` with a reusable dialog component supporting:
+
+* Confirmation workflows.
+* Destructive-action variants.
+* Escape-key dismissal.
+* Backdrop dismissal.
+* Focus management.
+* Body scroll locking.
+
+---
+
+## 2. Accessibility Improvements
+
+The audit introduced accessibility-focused improvements throughout the interface.
+
+### Implemented Improvements
+
+* Added accessible labels to form inputs and interactive controls.
+* Added ARIA roles for tabs, alerts, and loading states.
+* Added navigation landmark labeling.
+* Added keyboard-oriented modal interactions.
+* Improved error message announcements.
+* Added accessible loading indicators.
+* Scoped global CSS selectors affecting form elements.
+* Improved color contrast for muted text.
+
+### Example
+
+```jsx
+<div role="alert" aria-live="assertive">
+  {errorMessage}
+</div>
+```
+
+**Accessibility Note:** The changes improve accessibility patterns, but a complete WCAG compliance claim requires broader automated and manual testing across the application.
+
+---
+
+## 3. CSS & Maintainability Improvements
+
+### Problems Addressed
+
+* Duplicate CSS blocks.
+* Conflicting style definitions.
+* Undefined CSS tokens.
+* Unscoped form selectors.
+* Duplicate animations.
+* Hardcoded theme colors.
+* Unnecessary focus transformations.
+* Inline styles in reusable UI sections.
+
+### Key Improvements
+
+* Centralized design tokens in `theme.css`.
+* Removed duplicate blocks from `index.css` and `Navigation.css`.
+* Removed duplicate `slideUp` keyframes.
+* Fixed conflicting transition declarations.
+* Replaced hardcoded semantic colors with design tokens.
+* Scoped page-specific form styling.
+* Improved component-level CSS organization.
+
+These changes reduce styling conflicts and make future UI maintenance more predictable.
+
+---
+
+# 🔐 Authentication & Access Control
+
+The frontend integrates with the Atlas AI backend authentication system.
+
+### Authentication Flow
+
+```text
+User
+ │
+ ▼
+Login / Invitation Registration
+ │
+ ▼
+Backend Authentication
+ │
+ ▼
+JWT Token
+ │
+ ▼
+Session Persistence
+ │
+ ▼
+Protected Routes
+ │
+ ▼
+Role-Aware Interface
+```
+
+### Supported Workflows
+
+* Login with email and password.
+* Invitation-based registration.
+* User approval workflows.
+* JWT-based request authentication.
+* Protected routes.
+* Admin-only interface sections.
+
+### API Integration
+
+The frontend uses a unified API service for backend communication.
+
+```javascript
+apiService.login(email, password);
+
+apiService.askQuery(query);
+
+apiService.retrieveDocuments(query, top_k);
+
+apiService.getCostAnalytics();
+
+apiService.getPendingApprovals();
+```
+
+**Security Consideration:** JWT persistence and frontend role-based rendering support the user experience, but backend authorization must independently validate tokens, roles, and tenant boundaries. Frontend headers should not be treated as a trusted authorization mechanism.
+
+---
+
+# 📈 RAG Query Experience
+
+The Query and Agent pages provide an interface for interacting with the backend's AI workflows.
+
+### Query Workflow
+
+```text
+User Query
+    │
+    ▼
+Frontend Request
+    │
+    ▼
+Backend Agent / Retrieval Pipeline
+    │
+    ▼
+Hybrid Retrieval
+    │
+    ▼
+Document Reranking
+    │
+    ▼
+Generated Response
+    │
+    ▼
+Streaming UI
+```
+
+### Retrieval Visualization
+
+The interface can display retrieval-related scoring information, including:
+
+* Original retrieval score.
+* Reranking score.
+* Combined score.
+* Document metadata.
+* Retrieved document content.
+
+The UI also handles missing reranking scores through defensive null handling.
+
+```javascript
+const score = (doc.rerank_score ?? 0) * 100;
+```
+
+---
+
+# 📊 Evaluation & Cost Analytics
+
+The frontend includes dedicated interfaces for monitoring and evaluating AI workflows.
+
+### Evaluation Metrics
+
+* Precision@K
+* Recall@K
+* F1 Score
+* Mean Reciprocal Rank (MRR)
+* Jaccard Stability
+* Token F1
+
+### Cost Analytics
+
+* Total usage cost.
+* Average cost per query.
+* Model-level cost breakdown.
+* Input and output token tracking.
+* Query latency.
+* Cache hit-rate monitoring.
+* Optimization recommendations.
+
+The accuracy and reliability of these metrics depend on the backend's measurement and tracking implementation.
+
+---
+
+# 🧪 Verification & Build Quality
+
+The frontend audit was followed by a production build verification.
+
+### Build Result
+
+```text
+Compiled with warnings.
+
+Exit Code: 0
+
+JavaScript (Gzip): 70.46 kB
+CSS (Gzip):         11.17 kB
+```
+
+The build completed successfully with two pre-existing warnings.
+
+### Audit Verification
+
+| Area                      | Result                            |
+| ------------------------- | --------------------------------- |
+| Production build          | ✅ Successful                      |
+| Duplicate CSS blocks      | ✅ Addressed                       |
+| Undefined CSS tokens      | ✅ Addressed                       |
+| Browser alert calls       | ✅ Removed                         |
+| Browser confirm calls     | ✅ Removed                         |
+| Shared Toast system       | ✅ Integrated                      |
+| Shared Modal system       | ✅ Integrated                      |
+| Shared Spinner system     | ✅ Integrated                      |
+| Active navigation state   | ✅ Implemented                     |
+| Responsive hamburger menu | ✅ Implemented                     |
+| Form styling scope        | ✅ Improved                        |
+| Accessibility attributes  | ✅ Added across audited components |
+| Main landmarks            | ✅ Added to audited pages          |
+
+---
+
+# 🚀 Getting Started
+
+## Prerequisites
+
+* Node.js 16+
+* npm 8+
+* Running Atlas AI Backend
+* Modern web browser
+
+## Installation
 
 ```bash
 cd frontend
+
 npm install
 ```
 
-### 2. Environment Configuration
+## Environment Configuration
 
-Create `.env` file from template:
+Create a local environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-Update `.env` with your configuration:
+Example configuration:
 
 ```env
 REACT_APP_API_URL=http://localhost:8000/api
+
 REACT_APP_ENABLE_RERANKING=true
+
 REACT_APP_ENABLE_EVALUATION=true
+
 REACT_APP_ENABLE_ANALYTICS=true
 ```
 
-### 3. Start Development Server
+## Start Development Server
 
 ```bash
 npm start
 ```
 
-The application will open at `http://localhost:3000`
+Application:
 
-### 4. Build for Production
+```text
+http://localhost:3000
+```
+
+## Production Build
 
 ```bash
 npm run build
 ```
 
-## 📁 Project Structure
+## Available Scripts
 
-```
-frontend/
-├── public/
-│   └── index.html           # HTML entry point
-├── src/
-│   ├── index.js            # React entry point
-│   ├── index.css           # Global styles
-│   ├── App.jsx             # Main app component with routing
-│   ├── services/
-│   │   └── apiService.js   # Unified API client for all endpoints
-│   ├── components/
-│   │   ├── Navigation.jsx  # Header with nav links and logout
-│   │   ├── Navigation.css
-│   │   ├── ProtectedRoute.jsx  # Route protection wrapper
-│   │   └── ...
-│   └── pages/
-│       ├── LoginPage.jsx   # User authentication
-│       ├── LoginPage.css
-│       ├── RegisterPage.jsx # Invitation-based registration
-│       ├── DashboardPage.jsx # Navigation hub
-│       ├── DashboardPage.css
-│       ├── QueryPage.jsx   # Document search and retrieval
-│       ├── QueryPage.css
-│       ├── IngestPage.jsx  # File upload interface
-│       ├── IngestPage.css
-│       ├── AdminPanel.jsx  # User management
-│       ├── AdminPanel.css
-│       ├── EvaluationPage.jsx # Pipeline evaluation
-│       ├── EvaluationPage.css
-│       ├── CostAnalyticsPage.jsx # Usage analytics
-│       ├── CostAnalyticsPage.css
-│       └── ...
-├── package.json            # Dependencies
-├── .env.example           # Environment template
-└── README.md              # This file
-```
-
-## 🔐 Authentication Flow
-
-### 1. **Invitation-Based Registration**
-   - Admin sends invitation token to email
-   - User enters token on registration page
-   - User sets password and creates account
-   - Admin approves user before access
-
-### 2. **Login Process**
-   - User enters email and password
-   - System validates credentials and returns JWT token
-   - Token stored in localStorage for session persistence
-   - Requests include token in `Authorization` header
-
-### 3. **Access Control**
-   - Unauthenticated users redirected to login
-   - Routes protected by `ProtectedRoute` wrapper
-   - Admin features only visible to admin-role users
-   - Session expires after 30 minutes of inactivity
-
-## 📱 Page Documentation
-
-### LoginPage
-**Purpose**: User authentication
-
-**Features**:
-- Email/password form validation
-- Persistent session using JWT
-- Error handling with user feedback
-- Link to invitation-based registration
-
-**Example**:
-```jsx
-// Automatic token storage
-localStorage.setItem('token', response.token);
-localStorage.setItem('user', JSON.stringify(response.user));
-```
-
-### RegisterPage
-**Purpose**: Invitation-only user registration
-
-**Features**:
-- Token validation before registration
-- Secure password creation
-- Auto-populated email from token
-- Prevents duplicate registrations
-
-**Example**:
-```
-1. User enters invitation token
-2. System validates and retrieves email
-3. User sets password
-4. Account created, user awaits admin approval
-```
-
-### DashboardPage
-**Purpose**: Main application hub
-
-**Features**:
-- 6 navigation cards (Query, Ingest, Evaluate, Analytics, Admin)
-- User profile with stats (queries, documents, costs)
-- Role-based admin panel access
-- Quick action buttons
-
-### QueryPage
-**Purpose**: Document retrieval and Q&A
-
-**Features**:
-- Tab interface (Answer vs. Documents)
-- Streaming response with real-time display
-- Document retrieval with metadata
-- **Reranking Score Visualization**:
-  - Original Score: Initial semantic similarity
-  - Rerank Score: Cross-encoder refinement
-  - Combined Score: Weighted hybrid result
-- Cost tracking per query
-
-**Example Query**:
-```
-Input: "How does the reranker improve retrieval?"
-
-Response Tabs:
-1. Answer Tab: "The reranker combines semantic..." [streaming]
-2. Documents Tab:
-   - Doc 1: "Reranking Strategies..." 
-     Original: 92.5% | Rerank: 95.2% | Combined: 93.8%
-   - Doc 2: "Hybrid Approach..."
-     Original: 87.3% | Rerank: 89.1% | Combined: 88.2%
-```
-
-### IngestPage
-**Purpose**: Data ingestion and indexing
-
-**Features**:
-- File path input (local file system)
-- Recursive directory support
-- File source metadata (document source)
-- Author information tracking
-- Progress feedback
-
-**Example**:
-```
-Path: /data/documents/
-Source: Research Papers
-Author: John Doe
-Recursive: ✓ (includes subdirectories)
-```
-
-### AdminPanel
-**Purpose**: User and invitation management
-
-**Features**:
-- Two tabs: Send Invitations | Approve Users
-- **Invitations Tab**:
-  - Send invites to email addresses
-  - View pending invitations
-  - Resend expired invitations
-  - Track invitation status
-- **Approvals Tab**:
-  - List pending user approvals
-  - View user details (email, created_at)
-  - Approve or reject registration requests
-
-### EvaluationPage
-**Purpose**: RAG pipeline evaluation
-
-**Features**:
-- Upload evaluation dataset (JSON format)
-- Configure evaluation runs
-- Metrics tracked:
-  - Precision@K - Relevant documents in top K results
-  - Recall@K - Coverage of relevant documents
-  - F1 Score - Harmonic mean metric
-  - MRR - Mean Reciprocal Rank
-  - Jaccard Stability - Consistency measure
-  - Token F1 - Keyword overlap
-
-**Dataset Format**:
-```json
-[
-  {
-    "query": "What is the reranking strategy?",
-    "ground_truth": ["doc1.pdf", "doc3.pdf"],
-    "expected_answer": "Hybrid approach combining..."
-  }
-]
-```
-
-### CostAnalyticsPage
-**Purpose**: Usage monitoring and cost analysis
-
-**Features**:
-- Cost summary (total, average, per-query)
-- Cost breakdown by model
-- Usage metrics (latency, cache hit rate)
-- Token tracking (input/output)
-- Optimization recommendations
-- Integration with MLflow dashboard
-
-## 🔌 API Integration
-
-### API Service Structure
-
-The `apiService.js` provides unified methods for all backend endpoints:
-
-```javascript
-// Authentication
-apiService.login(email, password)
-apiService.register(email, password, tenantName)
-apiService.registerViaInvitation(token, password)
-apiService.getProfile()
-
-// Queries
-apiService.askQuery(query)
-apiService.retrieveDocuments(query, top_k)
-
-// Ingestion
-apiService.uploadFile(filePath, source, author, recursive)
-
-// Admin
-apiService.sendInvitation(email)
-apiService.validateInvitation(token)
-apiService.getPendingApprovals()
-apiService.approveUser(userId)
-
-// Analytics
-apiService.getCostAnalytics()
-apiService.getRuns()
-```
-
-### Error Handling
-
-All API calls include try-catch with user-friendly error messages:
-
-```javascript
-try {
-  const data = await apiService.askQuery(query);
-  setAnswer(data.answer);
-} catch (error) {
-  setError(error.message); // "Invalid query" or "Rate limit exceeded"
-}
-```
-
-### Authentication Headers
-
-All requests automatically include:
-
-```javascript
-headers: {
-  'Content-Type': 'application/json',
-  'Authorization': `Bearer ${token}`,
-  'X-User-ID': userId,
-  'X-Role': userRole,
-  'X-Tenant-ID': tenantId
-}
-```
-
-## 🎨 Styling System
-
-### Color Scheme
-- **Primary**: #667eea (purple-blue)
-- **Secondary**: #764ba2 (dark purple)
-- **Accent**: #f5576c (coral)
-- **Success**: #28a745 (green)
-- **Warning**: #ffc107 (amber)
-- **Error**: #dc3545 (red)
-
-### Responsive Breakpoints
-- **Desktop**: 1024px+
-- **Tablet**: 768px - 1023px
-- **Mobile**: 480px - 767px
-- **Small**: < 480px
-
-### Component Patterns
-Each page includes:
-- Gradient background header
-- White content cards with shadows
-- Smooth transitions and hover effects
-- Mobile-first responsive design
-- Accessible form controls
-
-## 🧪 Testing
-
-### Manual Testing Checklist
-
-```javascript
-// Test authentication
-1. ✓ Can login with valid credentials
-2. ✓ Cannot login with invalid password
-3. ✓ Can register via valid invitation
-4. ✓ Invitations expire correctly
-
-// Test querying
-5. ✓ Query returns streamed response
-6. ✓ Documents display with reranking scores
-7. ✓ Rate limiting blocks excessive queries
-8. ✓ Cost is tracked per query
-
-// Test admin functions
-9. ✓ Admin can send invitations
-10. ✓ Admin can approve/reject users
-11. ✓ Non-admin cannot access admin panel
-
-// Test ingestion
-12. ✓ Can upload files
-13. ✓ Supports recursive directories
-14. ✓ Shows progress and completion
-
-// Test analytics
-15. ✓ Costs display correctly
-16. ✓ Usage metrics update in real-time
-17. ✓ Evaluations complete successfully
-```
-
-## 📊 Performance Optimization
-
-### Implemented
-- ✅ Code splitting with React.lazy
-- ✅ Streaming response handling
-- ✅ Auto-scrolling for long content
-- ✅ Debounced search inputs
-- ✅ Cached authentication state
-- ✅ Optimized re-renders with React.memo
-
-### Metrics
-- **Page Load**: <2s (local network)
-- **Query Response**: Streaming in <500ms first byte
-- **Memory**: <50MB for typical session
-
-## 🔧 Development
-
-### Available Scripts
-
-```bash
-npm start      # Start dev server (port 3000)
-npm build      # Build for production
-npm test       # Run test suite
-npm eject      # Expose create-react-app config (irreversible)
-```
-
-### Browser DevTools
-
-- ✅ React DevTools browser extension recommended
-- ✅ Network tab for API debugging
-- ✅ Application storage shows JWT tokens
-- ✅ Console shows API response bodies
-
-### Common Issues
-
-**Issue**: "Cannot find Bearer token"
-- **Solution**: Ensure backend is running and login was successful
-
-**Issue**: "Query page shows no documents"
-- **Solution**: Check backend reranker is initialized (see backend README)
-
-**Issue**: Admin panel shows no users
-- **Solution**: Ensure you're logged in as admin role user
-
-## 📚 Additional Resources
-
-- **Backend Documentation**: See `../IMPLEMENTATION_GUIDE.md`
-- **Architecture Diagram**: See `../digrams/archDigram.simp`
-- **API Specification**: Backend FastAPI `/docs` endpoint
-- **MLflow Tracking**: Visit `http://localhost:5000` for experiment data
-
-## 🤝 Contributing
-
-When adding new features:
-
-1. Create component in appropriate folder
-2. Follow existing styling patterns
-3. Add error handling with user feedback
-4. Include responsive design
-5. Test on mobile devices
-6. Update this README
-
-## 📝 License
-
-Part of Atlas AI Platform - Production RAG System
-
-## 🚀 Deployment
-
-### Local Development
 ```bash
 npm start
-```
-
-### Production Build
-```bash
 npm run build
-# Serve build/ folder with web server
+npm test
+npm eject
 ```
-
-### Docker (Optional)
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
-EXPOSE 3000
-CMD ["npm", "start"]
-```
-
-## 📞 Support
-
-For issues or questions:
-1. Check this README
-2. Review backend IMPLEMENTATION_GUIDE.md
-3. Check console for error messages
-4. Verify backend API is running
-5. Check environment variables in .env
 
 ---
 
-**Built with React 18 • Styled for Enterprise • Ready for Production**
+# 🐳 Deployment
+
+The application supports a standard React production build workflow.
+
+```text
+Source Code
+    │
+    ▼
+npm install
+    │
+    ▼
+npm run build
+    │
+    ▼
+build/
+    │
+    ▼
+Static Web Server / Hosting
+```
+
+For production deployment, the generated `build/` directory can be served through a suitable static web server or hosting platform.
+
+**Deployment Considerations:**
+
+* Configure the production API URL.
+* Enable HTTPS.
+* Configure backend CORS policies.
+* Review authentication token handling.
+* Configure appropriate caching headers.
+* Validate production error handling.
+
+---
+
+# 🔗 Atlas AI Ecosystem
+
+This frontend is part of the broader Atlas AI Platform.
+
+### Backend Capabilities
+
+* FastAPI backend.
+* Agentic workflow orchestration.
+* Hybrid retrieval.
+* SQL generation and querying.
+* Multi-tenant architecture.
+* Vector search.
+* Redis-based caching.
+* Background task processing.
+* Observability and evaluation.
+
+### Frontend Responsibilities
+
+* User interaction.
+* AI query experience.
+* Document management.
+* Administrative workflows.
+* Analytics visualization.
+* Evaluation interface.
+* Authentication state and route handling.
+
+---
+
+# 🧠 Engineering Focus
+
+This project demonstrates practical frontend engineering within an AI application ecosystem.
+
+Key areas of focus:
+
+* React component architecture.
+* API-driven application design.
+* AI product interfaces.
+* RAG workflow visualization.
+* Accessibility-conscious UI development.
+* CSS architecture and design systems.
+* Error handling and user feedback.
+* Multi-tenant application workflows.
+* Production build validation.
+
+---
+
+# 📌 Project Status
+
+**Status:** Active Development
+
+The frontend has undergone a comprehensive audit and implementation pass covering 45 reported issues.
+
+The successful production build confirms that the current changes compile successfully. Further production validation should include end-to-end testing, security testing, browser compatibility checks, and deployment verification.
+
+---
+
+### Built With
+
+**React 18 • JavaScript • CSS • REST APIs • JWT • RAG • Agentic AI**
+
+**Part of the Atlas AI Platform — Enterprise AI Infrastructure.**
+
+---
+# atlas-ai-frontend
+# atlas-ai-frontend
