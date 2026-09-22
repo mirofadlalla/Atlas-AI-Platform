@@ -11,10 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Keep setuptools aligned with the direct runtime pin. Newer setuptools
-# releases vendor wheel 0.46.3 (packaging>=24), conflicting with MLflow 2.10.1
-# (packaging<24). Do not install a standalone wheel package.
-RUN pip install --no-cache-dir --upgrade pip "setuptools==80.10.1"
+# python:3.11-slim currently inherits top-level wheel==0.46.3 from its own
+# bootstrap. It is not required by this application, and its packaging>=24
+# metadata conflicts with mlflow==2.10.1 (packaging<24). Setuptools is pinned
+# to 80.10.1 for its compatible vendored wheel; remove only the independent,
+# inherited top-level distribution. Build isolation remains managed by pip.
+RUN python -m pip install --no-cache-dir --upgrade pip "setuptools==80.10.1" \
+    && python -m pip uninstall -y wheel \
+    && python -c "import importlib.metadata as m; top_level_wheel = [str(d.locate_file('')) for d in m.distributions() if d.metadata['Name'].lower() == 'wheel' and '/setuptools/_vendor' not in str(d.locate_file(''))]; assert not top_level_wheel, f'Unexpected top-level wheel: {top_level_wheel}'"
 
 # CPU-only PyTorch dependency resolution
 # Resolve requirements and the CPU-only PyTorch constraint together.
@@ -38,7 +42,7 @@ RUN pip install --no-cache-dir \
     --constraint constraints-cpu.txt \
     -r requirements.txt \
     && python -m pip check \
-    && python -c "import importlib.metadata as m; names = {d.metadata['Name'].lower() for d in m.distributions()}; forbidden = sorted(name for name in names if name.startswith('nvidia-') or name == 'triton'); assert not forbidden, f'Unexpected GPU packages: {forbidden}'; assert 'torchvision' not in names, 'Unexpected torchvision dependency'"
+    && python -c "import importlib.metadata as m; dists = list(m.distributions()); names = {d.metadata['Name'].lower() for d in dists}; forbidden = sorted(name for name in names if name.startswith('nvidia-') or name == 'triton'); top_level_wheel = [str(d.locate_file('')) for d in dists if d.metadata['Name'].lower() == 'wheel' and '/setuptools/_vendor' not in str(d.locate_file(''))]; assert not forbidden, f'Unexpected GPU packages: {forbidden}'; assert 'torchvision' not in names, 'Unexpected torchvision dependency'; assert not top_level_wheel, f'Unexpected top-level wheel: {top_level_wheel}'"
 
 # ==================== RUNTIME STAGE ====================
 FROM python:3.11-slim AS runner

@@ -49,9 +49,9 @@ prometheus-fastapi-instrumentator==6.1.0
 sentry-sdk>=2.0.0,<3.0.0
 
 # MLflow for Experiment Tracking
-# 80.10.1 is the newest setuptools that vendors wheel 0.45.1. Newer
-# setuptools releases vendor wheel 0.46.3, whose packaging>=24 requirement
-# conflicts with mlflow==2.10.1 (packaging<24) during pip check.
+# Pin the newest setuptools whose vendored wheel metadata remains compatible
+# with mlflow==2.10.1's packaging<24 requirement. The Dockerfile separately
+# removes python:3.11-slim's top-level wheel==0.46.3.
 setuptools==80.10.1
 mlflow==2.10.1
 

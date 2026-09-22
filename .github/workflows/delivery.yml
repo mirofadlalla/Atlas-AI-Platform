@@ -100,13 +100,20 @@ jobs:
           assert torch.__version__ == '2.4.1+cpu', torch.__version__
           assert torch.version.cuda is None
           assert not torch.cuda.is_available()
-          names = {d.metadata['Name'].lower() for d in distributions()}
+          dists = list(distributions())
+          names = {d.metadata['Name'].lower() for d in dists}
           forbidden = sorted(
               name for name in names
               if name.startswith('nvidia-') or name == 'triton'
           )
           assert not forbidden, f'Unexpected GPU packages: {forbidden}'
           assert 'torchvision' not in names, 'Unexpected torchvision dependency'
+          top_level_wheel = [
+              str(d.locate_file('')) for d in dists
+              if d.metadata['Name'].lower() == 'wheel'
+              and '/setuptools/_vendor' not in str(d.locate_file(''))
+          ]
+          assert not top_level_wheel, f'Unexpected top-level wheel: {top_level_wheel}'
 
           model = SentenceTransformer('BAAI/bge-m3', device='cpu')
           assert str(model.device) == 'cpu'
