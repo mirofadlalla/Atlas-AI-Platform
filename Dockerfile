@@ -11,9 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# MLflow 2.10.1 requires packaging<24. Do not install wheel here: the latest
-# wheel requires packaging>=24 and would make the resolver inconsistent.
-RUN pip install --no-cache-dir --upgrade pip setuptools
+# Keep setuptools aligned with the direct runtime pin. Newer setuptools
+# releases vendor wheel 0.46.3 (packaging>=24), conflicting with MLflow 2.10.1
+# (packaging<24). Do not install a standalone wheel package.
+RUN pip install --no-cache-dir --upgrade pip "setuptools==80.10.1"
 
 # CPU-only PyTorch dependency resolution
 # Resolve requirements and the CPU-only PyTorch constraint together.
