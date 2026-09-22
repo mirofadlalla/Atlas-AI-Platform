@@ -93,13 +93,19 @@ jobs:
           docker run --rm --entrypoint python \
             -e HF_HOME=/tmp/huggingface \
             "${{ steps.vars.outputs.local_tag }}" -c "
-          from importlib.metadata import distributions
+          from importlib.metadata import distributions, version
+          from pathlib import Path
+          from huggingface_hub import snapshot_download
           import torch
           from sentence_transformers import SentenceTransformer
 
           assert torch.__version__ == '2.4.1+cpu', torch.__version__
           assert torch.version.cuda is None
           assert not torch.cuda.is_available()
+          print('ML package versions:', {
+              package: version(package)
+              for package in ('torch', 'transformers', 'sentence-transformers', 'safetensors')
+          })
           dists = list(distributions())
           names = {d.metadata['Name'].lower() for d in dists}
           forbidden = sorted(
@@ -120,7 +126,31 @@ jobs:
           ]
           assert not top_level_wheel, f'Unexpected top-level wheel dist-info: {top_level_wheel}'
 
-          model = SentenceTransformer('BAAI/bge-m3', device='cpu')
+          # BAAI/bge-m3 main currently exposes only pytorch_model.bin, which
+          # correctly triggers Transformers' torch.load security guard on
+          # torch<2.6. This immutable revision adds model.safetensors. Download
+          # only the Sentence Transformers files needed for CPU encoding, then
+          # load from that local safetensors-only directory.
+          bge_safetensors_revision = '142964af7e05de16511657561de8e8750fc153a0'
+          bge_model_dir = Path(snapshot_download(
+              repo_id='BAAI/bge-m3',
+              revision=bge_safetensors_revision,
+              allow_patterns=[
+                  '1_Pooling/config.json',
+                  'config.json',
+                  'config_sentence_transformers.json',
+                  'model.safetensors',
+                  'modules.json',
+                  'sentence_bert_config.json',
+                  'sentencepiece.bpe.model',
+                  'special_tokens_map.json',
+                  'tokenizer.json',
+                  'tokenizer_config.json',
+              ],
+          ))
+          assert (bge_model_dir / 'model.safetensors').is_file()
+          assert not (bge_model_dir / 'pytorch_model.bin').exists()
+          model = SentenceTransformer(str(bge_model_dir), device='cpu')
           assert str(model.device) == 'cpu'
           vector = model.encode(['Atlas-AI CPU runtime smoke test'])
           assert len(vector) > 0
