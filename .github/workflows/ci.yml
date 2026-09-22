@@ -90,9 +90,10 @@ jobs:
           assert not forbidden, f'Unexpected GPU packages: {forbidden}'
           assert 'torchvision' not in names, 'Unexpected torchvision dependency'
           wheel_dists = [d for d in dists if d.metadata['Name'].lower() == 'wheel']
+          wheel_paths = [(d, str(d._path).replace(chr(92), '/')) for d in wheel_dists]
           top_level_wheel = [
-              str(d._path) for d in wheel_dists
-              if '/setuptools/_vendor/' not in str(d._path).replace('\\', '/')
+              path for _, path in wheel_paths
+              if '/setuptools/_vendor/' not in path
           ]
           assert not top_level_wheel, f'Unexpected top-level wheel dist-info: {top_level_wheel}'
           print('OK — CPU-only torch confirmed')
