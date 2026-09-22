@@ -1,0 +1,10 @@
+# Production CPU-only PyTorch lock for Linux/amd64.
+#
+# torch is pinned to its CPU-only local version so a later resolver cannot
+# replace it with a CUDA build (and nvidia-* / triton packages). The selected
+# sentence-transformers==2.6.1 no longer depends on torchvision, and the
+# application has no direct torchvision import, so it is intentionally absent.
+#
+# These exact local-version wheels exist in the official PyTorch CPU index for
+# CPython 3.11 on Linux x86_64. See Dockerfile and CI for the index URL.
+torch==2.4.1+cpu

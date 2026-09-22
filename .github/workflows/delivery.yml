@@ -85,6 +85,36 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # This runs before scanning or publishing. The model cache is placed in
+      # the disposable container filesystem, so BGE-M3 is verified on CPU but
+      # never becomes part of the published image layers.
+      - name: Validate CPU-only PyTorch and BGE-M3 runtime
+        run: |
+          docker run --rm --entrypoint python \
+            -e HF_HOME=/tmp/huggingface \
+            "${{ steps.vars.outputs.local_tag }}" -c "
+          from importlib.metadata import distributions
+          import torch
+          from sentence_transformers import SentenceTransformer
+
+          assert torch.__version__ == '2.4.1+cpu', torch.__version__
+          assert torch.version.cuda is None
+          assert not torch.cuda.is_available()
+          names = {d.metadata['Name'].lower() for d in distributions()}
+          forbidden = sorted(
+              name for name in names
+              if name.startswith('nvidia-') or name == 'triton'
+          )
+          assert not forbidden, f'Unexpected GPU packages: {forbidden}'
+          assert 'torchvision' not in names, 'Unexpected torchvision dependency'
+
+          model = SentenceTransformer('BAAI/bge-m3', device='cpu')
+          assert str(model.device) == 'cpu'
+          vector = model.encode(['Atlas-AI CPU runtime smoke test'])
+          assert len(vector) > 0
+          print('CPU-only PyTorch, Sentence Transformers, and BGE-M3 verified')
+          "
+
       # ── Prune BuildKit cache to free disk space before Trivy export ───────
       # Since the image is already loaded in the Docker daemon, freeing BuildKit
       # cache gives Trivy plenty of room to export and unpack the image in /tmp.

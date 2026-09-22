@@ -22,7 +22,13 @@ langchain-community==0.0.38
 langchain-core==0.1.53
 langchain-qdrant==0.1.4
 langgraph==0.0.21
-sentence-transformers==2.2.2
+# 2.2.2 imports the removed huggingface_hub.cached_download API.  2.6.1 keeps
+# the SentenceTransformer/CrossEncoder API used by the application, supports
+# modern Hugging Face Hub clients, and works with the CPU-only torch pin.
+sentence-transformers==2.6.1
+# BGE-M3 uses an XLM-R tokenizer; retain SentencePiece explicitly now that
+# newer sentence-transformers releases do not declare it as a direct dep.
+sentencepiece>=0.1.99
 fastembed>=0.7.4,<0.9.0
 
 # Task Queue & Caching

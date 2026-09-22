@@ -184,12 +184,23 @@ curl -f http://localhost:8000/health
 # FastAPI docs (confirm the API is fully initialised)
 curl -f http://localhost:8000/docs | head -5
 
-# Verify CPU-only PyTorch (no CUDA packages installed)
+# Verify the pinned CPU-only PyTorch build (not just CUDA hardware absence).
+# A CUDA-enabled wheel also reports False on a CPU-only EC2 instance, so check
+# the wheel versions and installed package metadata as well.
 docker exec atlas-api python -c "
+from importlib.metadata import distributions
 import torch
 print('torch version:', torch.__version__)
 print('CUDA available:', torch.cuda.is_available())
-assert not torch.cuda.is_available(), 'ERROR: CUDA is available — unexpected on CPU instance'
+assert torch.__version__ == '2.4.1+cpu', 'ERROR: unexpected torch build'
+assert torch.version.cuda is None and not torch.cuda.is_available()
+names = {d.metadata['Name'].lower() for d in distributions()}
+forbidden = sorted(
+    name for name in names
+    if name.startswith('nvidia-') or name == 'triton'
+)
+assert not forbidden, f'ERROR: unexpected GPU packages: {forbidden}'
+assert 'torchvision' not in names, 'ERROR: unexpected torchvision dependency'
 print('✓ CPU-only PyTorch confirmed')
 "
 
