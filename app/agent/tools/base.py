@@ -16,8 +16,8 @@ class ToolObservation:
     has_data: bool = False
 
 
-# الكود ده بيمثل Tool Framework في الـ Agent. بدل ما الـ Agent يعرف ينفذ SQL أو Retrieval بنفسه، هو عنده Registry فيه كل الأدوات، وكل أداة لها Interface موحد.  # noqa: E501
-
+# الكود ده بيمثل Tool Framework في الـ Agent. بدل ما الـ Agent يعرف ينفذ SQL أو Retrieval بنفسه
+# ، هو عنده Registry فيه كل الأدوات، وكل أداة لها Interface موحد.  # noqa: E501
 
 # الفكرة العامة كده:
 
@@ -34,7 +34,6 @@ class ToolObservation:
 #      SQL Database      Vector DB / RAG
 
 # الميزة إن الـ Agent مش محتاج يعرف تفاصيل كل Tool، هو بس يقول:
-
 # "هاتلي Tool اسمها sql"
 
 # أولاً الـ dataclass
@@ -46,7 +45,6 @@ class ToolObservation:
 #     has_data: bool = False
 
 # ده مجرد Object لتسجيل إيه اللي حصل بعد تنفيذ الأداة.
-
 # مثلاً
 
 # ToolObservation(

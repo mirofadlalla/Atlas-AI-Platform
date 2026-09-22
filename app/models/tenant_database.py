@@ -26,7 +26,9 @@ class TenantDatabase(Base):
     connection_timeout = Column(Integer, default=10, nullable=False)
     enabled = Column(Boolean, default=True, nullable=False)
     last_tested_at = Column(DateTime, nullable=True)
-    schema_metadata = Column(Text, nullable=True)
+    schema_metadata = Column(
+        Text, nullable=True
+    )  # دي بتخزن الـ schema metadata الخاصة بالـ tenant database عشان الـ Agent يعرف شكل قاعدة البيانات بدون ما يعرف credentials.
     schema_updated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(

@@ -8,8 +8,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-atlas_db}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    # PostgreSQL is NOT exposed publicly.
+    # The API connects via the Docker network using hostname "postgres".
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -27,9 +29,12 @@ services:
     # Pinned to the same version used in CI (ci.yml) — prevents local/CI version drift.
     image: qdrant/qdrant:v1.17.0
     container_name: atlas-qdrant
-    ports:
-      - "${QDRANT_PORT:-6333}:6333"
-      - "6334:6334"
+    # Qdrant REST API is NOT exposed publicly.
+    # The API connects via the Docker network using hostname "qdrant" on port 6333.
+    # gRPC port 6334 is not exposed — the app uses the REST client only.
+    expose:
+      - "6333"
+      - "6334"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
@@ -49,13 +54,15 @@ services:
   # ==================== Redis Cache & Message Broker ====================
   redis:
     # Pinned to the same major version used in CI (redis/redis-stack-server:7.2.0-v10).
-    # RedisStack includes RediSearch, RedisJSON, RedisGraph, etc.
+    # RedisStack includes RediSearch, RedisJSON, etc.
     # Plain redis:7-alpine does NOT include these modules.
     image: redis/redis-stack-server:7.2.0-v10
     container_name: atlas-redis
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-atlas_redis_password}
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    # Redis is NOT exposed publicly.
+    # The API and Celery workers connect via the Docker network using hostname "redis".
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -70,37 +77,51 @@ services:
 
   # ==================== FastAPI Application ====================
   api:
+    # In production, always use the GHCR image — never build locally.
+    # Set ATLAS_IMAGE to the exact SHA tag before deploying:
+    #   export ATLAS_IMAGE=ghcr.io/mirofadlalla/atlas-ai:sha-<GITHUB_SHA>
+    # Fallback "atlas-ai-api:local" is used only for local development builds.
     image: ${ATLAS_IMAGE:-atlas-ai-api:local}
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: atlas-api
     environment:
       PYTHONUNBUFFERED: "1"
+      # Run Alembic migrations on API startup only (workers wait for API health).
       RUN_MIGRATIONS: "true"
+      # PostgreSQL — app reads postgres_user, postgres_pass, postgres_db,
+      # postgres_host, postgres_port from Settings.
       POSTGRES_USER: ${POSTGRES_USER:-atlas_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_PASS: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-atlas_db}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+      # Qdrant — app reads qdrant_url from Settings.
       QDRANT_URL: http://qdrant:6333
+      # Redis — app reads redis_host, redis_port, redis_password from Settings.
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-atlas_redis_password}
+      # Celery broker and result backend
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/0
       CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/1
+      # Required secrets — must be set in .env or environment before starting
       API_SECRET_KEY: ${API_SECRET_KEY:?Set API_SECRET_KEY in .env}
+      # Optional external services
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       JINA_API_KEY: ${JINA_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       REMOTE_EMBED_URL: ${REMOTE_EMBED_URL:-}
-      DEBUG: "${DEBUG:-False}"
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+      # Embedding provider — "production" activates BGE-M3 (local) with Jina fallback
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-BAAI/bge-m3}
+      # Observability
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEBUG: "${DEBUG:-False}"
     ports:
+      # Only the API port is publicly exposed.
+      # Prometheus metrics are served on /metrics at the same port 8000.
       - "${API_PORT:-8000}:8000"
-      - "9090:9090"  # Prometheus metrics
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,21 +140,20 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      # Allow extra time for BGE-M3 model download on first cold start
+      start_period: 120s
 
   # ==================== Celery Worker ====================
   celery_worker:
     image: ${ATLAS_IMAGE:-atlas-ai-api:local}
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: atlas-celery-worker
-    command: celery -A app.celery.celery_config worker --loglevel=info --concurrency=4
+    # concurrency=2: limited to 2 on t3.small (2 vCPU, 2 GB RAM) to avoid OOM
+    # when BGE-M3 model (~1.5 GB) is loaded.  Increase on larger instances.
+    command: celery -A app.celery.celery_config worker --loglevel=info --concurrency=2
     environment:
       PYTHONUNBUFFERED: "1"
       POSTGRES_USER: ${POSTGRES_USER:-atlas_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_PASS: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-atlas_db}
       POSTGRES_HOST: postgres
@@ -145,13 +165,17 @@ services:
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/0
       CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/1
       API_SECRET_KEY: ${API_SECRET_KEY:?Set API_SECRET_KEY in .env}
+      # Internal service-to-service: Celery → FastAPI metrics endpoint
       API_HOST: http://api:8000
       JINA_API_KEY: ${JINA_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       REMOTE_EMBED_URL: ${REMOTE_EMBED_URL:-}
-      DEBUG: "${DEBUG:-False}"
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-BAAI/bge-m3}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEBUG: "${DEBUG:-False}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -172,15 +196,11 @@ services:
   # ==================== Celery Beat (Scheduled Tasks) ====================
   celery_beat:
     image: ${ATLAS_IMAGE:-atlas-ai-api:local}
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: atlas-celery-beat
     command: celery -A app.celery.celery_config beat --loglevel=info
     environment:
       PYTHONUNBUFFERED: "1"
       POSTGRES_USER: ${POSTGRES_USER:-atlas_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_PASS: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-atlas_db}
       POSTGRES_HOST: postgres
@@ -195,9 +215,12 @@ services:
       JINA_API_KEY: ${JINA_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       REMOTE_EMBED_URL: ${REMOTE_EMBED_URL:-}
-      DEBUG: "${DEBUG:-False}"
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-BAAI/bge-m3}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEBUG: "${DEBUG:-False}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -214,91 +237,6 @@ services:
       - atlas-network
     restart: unless-stopped
 
-  # ==================== Prometheus Metrics Collection ====================
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: atlas-prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=15d'
-      - '--web.enable-lifecycle'
-    ports:
-      - "${PROMETHEUS_PORT:-9091}:9090"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    depends_on:
-      - api
-    networks:
-      - atlas-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # ==================== Grafana Visualization ====================
-  grafana:
-    image: grafana/grafana:latest
-    container_name: atlas-grafana
-    environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin123}
-      GF_INSTALL_PLUGINS: 'grafana-piechart-panel,grafana-worldmap-panel'
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3100}
-    ports:
-      - "${GRAFANA_PORT:-3100}:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
-    depends_on:
-      - prometheus
-    networks:
-      - atlas-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # ==================== PgAdmin Database Management ====================
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: atlas-pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
-    ports:
-      - "${PGADMIN_PORT:-5050}:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      - postgres
-    networks:
-      - atlas-network
-    restart: unless-stopped
-
-  # ==================== Flower Celery Monitoring ====================
-  flower:
-    image: mher/flower:latest
-    container_name: atlas-flower
-    command: celery -A app.celery.celery_config flower --port=5555 --broker=redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/0
-    environment:
-      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/0
-      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/1
-    ports:
-      - "${FLOWER_PORT:-5555}:5555"
-    depends_on:
-      - redis
-      - celery_worker
-    networks:
-      - atlas-network
-    restart: unless-stopped
-
 # ==================== NETWORKS & VOLUMES ====================
 
 networks:
@@ -306,18 +244,14 @@ networks:
     driver: bridge
 
 volumes:
+  # Persistent data volumes — NEVER delete these in production.
   postgres_data:
     driver: local
   qdrant_data:
     driver: local
   redis_data:
     driver: local
-  prometheus_data:
-    driver: local
-  grafana_data:
-    driver: local
-  pgadmin_data:
-    driver: local
+  # Application data volumes
   uploads_data:
     driver: local
   logs_data:

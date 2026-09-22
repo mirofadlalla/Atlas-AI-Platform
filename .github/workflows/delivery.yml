@@ -1,10 +1,13 @@
 name: Backend Delivery
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
+  push:
+    branches:
+      - main
+      - "fix/**"
+  pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,15 +19,30 @@ env:
 
 jobs:
   build-scan-push:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     name: Build, scan, and publish image
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # ── Free runner disk space (~20+ GB freed) ───────────────────────────
+      # The default ubuntu-latest runner only has ~14-18 GB free. Unused pre-installed
+      # toolchains are removed here so Docker build and Trivy layer extraction have
+      # ample disk space.
+      - name: Free runner disk space
+        run: |
+          echo "=== Disk before cleanup ==="
+          df -h /
+          sudo rm -rf /usr/local/lib/android          || true  # ~10 GB Android SDK
+          sudo rm -rf /usr/share/dotnet               || true  # ~2.5 GB .NET
+          sudo rm -rf /opt/ghc                        || true  # ~1.5 GB Haskell GHC
+          sudo rm -rf /usr/local/share/boost          || true  # ~1 GB Boost
+          sudo rm -rf /opt/hostedtoolcache/CodeQL     || true  # ~1 GB CodeQL
+          sudo docker image prune --all --force       || true  # Pre-cached images
+          sudo apt-get clean                          || true
+          echo "=== Disk after cleanup ==="
+          df -h /
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -36,44 +54,65 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Determine commit SHA and tags
+        id: vars
+        run: |
+          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "commit_sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "local_tag=atlas-ai-local:sha-${SHA}" >> "$GITHUB_OUTPUT"
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=sha-${{ github.sha }}
-            type=raw,value=latest
+            type=raw,value=sha-${{ steps.vars.outputs.commit_sha }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Set local image tag for scanning
-        id: local_tag
-        run: echo "local_tag=atlas-ai-local:sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
-
-      - name: Build multi-stage image (load to local daemon for Trivy scan)
+      # ── Build ONCE, load to local daemon ─────────────────────────────────
+      # platform linux/amd64 matches the EC2 t3.small (x86_64 / Intel Xeon).
+      # Labels are applied here now since there's no second build to carry them.
+      - name: Build image (linux/amd64, local daemon)
         uses: docker/build-push-action@v6
         with:
           context: .
           push: false
           load: true
-          tags: ${{ steps.local_tag.outputs.local_tag }}
+          platforms: linux/amd64
+          tags: ${{ steps.vars.outputs.local_tag }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Scan local image with Trivy before push
+      # ── Prune BuildKit cache to free disk space before Trivy export ───────
+      # Since the image is already loaded in the Docker daemon, freeing BuildKit
+      # cache gives Trivy plenty of room to export and unpack the image in /tmp.
+      - name: Prune BuildKit cache
+        run: |
+          docker builder prune -f
+          echo "=== Disk before Trivy scan ==="
+          df -h /
+
+      # ── Security scan BEFORE push ─────────────────────────────────────────
+      - name: Scan image with Trivy (CRITICAL + HIGH)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ steps.local_tag.outputs.local_tag }}
+          image-ref: ${{ steps.vars.outputs.local_tag }}
           format: table
           exit-code: "0"
           ignore-unfixed: true
           severity: CRITICAL,HIGH
 
-      - name: Push multi-stage image to GHCR
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # ── Tag + push the ALREADY-BUILT image (no second build) ────────────
+      # This is what was filling the disk: a second buildx invocation
+      # re-materializing the image layers. Tagging and pushing the image
+      # that's already loaded in the local daemon avoids that entirely,
+      # and is faster than a rebuild — no cleanup step needed.
+      - name: Tag and push image to GHCR
+        run: |
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            docker tag "${{ steps.vars.outputs.local_tag }}" "$tag"
+            docker push "$tag"
+          done <<< "${{ steps.meta.outputs.tags }}"

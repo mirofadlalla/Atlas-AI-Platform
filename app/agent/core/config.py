@@ -30,6 +30,11 @@ class AgentSettings(BaseSettings):
     retrieval_timeout_seconds: float = 30.0
     retrieval_top_k: int = 5
     retrieval_doc_preview_chars: int = 300
+    retrieval_score_floor: float = (
+        0.0  # Hard floor threshold to discard near-zero similarity chunks
+    )
+    retrieval_grading_enabled: bool = True  # Enable/disable CRAG LLM relevance grading
+    retrieval_grading_model: str = ""  # Optional lightweight model override for grading
     llm_retry_attempts: int = 3
     llm_retry_min_wait_seconds: float = 0.5
     llm_retry_max_wait_seconds: float = 4.0

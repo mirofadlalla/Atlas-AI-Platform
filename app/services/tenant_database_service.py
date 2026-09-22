@@ -25,6 +25,11 @@ class TenantDatabaseError(RuntimeError):
 
 
 class CredentialManager:
+    """
+    Responsible for encrypting and decrypting tenant database credentials.
+    The encryption key is stored in the application settings and should be rotated periodically.
+    """
+
     def _fernet(self) -> Fernet:
         key = settings.credential_encryption_key
         if not key:
@@ -40,14 +45,39 @@ class CredentialManager:
     def decrypt(self, value: str) -> str:
         return self._fernet().decrypt(value.encode()).decode()
 
-    def rotate(self, value: str) -> str:
+    def rotate(self, value: str) -> str:  # دي مهمة لو غيرت encryption key
+        #  old encrypted credential =>  decrypt => plaintext => encrypt => new encrypted credential
         return self.encrypt(self.decrypt(value))
 
 
 class TenantDatabaseManager:
-    _engines: dict[str, Engine] = {}
+    """Manager for tenant external database connections and schema metadata."
+    هو الـ Gateway / Security Boundary اللي بيقف بين الـ Agent وبين قواعد بيانات العملاء الخارجية.
+
+    يعني الـ Agent ممنوع يعرف:
+    username
+    password
+    connection string
+    encryption key
+
+    الـ Agent يقول فقط:
+    "هاتلي Database الخاصة بالـ tenant ده"
+
+    والـ TenantDatabaseManager هو اللي:
+    يجيب الـ configuration من الـ internal DB.
+    يفك تشفير الـ password.
+    يبني الـ SQLAlchemy connection.
+    يعمل connection للـ external DB.
+    ينفذ العملية المطلوبة.
+    يرجع للـ Agent النتيجة فقط، مش credentials.
+    """
+
+    _engines: dict[str, Engine] = (
+        {}
+    )  # check if we already have an engine for this tenant_id, if yes return it, else create a new one (tenant_1 → Engine) كاش
     _lock = threading.Lock()
 
+    # هات Database configuration الخاصة بالـ tenant ده بشرط إنها enabled
     def _configuration(self, db: Session, tenant_id: str) -> TenantDatabase:
         config = (
             db.query(TenantDatabase)
@@ -58,6 +88,7 @@ class TenantDatabaseManager:
             raise TenantDatabaseError("TENANT_DATABASE_NOT_CONFIGURED")
         return config
 
+    # بناء الـ connection URL الخاص بالـ external database (دي بتحوّل الـ configuration إلى SQLAlchemy URL.)
     def _url(self, config: TenantDatabase) -> URL:
         drivers = {"postgresql": "postgresql+psycopg2", "mysql": "mysql+pymysql"}
         driver = drivers.get(config.database_type)
@@ -76,7 +107,7 @@ class TenantDatabaseManager:
     def get_engine(self, db: Session, tenant_id: str) -> Engine:
         key = str(tenant_id)
         with self._lock:
-            if key in self._engines:
+            if key in self._engines:  # لو محفوظ في الكاش رجعه غير كده اول مره اعمله
                 return self._engines[key]
             config = self._configuration(db, key)
             engine = create_engine(
@@ -108,13 +139,16 @@ class TenantDatabaseManager:
             "read_only": True,
         }
 
-    def dispose(self, tenant_id: str) -> None:
+    def dispose(
+        self, tenant_id: str
+    ) -> None:  # دي بتحذف Engine الخاصة بالـ tenant من الـ cache:
         engine = self._engines.pop(str(tenant_id), None)
         if engine:
             engine.dispose()
 
     invalidate = dispose
 
+    # دي الجزء اللي بيخلي الـ Agent يعرف شكل قاعدة البيانات بدون ما يعرف credentials.
     def schema(self, db: Session, tenant_id: str, refresh: bool = False) -> dict:
         config = self._configuration(db, tenant_id)
         if config.schema_metadata and not refresh:

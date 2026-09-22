@@ -6,7 +6,7 @@ from app.agent.schemas import format_instructions
 
 
 class PromptRegistry:
-    VERSION = "1.0.0"
+    VERSION = "3.0.0"
 
     @staticmethod
     def decompose(

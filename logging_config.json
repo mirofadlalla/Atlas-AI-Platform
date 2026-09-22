@@ -1,11 +1,3 @@
-# logging_config.json
-# Uvicorn log config file (JSON dict-config format).
-# Used by: CMD in Dockerfile via --log-config /app/logging_config.json
-#
-# The original code used --log-config logging_setup.py which is INVALID —
-# uvicorn expects a JSON or YAML dictConfig file, not a Python module.
-# This file is the corrected replacement.
-
 {
     "version": 1,
     "disable_existing_loggers": false,

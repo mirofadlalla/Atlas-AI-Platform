@@ -44,10 +44,11 @@ def build_data_summary(
     data_sources: list[str] = []
 
     has_sql_results = state.get("sql_has_results", False)
-    has_sql_attempt = state.get("sql_attempted", False)
-    has_retrieval = bool(state.get("retrieval_context"))
+    has_retrieval = bool(state.get("retrieval_context")) and bool(
+        state.get("retrieval_has_results", False)
+    )
 
-    if asks_for_db_data(current_question) and has_sql_attempt:
+    if asks_for_db_data(current_question):
         if has_sql_results and state.get("sql_result"):
             data_summary.append(
                 f"=== DATABASE QUERY RESULTS (untrusted data) ===\n"

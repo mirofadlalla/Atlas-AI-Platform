@@ -1,59 +1,67 @@
-# (removed obsolete 'version' key)
-# ==================== STANDALONE MONITORING STACK ====================
+# ==================== OPTIONAL MONITORING STACK ====================
 #
-# Usage: docker-compose -f docker-compose.monitoring.yml up -d
+# Start alongside the core stack when you need observability tools:
 #
-# This runs ONLY:
-# - Prometheus (Docker) → Port 9091
-# - Grafana (Docker) → Port 3100
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.monitoring.yml \
+#     up -d
 #
-# Scrapes from: API on HOST MACHINE (localhost:8000)
-# Perfect for Windows development with Docker Desktop
+# Stop monitoring only (preserves core services):
 #
-# ===================================================================
+#   docker compose -f docker-compose.monitoring.yml down
+#
+# This stack includes:
+#   - Prometheus  → http://<ec2-ip>:9091
+#   - Grafana     → http://<ec2-ip>:3100
+#   - PgAdmin     → http://<ec2-ip>:5050
+#   - Flower      → http://<ec2-ip>:5555
+#
+# ⚠️  Do NOT start these on t3.small when under memory pressure.
+#     Each monitoring container consumes 128–256 MB additional RAM.
+# =====================================================================
 
 services:
   # ==================== Prometheus Metrics Collection ====================
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.53.4
     container_name: atlas-prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.time=15d'
       - '--web.enable-lifecycle'
     ports:
-      - "9091:9090"
+      - "${PROMETHEUS_PORT:-9091}:9090"
     volumes:
-      - ./monitoring/prometheus.monitoring.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
+    depends_on:
+      - api
     networks:
-      - monitoring
+      - atlas-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
       interval: 30s
       timeout: 10s
       retries: 3
-    # Allow Docker to reach host machine
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      start_period: 15s
 
   # ==================== Grafana Visualization ====================
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.6.1
     container_name: atlas-grafana
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin123}
       GF_INSTALL_PLUGINS: 'grafana-piechart-panel,grafana-worldmap-panel'
-      GF_SERVER_ROOT_URL: http://localhost:3100
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3100}
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_LOG_MODE: console
       GF_LOG_LEVEL: info
-      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
     ports:
-      - "3100:3000"
+      - "${GRAFANA_PORT:-3100}:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -61,26 +69,70 @@ services:
     depends_on:
       - prometheus
     networks:
-      - monitoring
-    restart: on-failure
+      - atlas-network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 30s
+      timeout: 10s
+      retries: 3
       start_period: 30s
-    # Allow Docker to reach host machine
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+
+  # ==================== PgAdmin Database Management ====================
+  pgadmin:
+    image: dpage/pgadmin4:8.14
+    container_name: atlas-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: 'True'
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - atlas-network
+    restart: unless-stopped
+
+  # ==================== Flower Celery Monitoring ====================
+  # Flower uses the standalone image — it connects to Redis directly and
+  # does not require the Atlas application code.
+  flower:
+    image: mher/flower:2.0
+    container_name: atlas-flower
+    command:
+      - "--broker=redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/0"
+      - "--port=5555"
+      - "--basic_auth=${FLOWER_BASIC_AUTH:-admin:admin}"
+    environment:
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/1
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    depends_on:
+      - redis
+      - celery_worker
+    networks:
+      - atlas-network
+    restart: unless-stopped
 
 # ==================== NETWORKS & VOLUMES ====================
+# Attach to the same network as the core stack so monitoring services
+# can reach the API, postgres, redis, etc. by their service names.
 
 networks:
-  monitoring:
-    driver: bridge
+  atlas-network:
+    # Reference the existing external network created by docker-compose.yml.
+    # This allows monitoring services to reach core services without
+    # duplicating the network definition.
+    external: true
 
 volumes:
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  pgadmin_data:
     driver: local

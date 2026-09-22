@@ -39,9 +39,14 @@ class AgentState(TypedDict, total=False):
     sql_attempted: bool
     sql_has_results: bool
 
+    # Retrieval & CRAG relevance grading state
+    # retrieval_has_results: True ONLY when retrieved chunks pass similarity pre-filter and LLM relevance grading
+    # retrieval_context: Formatted string containing ONLY relevant_docs (None if 0 relevant)
+    # relevant_docs: Filtered list of doc dicts that survived pre-filter and LLM grading
     retrieval_context: str | None
     retrieval_attempted: bool
     retrieval_has_results: bool
+    relevant_docs: list[dict] | None
 
     step_count: int
     total_step_count: int

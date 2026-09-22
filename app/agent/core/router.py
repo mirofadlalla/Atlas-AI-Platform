@@ -42,16 +42,22 @@ def _extract_action_history(state: AgentState) -> list[str]:
 def _detect_action_loop(actions: list[str]) -> bool:
     window = agent_settings.loop_detection_window
     recent = actions[-window:]
-    if len(recent) >= 2 and recent[-1] == recent[-2]:
+    if len(recent) >= 2 and recent[-1] == recent[-2]:  # ["sql", "sql"]
         return True
 
     if len(recent) >= 4:
-        a, b, c, d = recent[-4], recent[-3], recent[-2], recent[-1]
+        a, b, c, d = (
+            recent[-4],
+            recent[-3],
+            recent[-2],
+            recent[-1],
+        )  # ["sql", "retrieval", "sql", "retrieval"]
         if a == c and b == d and a != b:
             return True
 
     if len(recent) >= 6:
-        pattern = recent[-3:]
+        pattern = recent[-3:]  # ["sql", "retrieval", "sql"]
+        prev = recent[-6:-3]  # ["retrieval", "sql", "retrieval"]
         prev = recent[-6:-3]
         if pattern == prev:
             return True
@@ -98,6 +104,7 @@ async def fast_hybrid_router(state: AgentState) -> dict:
     await emit_thought_chunk(
         "[Router] Ambiguous prompt -> Invoking Fallback Intent Classifier...\n"
     )
+
     classifier_prompt = (
         f"Classify the following query into ONE intent category:\n"
         f"- DIRECT_QA: General knowledge or conceptual questions.\n"
@@ -142,6 +149,10 @@ def route_target_path(state: AgentState) -> str:
 
 
 def evaluate_tool_sufficiency(state: AgentState) -> str:
+    """
+    Evaluate whether the current tool results are sufficient
+    to answer the user's question.
+    """
     intent = state.get("intent", "DIRECT_QA")
 
     if intent == "COMPLEX":
@@ -153,7 +164,7 @@ def evaluate_tool_sufficiency(state: AgentState) -> str:
         return "INSUFFICIENT"
 
     if intent == "SIMPLE_RETRIEVAL":
-        if state.get("retrieval_has_results") or bool(state.get("retrieval_context")):
+        if state.get("retrieval_has_results") and bool(state.get("retrieval_context")):
             return "SUFFICIENT"
         return "INSUFFICIENT"
 
@@ -182,12 +193,9 @@ def route_action(state: AgentState) -> str:
         return "finish"
 
     if last_action == "retrieval":
-        if state.get("retrieval_has_results") or bool(state.get("retrieval_context")):
+        if state.get("retrieval_has_results") and bool(state.get("retrieval_context")):
             return "finish"
-        # Retrieval found nothing — fall back to SQL if it hasn't been tried yet.
-        # This replaces the previous dead-code branch where both cases returned
-        # "finish", silently producing an empty-data answer instead of trying
-        # an alternative data source.
+        # Retrieval found no relevant data — fall back to SQL if it hasn't been tried yet.
         if not state.get("sql_attempted"):
             return "sql"
         return "finish"

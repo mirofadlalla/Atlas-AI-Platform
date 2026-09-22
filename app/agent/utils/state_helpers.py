@@ -75,6 +75,7 @@ def create_initial_state(
         "sql_has_results": False,
         "retrieval_attempted": False,
         "retrieval_has_results": False,
+        "relevant_docs": [],
         "degraded": False,
         "degraded_reason": None,
         "data_sources": [],

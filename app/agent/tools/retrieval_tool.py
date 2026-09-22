@@ -32,15 +32,51 @@ class RetrievalTool(AgentTool):
                 docs_count = len(docs_payload)
             else:
                 retriever = get_retriever(tenant_id)
-                docs = retriever.invoke(question)
+                docs_with_scores = []
+                if hasattr(retriever, "vectorstore") and hasattr(
+                    retriever.vectorstore, "similarity_search_with_score"
+                ):
+                    try:
+                        from qdrant_client import models
+
+                        docs_with_scores = (
+                            retriever.vectorstore.similarity_search_with_score(
+                                question,
+                                k=agent_settings.retrieval_top_k,
+                                filter=models.Filter(
+                                    must=[
+                                        models.FieldCondition(
+                                            key="payload.tenant_id",
+                                            match=models.MatchValue(
+                                                value=int(tenant_id)
+                                            ),
+                                        )
+                                    ]
+                                ),
+                            )
+                        )
+                    except Exception as score_exc:
+                        logger.debug(
+                            "similarity_search_with_score fallback: %s", score_exc
+                        )
+                        docs_with_scores = []
+
+                if not docs_with_scores:
+                    docs = retriever.invoke(question)
+                    docs_with_scores = [
+                        (doc, getattr(doc, "metadata", {}).get("score", 1.0))
+                        for doc in docs
+                    ]
+
                 docs_payload = []
-                for doc in docs[: agent_settings.retrieval_top_k]:
+                for doc, score in docs_with_scores[: agent_settings.retrieval_top_k]:
                     docs_payload.append(
                         {
                             "content": doc.page_content[
                                 : agent_settings.retrieval_doc_preview_chars
                             ],
                             "metadata": getattr(doc, "metadata", {}) or {},
+                            "score": float(score) if score is not None else 1.0,
                         }
                     )
                 set_cached_retrieval(tenant_id, question, docs_payload)
@@ -52,13 +88,13 @@ class RetrievalTool(AgentTool):
                     formatted.append(f"{i}. {doc['content']}...")
                 context = _UNTRUSTED_PREFIX + "\n".join(formatted)
                 observation = (
-                    f"Retrieved {docs_count} relevant document(s) from knowledge base:\n"
+                    f"Retrieved {docs_count} candidate document(s) from knowledge base:\n"
                     f"{context[:500]}..."
                 )
                 has_data = True
             else:
                 context = ""
-                observation = "No relevant documents found in knowledge base."
+                observation = "No candidate documents found in knowledge base."
                 has_data = False
 
             return ToolResult(
@@ -68,6 +104,7 @@ class RetrievalTool(AgentTool):
                     "retrieval_context": context if has_data else None,
                     "retrieval_attempted": True,
                     "retrieval_has_results": has_data,
+                    "raw_retrieved_docs": docs_payload,
                 },
             )
         except Exception as exc:

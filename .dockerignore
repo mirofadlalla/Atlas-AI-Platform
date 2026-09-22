@@ -1,15 +1,17 @@
 # ==================== Secrets & Environment ====================
+# Never include secrets or environment files in the image.
 .env
 .env.local
 .env.*.local
 
 # ==================== uv Toolchain Artifacts ====================
-# These are large local-only caches; never needed inside the image.
+# Large local-only caches; never needed inside the image.
 .uv-cache/
 .uv-python/
 .requirements-resolved.txt
 
 # ==================== MLflow & Experiment Tracking ====================
+# Local mlruns directory; production writes to the mlruns_data Docker volume.
 mlruns/
 mlruns
 
@@ -36,34 +38,45 @@ env/
 ENV/
 
 # ==================== Node & Frontend Build Artifacts ====================
+# The frontend is a separate application; it is not served by the FastAPI image.
 node_modules/
-frontend/node_modules/
-frontend/build/
-frontend/dist/
-frontend/.next/
-frontend/out/
+frontend/
 .pnpm-store/
 .pnpm-store
-frontend/.pnpm-store/
 
-# ==================== Git & IDE Files ====================
+# ==================== Git & CI ====================
 .git/
 .gitignore
+.github/
+
+# ==================== IDE & OS Artifacts ====================
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 
-# ==================== Tests (not needed in production image) ====================
+# ==================== Tests ====================
+# Test files are not required at runtime.
 tests/
 
 # ==================== Documentation & Design Artifacts ====================
+# These directories contain design docs and diagrams — not runtime files.
 SRS/
 digrams/
-README.md
+*.md
+
+# ==================== Development Config ====================
+# Linting and test config — not needed at runtime.
+.flake8
+pytest.ini
 
 # ==================== Temporary & System Artifacts ====================
 tmp/
 .system_generated/
 scratch/
-write_readme.py
+write_readme.py
+
+# ==================== Local Model Cache ====================
+# HuggingFace model cache — models are downloaded at runtime or baked separately.
+# If you pre-bake models, remove this exclusion and COPY the cache explicitly.
+.cache/

@@ -53,6 +53,14 @@ def connect(
         "ssl_mode",
         "connection_timeout",
     ):
+        """
+        بدل ما نكتب:
+        config.host = payload.host
+        config.port = payload.port
+        config.username = payload.username
+        هو بيلف على fields ويعمل assignment ديناميكي.
+        ...
+        """
         setattr(config, field, getattr(payload, field))
     try:
         config.encrypted_password = CredentialManager().encrypt(payload.password)
@@ -62,7 +70,11 @@ def connect(
         # The Atlas session intentionally has autoflush disabled.  Persist the
         # new configuration before TenantDatabaseManager resolves it to test
         # the external connection in this same request.
-        db.flush()
+        db.flush()  # هنا مهم عشان الـ TenantDatabaseManager يقدر يعمل query ويشوف الـ config الجديدة قبل ما نعمل commit.
+        # ولو الـ connection test فشل:
+        # فتختفي configuration الجديدة.
+        # أما لو كل حاجة نجحت، الـ transaction الخارجي هو اللي يعمل commit في النهاية.
+        # db.rollback()
         tenant_database_manager.invalidate(str(admin.tenant_id))
         tenant_database_manager.test_connection(db, str(admin.tenant_id))
     except TenantDatabaseError as exc:

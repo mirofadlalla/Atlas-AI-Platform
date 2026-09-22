@@ -48,6 +48,15 @@ from __future__ import annotations
 
 import re
 
+# دي Tuple فيها Regular Expressions بتوصف أنماط أوامر مشبوهة.
+# | النوع                  | الهدف                          |
+# | ---------------------- | ------------------------------ |
+# | Instruction forgetting | تجاهل التعليمات السابقة        |
+# | Role switching         | تغيير شخصية الـLLM             |
+# | Delimiter injection    | إدخال System/ChatML tokens     |
+# | New task injection     | فرض مهمة جديدة                 |
+# | Jailbreak              | عبارات مثل DAN وDeveloper mode |
+
 _INJECTION_PATTERNS = (
     # ── Instruction forgetting ────────────────────────────────────────────────
     r"ignore\s+(all\s+)?(prior|previous|above|earlier)\s+(instructions?|prompts?|context)",
