@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # inherited top-level distribution. Build isolation remains managed by pip.
 RUN python -m pip install --no-cache-dir --upgrade pip "setuptools==80.10.1" \
     && python -m pip uninstall -y wheel \
-    && python -c "import importlib.metadata as m; top_level_wheel = [str(d.locate_file('')) for d in m.distributions() if d.metadata['Name'].lower() == 'wheel' and '/setuptools/_vendor' not in str(d.locate_file(''))]; assert not top_level_wheel, f'Unexpected top-level wheel: {top_level_wheel}'"
+    && python -c "import importlib.metadata as m; wheels = [d for d in m.distributions() if d.metadata['Name'].lower() == 'wheel']; top_level_wheel = [str(d._path) for d in wheels if '/setuptools/_vendor/' not in str(d._path)]; print('wheel distributions after bootstrap:', [(d.version, str(d._path), str(d.locate_file('')), d.requires) for d in wheels]); assert not top_level_wheel, f'Unexpected top-level wheel dist-info: {top_level_wheel}'"
 
 # CPU-only PyTorch dependency resolution
 # Resolve requirements and the CPU-only PyTorch constraint together.
@@ -37,12 +37,25 @@ RUN python -m pip install --no-cache-dir --upgrade pip "setuptools==80.10.1" \
 # dependencies continue to come from PyPI. CPU wheels have no nvidia-* or
 # triton runtime dependencies.
 COPY requirements.txt constraints-cpu.txt ./
-RUN pip install --no-cache-dir \
+# Temporary dependency-provenance diagnostics.  locate_file('') is only the
+# installation root; _path identifies the actual *.dist-info directory and
+# therefore distinguishes a standalone wheel from setuptools/_vendor/wheel.
+RUN set -eux; \
+    echo '=== wheel diagnostics before application dependencies ==='; \
+    python -m pip show wheel || true; \
+    python -c "import importlib.metadata as m; wheels = [d for d in m.distributions() if d.metadata['Name'].lower() == 'wheel']; print('wheel distributions:', [(d.version, str(d._path), str(d.locate_file('')), d.requires) for d in wheels])"; \
+    pip install --no-cache-dir \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     --constraint constraints-cpu.txt \
-    -r requirements.txt \
-    && python -m pip check \
-    && python -c "import importlib.metadata as m; dists = list(m.distributions()); names = {d.metadata['Name'].lower() for d in dists}; forbidden = sorted(name for name in names if name.startswith('nvidia-') or name == 'triton'); top_level_wheel = [str(d.locate_file('')) for d in dists if d.metadata['Name'].lower() == 'wheel' and '/setuptools/_vendor' not in str(d.locate_file(''))]; assert not forbidden, f'Unexpected GPU packages: {forbidden}'; assert 'torchvision' not in names, 'Unexpected torchvision dependency'; assert not top_level_wheel, f'Unexpected top-level wheel: {top_level_wheel}'"
+    -r requirements.txt; \
+    echo '=== wheel diagnostics after application dependencies ==='; \
+    python -m pip show wheel || true; \
+    python -m pip show setuptools || true; \
+    python -m pip show packaging || true; \
+    python -m pip freeze | grep -E '^(wheel|setuptools|packaging|mlflow)==' || true; \
+    python -c "import importlib.metadata as m; wheels = [d for d in m.distributions() if d.metadata['Name'].lower() == 'wheel']; print('wheel distributions:', [(d.version, str(d._path), str(d.locate_file('')), d.requires) for d in wheels])"; \
+    python -m pip check; \
+    python -c "import importlib.metadata as m; dists = list(m.distributions()); names = {d.metadata['Name'].lower() for d in dists}; wheels = [d for d in dists if d.metadata['Name'].lower() == 'wheel']; forbidden = sorted(name for name in names if name.startswith('nvidia-') or name == 'triton'); top_level_wheel = [str(d._path) for d in wheels if '/setuptools/_vendor/' not in str(d._path)]; assert not forbidden, f'Unexpected GPU packages: {forbidden}'; assert 'torchvision' not in names, 'Unexpected torchvision dependency'; assert not top_level_wheel, f'Unexpected top-level wheel dist-info: {top_level_wheel}'"
 
 # ==================== RUNTIME STAGE ====================
 FROM python:3.11-slim AS runner
@@ -50,6 +63,9 @@ FROM python:3.11-slim AS runner
 WORKDIR /app
 
 # Install runtime C libraries, curl (healthcheck), and create non-root user.
+# This is a fresh python:3.11-slim stage: its inherited standalone wheel must
+# also be removed. Copying site-packages from builder does not delete files
+# already present in this stage.
 # libgomp1 — required by PyTorch CPU for OpenMP multi-threading (intra-op parallelism).
 # libpq5  — required by psycopg2-binary at runtime.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -57,6 +73,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     curl \
     && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall -y wheel \
+    && python -c "import importlib.metadata as m; wheels = [d for d in m.distributions() if d.metadata['Name'].lower() == 'wheel']; top_level_wheel = [str(d._path) for d in wheels if '/setuptools/_vendor/' not in str(d._path)]; print('runner wheel distributions after bootstrap cleanup:', [(d.version, str(d._path), str(d.locate_file('')), d.requires) for d in wheels]); assert not top_level_wheel, f'Unexpected top-level wheel dist-info: {top_level_wheel}'" \
     && useradd -m -u 1000 atlas
 
 # Copy installed Python packages and binaries from builder stage
@@ -69,7 +87,8 @@ COPY --chown=atlas:atlas . .
 
 # Set up entrypoint script (runs Alembic migrations when RUN_MIGRATIONS=true)
 COPY --chown=atlas:atlas scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint
-RUN chmod +x /usr/local/bin/docker-entrypoint
+RUN chmod +x /usr/local/bin/docker-entrypoint \
+    && python -c "import importlib.metadata as m; wheels = [d for d in m.distributions() if d.metadata['Name'].lower() == 'wheel']; top_level_wheel = [str(d._path) for d in wheels if '/setuptools/_vendor/' not in str(d._path)]; print('final runner wheel distributions:', [(d.version, str(d._path), str(d.locate_file('')), d.requires) for d in wheels]); assert not top_level_wheel, f'Unexpected top-level wheel dist-info: {top_level_wheel}'"
 
 # Create necessary runtime directories with non-root ownership.
 # /app/app/files/uploads — used by the file-upload endpoints.
