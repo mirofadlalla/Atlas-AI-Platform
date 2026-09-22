@@ -63,7 +63,7 @@ jobs:
 
       - name: Install project dependencies with CPU-only PyTorch constraints
         run: |
-          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade pip setuptools
           pip install --no-cache-dir \
             --extra-index-url https://download.pytorch.org/whl/cpu \
             --constraint constraints-cpu.txt \
@@ -148,7 +148,7 @@ jobs:
 
       - name: Install project dependencies with CPU-only PyTorch constraints
         run: |
-          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade pip setuptools
           pip install --no-cache-dir \
             --extra-index-url https://download.pytorch.org/whl/cpu \
             --constraint constraints-cpu.txt \
@@ -251,7 +251,7 @@ jobs:
 
       - name: Install project dependencies with CPU-only PyTorch constraints
         run: |
-          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade pip setuptools
           pip install --no-cache-dir \
             --extra-index-url https://download.pytorch.org/whl/cpu \
             --constraint constraints-cpu.txt \

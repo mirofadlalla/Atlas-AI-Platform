@@ -11,8 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip/setuptools/wheel first (single layer, rarely changes)
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+# MLflow 2.10.1 requires packaging<24. Do not install wheel here: the latest
+# wheel requires packaging>=24 and would make the resolver inconsistent.
+RUN pip install --no-cache-dir --upgrade pip setuptools
 
 # CPU-only PyTorch dependency resolution
 # Resolve requirements and the CPU-only PyTorch constraint together.
