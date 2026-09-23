@@ -14,12 +14,12 @@ class HybridReranker(BaseReranker):
         self,
         cross_encoder_weight: float = 0.7,
         bm25_weight: float = 0.3,
-        cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2",
+        cross_encoder_model: str = None,
     ):
         self.cross_encoder_weight = cross_encoder_weight
         self.bm25_weight = bm25_weight
 
-        self.cross_encoder = CrossEncoderReranker(cross_encoder_model)
+        self.cross_encoder = CrossEncoderReranker(model_name=cross_encoder_model)
         self.bm25 = BM25Reranker()
 
         logger.info(

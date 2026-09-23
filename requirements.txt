@@ -11,6 +11,7 @@ alembic==1.13.1
 # Authentication & Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+argon2-cffi==23.1.0
 pydantic==2.7.4
 email-validator>=2.0.0
 python-dotenv==1.0.1
@@ -21,7 +22,12 @@ langchain==0.1.20
 langchain-community==0.0.38
 langchain-core==0.1.53
 langchain-qdrant==0.1.4
+langchain-experimental==0.0.57
 langgraph==0.0.21
+
+# Document loaders
+pypdf==5.9.0
+
 # 2.2.2 imports the removed huggingface_hub.cached_download API.  2.6.1 keeps
 # the SentenceTransformer/CrossEncoder API used by the application, supports
 # modern Hugging Face Hub clients, and works with the CPU-only torch pin.
@@ -75,3 +81,5 @@ black>=24.3.0
 flake8==6.1.0
 
 python-json-logger==2.0.7
+
+

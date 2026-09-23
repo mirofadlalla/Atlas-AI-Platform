@@ -13,8 +13,10 @@ class RankingService:
     def __init__(self, strategy: str = "hybrid"):
         self.strategy = strategy
 
-        if strategy == "cross-encoder":
+        if strategy in ("cross-encoder", "cross_encoder"):
             self.reranker = CrossEncoderReranker()
+        elif strategy == "jina":
+            self.reranker = CrossEncoderReranker(provider="jina")
         elif strategy == "bm25":
             self.reranker = BM25Reranker()
         elif strategy == "hybrid":

@@ -3,239 +3,333 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: atlas-postgres
+
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-atlas_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-atlas_db}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
-    # PostgreSQL is NOT exposed publicly.
-    # The API connects via the Docker network using hostname "postgres".
+
     expose:
       - "5432"
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-atlas_user} -d ${POSTGRES_DB:-atlas_db}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-atlas_user} -d ${POSTGRES_DB:-atlas_db}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
+
     networks:
       - atlas-network
+
     restart: unless-stopped
 
   # ==================== Qdrant Vector Database ====================
   qdrant:
-    # Pinned to the same version used in CI (ci.yml) — prevents local/CI version drift.
     image: qdrant/qdrant:v1.17.0
     container_name: atlas-qdrant
-    # Qdrant REST API is NOT exposed publicly.
-    # The API connects via the Docker network using hostname "qdrant" on port 6333.
-    # gRPC port 6334 is not exposed — the app uses the REST client only.
+
     expose:
       - "6333"
       - "6334"
+
     volumes:
       - qdrant_data:/qdrant/storage
-    healthcheck:
-      # /readyz returns 200 only after Qdrant is fully initialised and ready
-      # to serve REST and gRPC traffic.  /health returns 200 immediately on
-      # startup (before collections are loaded), making it unsuitable as a
-      # readiness probe.
-      test: ["CMD-SHELL", "curl -sf http://localhost:6333/readyz"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+
     networks:
       - atlas-network
+
     restart: unless-stopped
 
   # ==================== Redis Cache & Message Broker ====================
   redis:
-    # Pinned to the same major version used in CI (redis/redis-stack-server:7.2.0-v10).
-    # RedisStack includes RediSearch, RedisJSON, etc.
-    # Plain redis:7-alpine does NOT include these modules.
     image: redis/redis-stack-server:7.2.0-v10
     container_name: atlas-redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-atlas_redis_password}
-    # Redis is NOT exposed publicly.
-    # The API and Celery workers connect via the Docker network using hostname "redis".
+
+    command:
+      redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-atlas_redis_password}
+
     expose:
       - "6379"
+
     volumes:
       - redis_data:/data
+
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-atlas_redis_password}", "ping"]
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "-a",
+          "${REDIS_PASSWORD:-atlas_redis_password}",
+          "ping",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
+
     networks:
       - atlas-network
+
     restart: unless-stopped
 
   # ==================== FastAPI Application ====================
   api:
-    # In production, always use the GHCR image — never build locally.
-    # Set ATLAS_IMAGE to the exact SHA tag before deploying:
-    #   export ATLAS_IMAGE=ghcr.io/mirofadlalla/atlas-ai:sha-<GITHUB_SHA>
-    # Fallback "atlas-ai-api:local" is used only for local development builds.
     image: ${ATLAS_IMAGE:-atlas-ai-api:local}
     container_name: atlas-api
+
     environment:
       PYTHONUNBUFFERED: "1"
-      # Run Alembic migrations on API startup only (workers wait for API health).
+
+      # Run Alembic migrations on API startup only.
       RUN_MIGRATIONS: "true"
-      # PostgreSQL — app reads postgres_user, postgres_pass, postgres_db,
-      # postgres_host, postgres_port from Settings.
+
+      # PostgreSQL
       POSTGRES_USER: ${POSTGRES_USER:-atlas_user}
       POSTGRES_PASS: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-atlas_db}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      # Qdrant — app reads qdrant_url from Settings.
+
+      # Qdrant
       QDRANT_URL: http://qdrant:6333
-      # Redis — app reads redis_host, redis_port, redis_password from Settings.
+
+      # Redis
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-atlas_redis_password}
+
       # Celery broker and result backend
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/0
       CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/1
-      # Required secrets — must be set in .env or environment before starting
+
+      # Required secrets
       API_SECRET_KEY: ${API_SECRET_KEY:?Set API_SECRET_KEY in .env}
-      # Optional external services
+
+      # External services
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       JINA_API_KEY: ${JINA_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       REMOTE_EMBED_URL: ${REMOTE_EMBED_URL:-}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
-      # Embedding provider — "production" activates BGE-M3 (local) with Jina fallback
+
+      # ==================== SMTP / Email ====================
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+
+      # Embedding provider
       ENVIRONMENT: ${ENVIRONMENT:-production}
       EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-BAAI/bge-m3}
+
       # Observability
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEBUG: "${DEBUG:-False}"
+
     ports:
-      # Only the API port is publicly exposed.
-      # Prometheus metrics are served on /metrics at the same port 8000.
       - "${API_PORT:-8000}:8000"
+
     depends_on:
       postgres:
         condition: service_healthy
+
       qdrant:
-        condition: service_healthy
+        condition: service_started
+
       redis:
         condition: service_healthy
+
     volumes:
-      - uploads_data:/app/uploads
+      - uploads_data:/app/app/files/uploads
       - logs_data:/app/logs
       - mlruns_data:/app/mlruns
+
     networks:
       - atlas-network
+
     restart: unless-stopped
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 5
-      # Allow extra time for BGE-M3 model download on first cold start
       start_period: 120s
 
   # ==================== Celery Worker ====================
   celery_worker:
     image: ${ATLAS_IMAGE:-atlas-ai-api:local}
     container_name: atlas-celery-worker
-    # concurrency=2: limited to 2 on t3.small (2 vCPU, 2 GB RAM) to avoid OOM
-    # when BGE-M3 model (~1.5 GB) is loaded.  Increase on larger instances.
+
     command: celery -A app.celery.celery_config worker --loglevel=info --concurrency=2
+
     environment:
       PYTHONUNBUFFERED: "1"
+
+      # PostgreSQL
       POSTGRES_USER: ${POSTGRES_USER:-atlas_user}
       POSTGRES_PASS: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-atlas_db}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+
+      # Qdrant
       QDRANT_URL: http://qdrant:6333
+
+      # Redis
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-atlas_redis_password}
+
+      # Celery broker and result backend
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/0
       CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/1
+
+      # Required secrets
       API_SECRET_KEY: ${API_SECRET_KEY:?Set API_SECRET_KEY in .env}
-      # Internal service-to-service: Celery → FastAPI metrics endpoint
+
+      # Internal service-to-service
       API_HOST: http://api:8000
+
+      # External services
       JINA_API_KEY: ${JINA_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       REMOTE_EMBED_URL: ${REMOTE_EMBED_URL:-}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+
+      # ==================== SMTP / Email ====================
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+
+      # Embedding provider
       ENVIRONMENT: ${ENVIRONMENT:-production}
       EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-BAAI/bge-m3}
+
+      # Observability
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEBUG: "${DEBUG:-False}"
+
     depends_on:
       postgres:
         condition: service_healthy
+
       qdrant:
-        condition: service_healthy
+        condition: service_started
+
       redis:
         condition: service_healthy
+
       api:
         condition: service_healthy
+
     volumes:
-      - uploads_data:/app/uploads
+      - uploads_data:/app/app/files/uploads
       - logs_data:/app/logs
       - mlruns_data:/app/mlruns
+
     networks:
       - atlas-network
+
     restart: unless-stopped
 
-  # ==================== Celery Beat (Scheduled Tasks) ====================
+    healthcheck:
+      disable: true
+
+  # ==================== Celery Beat ====================
   celery_beat:
     image: ${ATLAS_IMAGE:-atlas-ai-api:local}
     container_name: atlas-celery-beat
+
     command: celery -A app.celery.celery_config beat --loglevel=info
+
     environment:
       PYTHONUNBUFFERED: "1"
+
+      # PostgreSQL
       POSTGRES_USER: ${POSTGRES_USER:-atlas_user}
       POSTGRES_PASS: ${POSTGRES_PASSWORD:-atlas_secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-atlas_db}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+
+      # Qdrant
       QDRANT_URL: http://qdrant:6333
+
+      # Redis
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-atlas_redis_password}
+
+      # Celery broker and result backend
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/0
       CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-atlas_redis_password}@redis:6379/1
+
+      # Required secrets
       API_SECRET_KEY: ${API_SECRET_KEY:?Set API_SECRET_KEY in .env}
+
+      # External services
       JINA_API_KEY: ${JINA_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       REMOTE_EMBED_URL: ${REMOTE_EMBED_URL:-}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+
+      # ==================== SMTP / Email ====================
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+
+      # Embedding provider
       ENVIRONMENT: ${ENVIRONMENT:-production}
       EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-BAAI/bge-m3}
+
+      # Observability
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEBUG: "${DEBUG:-False}"
+
     depends_on:
       postgres:
         condition: service_healthy
+
       qdrant:
-        condition: service_healthy
+        condition: service_started
+
       redis:
         condition: service_healthy
+
       api:
         condition: service_healthy
+
     volumes:
       - logs_data:/app/logs
       - mlruns_data:/app/mlruns
+
     networks:
       - atlas-network
+
     restart: unless-stopped
+
+    healthcheck:
+      disable: true
+
 
 # ==================== NETWORKS & VOLUMES ====================
 
@@ -243,18 +337,24 @@ networks:
   atlas-network:
     driver: bridge
 
+
+# ==================== PERSISTENT VOLUMES ====================
+
 volumes:
-  # Persistent data volumes — NEVER delete these in production.
   postgres_data:
     driver: local
+
   qdrant_data:
     driver: local
+
   redis_data:
     driver: local
-  # Application data volumes
+
   uploads_data:
     driver: local
+
   logs_data:
     driver: local
+
   mlruns_data:
     driver: local

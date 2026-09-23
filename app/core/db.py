@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from app.core.config import settings
 
-data_base = create_engine(
+engine = create_engine(
     settings.DATABASE_URL,
     pool_size=20,
     max_overflow=10,
@@ -16,7 +16,7 @@ data_base = create_engine(
 Sessions = sessionmaker(
     autoflush=False,
     autocommit=False,
-    bind=data_base,
+    bind=engine,
 )
 
 
@@ -36,18 +36,7 @@ def get_db():
 def get_db_session():
     """
     Context-manager wrapper for use in Celery tasks and other non-FastAPI
-    code that cannot use ``Depends``.
-
-    Usage::
-
-        with get_db_session() as db:
-            repo = UserRepository(db)
-            ...
-        # Session is automatically closed here, even on exception.
-
-    Previously this returned a raw Session which callers had to close
-    manually, causing connection leaks when an exception bypassed the
-    ``db.close()`` call.
+    code that cannot use Depends.
     """
     db: Session = Sessions()
     try:

@@ -24,10 +24,11 @@ def _to_list(vec) -> List[float]:
 
 
 class EmbeddedModel(Embeddings):
-    """Use Jina in development, BGE-M3 then Jina in production."""
+    """Use Jina AI as the primary provider with BGE-M3 as fallback."""
 
     _instance = None
     _lock = threading.Lock()
+
     _query_embedding_cache = TTLCache(maxsize=4_096, ttl=60)
     _query_embedding_cache_lock = threading.Lock()
 
@@ -37,6 +38,7 @@ class EmbeddedModel(Embeddings):
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
                     cls._instance._initialized = False
+
         return cls._instance
 
     def _ensure_initialized(self):
@@ -44,26 +46,41 @@ class EmbeddedModel(Embeddings):
             return
 
         self.is_production = settings.is_production
+
+        # BGE-M3 configuration
         self.bge_model_name = settings.embedding_model_name
+
+        # Jina configuration
         self.jina_api_key = settings.jina_api_key
         self.jina_enabled = bool(self.jina_api_key)
-        self.bge_enabled = self.is_production
+
+        # BGE-M3 is available as fallback
+        self.bge_enabled = True
+
         self.batch_size = int(os.environ.get("EMBED_BATCH_SIZE", "32"))
         self.timeout = float(os.environ.get("EMBED_TIMEOUT", "30"))
+
         self.local_model = None
+
         self._initialized = True
 
         logger.info(
-            "Embedding provider initialized: environment=%s provider=%s jina_fallback=%s",
-            "production" if self.is_production else "development",
-            self.bge_model_name if self.is_production else _JINA_MODEL,
-            "enabled" if self.jina_enabled else "unavailable",
+            "Embedding provider initialized: "
+            "primary=Jina AI model=%s "
+            "jina_enabled=%s "
+            "fallback=BGE-M3 model=%s",
+            _JINA_MODEL,
+            self.jina_enabled,
+            self.bge_model_name,
         )
 
     def _call_jina(
-        self, texts: List[str], task: str = "retrieval.passage"
+        self,
+        texts: List[str],
+        task: str = "retrieval.passage",
     ) -> List[List[float]]:
         """Call Jina's embedding API."""
+
         response = requests.post(
             _JINA_URL,
             headers={
@@ -78,11 +95,19 @@ class EmbeddedModel(Embeddings):
             },
             timeout=self.timeout,
         )
+
         response.raise_for_status()
-        items = sorted(response.json()["data"], key=lambda item: item["index"])
+
+        items = sorted(
+            response.json()["data"],
+            key=lambda item: item["index"],
+        )
+
         return [item["embedding"] for item in items]
 
     def _load_bge_model(self) -> None:
+        """Load BGE-M3 lazily only when Jina is unavailable."""
+
         if self.local_model is not None:
             return
 
@@ -90,69 +115,150 @@ class EmbeddedModel(Embeddings):
         import torch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.local_model = SentenceTransformer(self.bge_model_name, device=device)
-        logger.info(
-            "Loaded Hugging Face embedding model %s on %s", self.bge_model_name, device
+
+        self.local_model = SentenceTransformer(
+            self.bge_model_name,
+            device=device,
         )
 
-    def _call_bge_m3(self, texts: List[str]) -> List[List[float]]:
+        logger.info(
+            "Loaded Hugging Face embedding model %s on %s",
+            self.bge_model_name,
+            device,
+        )
+
+    def _call_bge_m3(
+        self,
+        texts: List[str],
+    ) -> List[List[float]]:
+        """Generate embeddings using BGE-M3."""
+
         self._load_bge_model()
+
         embeddings = self.local_model.encode(
             texts,
             normalize_embeddings=True,
             batch_size=self.batch_size,
         )
+
         return _to_list(embeddings)
 
     def _embed_batch(
-        self, texts: List[str], task: str = "retrieval.passage"
+        self,
+        texts: List[str],
+        task: str = "retrieval.passage",
     ) -> List[List[float]]:
-        """Embed with the configured provider and its allowed fallback."""
-        if self.is_production and self.bge_enabled:
-            try:
-                return self._call_bge_m3(texts)
-            except Exception:
-                logger.exception("BGE-M3 failed; falling back to Jina AI")
-                self.bge_enabled = False
+        """
+        Generate embeddings using:
 
+        1. Jina AI — primary provider
+        2. BGE-M3 — fallback provider
+        """
+
+        # ---------------------------------------------------------
+        # 1. PRIMARY: Jina AI
+        # ---------------------------------------------------------
         if self.jina_enabled:
             try:
-                return self._call_jina(texts, task=task)
+                logger.debug(
+                    "Generating embeddings with Jina AI (%s)",
+                    _JINA_MODEL,
+                )
+
+                return self._call_jina(
+                    texts,
+                    task=task,
+                )
+
             except Exception:
-                logger.exception("Jina AI embedding failed")
+                logger.exception("Jina AI embedding failed; " "falling back to BGE-M3")
+
+                # Disable Jina for the lifetime of this process
+                # after a failure so we don't repeatedly hit a
+                # broken API on every batch.
                 self.jina_enabled = False
 
-        provider = "BGE-M3 and Jina AI" if self.is_production else "Jina AI"
-        raise RuntimeError(f"No embedding provider is available: {provider}")
+        # ---------------------------------------------------------
+        # 2. FALLBACK: BGE-M3
+        # ---------------------------------------------------------
+        if self.bge_enabled:
+            try:
+                logger.info("Generating embeddings with BGE-M3 fallback")
 
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+                return self._call_bge_m3(texts)
+
+            except Exception:
+                logger.exception("BGE-M3 embedding failed")
+
+        # ---------------------------------------------------------
+        # 3. Nothing available
+        # ---------------------------------------------------------
+        raise RuntimeError(
+            "No embedding provider is available. "
+            "Jina AI failed or is unavailable, "
+            "and BGE-M3 fallback also failed."
+        )
+
+    def embed_documents(
+        self,
+        texts: List[str],
+    ) -> List[List[float]]:
         self._ensure_initialized()
+
         if not texts:
             return []
 
         results: List[List[float]] = []
-        for start in range(0, len(texts), self.batch_size):
+
+        for start in range(
+            0,
+            len(texts),
+            self.batch_size,
+        ):
             results.extend(
                 self._embed_batch(
                     texts[start : start + self.batch_size],
                     task="retrieval.passage",
                 )
             )
+
         return results
 
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query(
+        self,
+        text: str,
+    ) -> List[float]:
         self._ensure_initialized()
+
         cache_key = text.strip()
+
+        # ---------------------------------------------------------
+        # Query cache
+        # ---------------------------------------------------------
         if cache_key:
             with self._query_embedding_cache_lock:
                 cached_vector = self._query_embedding_cache.get(cache_key)
+
             if cached_vector is not None:
                 logger.debug("Reused exact query embedding from local cache")
+
                 return list(cached_vector)
 
-        result = self._embed_batch([text], task="retrieval.query")
+        # ---------------------------------------------------------
+        # Jina → BGE fallback
+        # ---------------------------------------------------------
+        result = self._embed_batch(
+            [text],
+            task="retrieval.query",
+        )
+
         vector = result[0] if result else []
+
+        # ---------------------------------------------------------
+        # Store in cache
+        # ---------------------------------------------------------
         if cache_key and vector:
             with self._query_embedding_cache_lock:
                 self._query_embedding_cache[cache_key] = tuple(vector)
+
         return vector

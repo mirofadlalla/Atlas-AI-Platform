@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     sparse_embedding_model: str = "Qdrant/bm25"
     cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2"
 
+    # ── Reranker ──────────────────────────────────────────────────────────
+    reranker_provider: str = (
+        "local"  # "local" (sentence-transformers HF) or "jina" (Jina AI API)
+    )
+    cross_encoder_provider: str = ""  # Env var alias for reranker_provider
+    jina_reranker_model: str = "jina-reranker-v3.5"
+    jina_reranker_url: str = "https://api.jina.ai/v1/rerank"
+
     # ── SMTP / Email ──────────────────────────────────────────────────────
     smtp_server: str = "smtp.gmail.com"
     smtp_port: int = 587
@@ -100,6 +108,8 @@ class Settings(BaseSettings):
                 f"Required environment variable(s) not set: {', '.join(missing)}. "
                 "Set them in your .env file or system environment before starting the server."
             )
+        if self.cross_encoder_provider and self.reranker_provider == "local":
+            self.reranker_provider = self.cross_encoder_provider
         return self
 
     # ── Computed connection strings ───────────────────────────────────────
