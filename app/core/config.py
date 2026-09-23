@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     tenant_db_max_overflow: int = 5
     tenant_db_query_timeout_seconds: int = 15
 
-    llm_generation_model="openai/gpt-oss-120b"
+    llm_generation_model: str = "openai/gpt-oss-120b"
 
     @property
     def is_production(self) -> bool:
@@ -103,17 +103,22 @@ class Settings(BaseSettings):
         This prevents accidentally running production with empty/default credentials.
         """
         missing = []
+
         if not self.postgres_pass:
             missing.append("POSTGRES_PASS")
+
         if not self.api_secret_key:
             missing.append("API_SECRET_KEY")
+
         if missing:
             raise ValueError(
                 f"Required environment variable(s) not set: {', '.join(missing)}. "
                 "Set them in your .env file or system environment before starting the server."
             )
+
         if self.cross_encoder_provider and self.reranker_provider == "local":
             self.reranker_provider = self.cross_encoder_provider
+
         return self
 
     # ── Computed connection strings ───────────────────────────────────────
@@ -128,7 +133,11 @@ class Settings(BaseSettings):
     def REDIS_URL(self) -> str:
         """Redis URL with optional authentication."""
         if self.redis_password:
-            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
+            return (
+                f"redis://:{self.redis_password}@"
+                f"{self.redis_host}:{self.redis_port}/{self.redis_db}"
+            )
+
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
     @property
@@ -136,8 +145,10 @@ class Settings(BaseSettings):
         """Redis URL without database number (for semantic cache)."""
         if self.redis_password:
             return (
-                f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/0"
+                f"redis://:{self.redis_password}@"
+                f"{self.redis_host}:{self.redis_port}/0"
             )
+
         return f"redis://{self.redis_host}:{self.redis_port}/0"
 
 

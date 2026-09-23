@@ -79,9 +79,8 @@ class JinaReranker(BaseReranker):
         if api_key is not None:
             self.api_key = api_key
         else:
-            self.api_key = (
-                getattr(settings, "jina_api_key", "")
-                or os.getenv("JINA_API_KEY", "")
+            self.api_key = getattr(settings, "jina_api_key", "") or os.getenv(
+                "JINA_API_KEY", ""
             )
         self.model_name = model_name or getattr(
             settings, "jina_reranker_model", "jina-reranker-v3.5"
