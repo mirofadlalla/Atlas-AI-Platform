@@ -1,11 +1,11 @@
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
 
-engine = create_engine(
+data_base = create_engine(
     settings.DATABASE_URL,
     pool_size=20,
     max_overflow=10,
@@ -13,10 +13,15 @@ engine = create_engine(
     pool_pre_ping=True,
 )
 
+# Backward/forward compatibility:
+# Some modules use `data_base`, while database initialization expects `engine`.
+engine = data_base
+
+
 Sessions = sessionmaker(
     autoflush=False,
     autocommit=False,
-    bind=engine,
+    bind=data_base,
 )
 
 
