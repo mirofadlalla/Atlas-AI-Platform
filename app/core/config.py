@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     tenant_db_max_overflow: int = 5
     tenant_db_query_timeout_seconds: int = 15
 
+    llm_generation_model="openai/gpt-oss-120b"
+
     @property
     def is_production(self) -> bool:
         """Whether production-only infrastructure should be enabled."""
@@ -86,6 +88,8 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     email_from: str = ""
     frontend_url: str = "http://localhost:3000"
+
+    allow_origins: list[str] = ["http://localhost:3000"]
 
     class Config:
         env_file = ".env"

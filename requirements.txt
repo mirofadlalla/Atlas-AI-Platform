@@ -1,14 +1,17 @@
 # Core Framework
+
 fastapi==0.115.12
 uvicorn[standard]==0.34.3
 python-multipart==0.0.31
 
 # Database
+
 sqlalchemy==2.0.23
 psycopg2-binary==2.9.9
 alembic==1.13.1
 
 # Authentication & Security
+
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 argon2-cffi==23.1.0
@@ -17,51 +20,74 @@ email-validator>=2.0.0
 python-dotenv==1.0.1
 
 # Vector Database & RAG
+
 qdrant-client>=1.18.0,<2.0.0
-langchain==0.1.20
-langchain-community==0.0.38
-langchain-core==0.1.53
-langchain-qdrant==0.1.4
-langchain-experimental==0.0.57
-langgraph==0.0.21
+langchain==1.2.10
+langchain-community==0.4.1
+langchain-core==1.2.14
+langchain-qdrant==1.1.0
+langchain-experimental==0.4.1
+langgraph==1.0.8
+langgraph-checkpoint==4.0.0
+langgraph-prebuilt==1.0.7
+langgraph-sdk==0.3.5
+langchain-text-splitters==1.1.0
 
 # Document loaders
-pypdf==5.9.0
+pypdf==6.7.1
+python-docx==1.2.0
+python-pptx==1.0.2
+openpyxl==3.1.5
 
 # 2.2.2 imports the removed huggingface_hub.cached_download API.  2.6.1 keeps
+
 # the SentenceTransformer/CrossEncoder API used by the application, supports
+
 # modern Hugging Face Hub clients, and works with the CPU-only torch pin.
+
 sentence-transformers==2.6.1
+
 # BGE-M3 uses an XLM-R tokenizer; retain SentencePiece explicitly now that
+
 # newer sentence-transformers releases do not declare it as a direct dep.
+
 sentencepiece>=0.1.99
 fastembed>=0.7.4,<0.9.0
 
 # Task Queue & Caching
+
 celery==5.3.4
 redis==5.0.1
 cachetools>=5.3.0
 
 # LLM Integration
+
 openai==1.30.5
 langchain-openai==0.1.7
 groq>=0.9.0,<2.0
 
 # Monitoring & Metrics
+
 prometheus-client==0.19.0
 prometheus-fastapi-instrumentator==6.1.0
 
 # Logging & Observability
+
 sentry-sdk>=2.0.0,<3.0.0
 
 # MLflow for Experiment Tracking
+
 # Pin the newest setuptools whose vendored wheel metadata remains compatible
+
 # with mlflow==2.10.1's packaging<24 requirement. The Dockerfile separately
+
 # removes python:3.11-slim's top-level wheel==0.46.3.
+
 setuptools==80.10.1
 mlflow==2.10.1
 
 # Utilities
+
 requests>=2.32.2
 aiohttp>=3.11.0
 httpx==0.28.1
@@ -71,15 +97,15 @@ tenacity==8.2.3
 tiktoken>=0.7.0,<1.0.0
 
 # Explicit transitive-dep pins to resolve security CVEs
+
 pillow>=11.0.0
 psutil>=5.9.0
 
 # Development & Testing
+
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
 black>=24.3.0
 flake8==6.1.0
 
 python-json-logger==2.0.7
-
-

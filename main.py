@@ -17,6 +17,7 @@ from time import time
 from fastapi import FastAPI, HTTPException, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from app.core.config import settings
 from prometheus_client import REGISTRY, generate_latest, CONTENT_TYPE_LATEST
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -127,7 +128,7 @@ app = FastAPI(
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=settings.allow_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # explicit, not ["*"]
     allow_headers=["*"],
@@ -229,7 +230,6 @@ async def metrics(x_internal_key: str = Header(default="")):
     Exposes system, HTTP, RAG, and agent execution metrics to Prometheus.
     If an explicit X-Internal-Key header is passed, validates it against internal_metrics_api_key.
     """
-    from app.core.config import settings
 
     if settings.internal_metrics_api_key and x_internal_key:
         if x_internal_key != settings.internal_metrics_api_key:

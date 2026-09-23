@@ -25,11 +25,11 @@ class LLMService:
             or not hasattr(cls._instance, "client")
             or cls._instance.client is None
         ):
-            logger.info("Initializing Groq LLM client (llama-3.3-70b-versatile)...")
+            logger.info(f"Initializing Groq LLM client ({settings.llm_generation_model or 'openai/gpt-oss-120b'})...")
             api_key = settings.groq_api_key or os.getenv("GROQ_API_KEY", "")
             instance = super().__new__(cls)
             instance.client = Groq(api_key=api_key)
-            instance.model = "llama-3.3-70b-versatile"
+            instance.model = settings.llm_generation_model or "openai/gpt-oss-120b"
             cls._instance = instance
         return cls._instance
 

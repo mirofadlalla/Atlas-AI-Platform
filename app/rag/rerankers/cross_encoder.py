@@ -76,11 +76,13 @@ class JinaReranker(BaseReranker):
         url: Optional[str] = None,
         timeout: float = 30.0,
     ):
-        self.api_key = (
-            api_key
-            or getattr(settings, "jina_api_key", "")
-            or os.getenv("JINA_API_KEY", "")
-        )
+        if api_key is not None:
+            self.api_key = api_key
+        else:
+            self.api_key = (
+                getattr(settings, "jina_api_key", "")
+                or os.getenv("JINA_API_KEY", "")
+            )
         self.model_name = model_name or getattr(
             settings, "jina_reranker_model", "jina-reranker-v3.5"
         )
@@ -165,9 +167,9 @@ class CrossEncoderReranker(BaseReranker):
     ):
         raw_provider = (
             provider
-            or getattr(settings, "reranker_provider", None)
             or os.getenv("RERANKER_PROVIDER")
             or os.getenv("CROSS_ENCODER_PROVIDER")
+            or getattr(settings, "reranker_provider", None)
             or "local"
         )
         self.provider = raw_provider.strip().lower()

@@ -42,8 +42,8 @@ class AgentSettings(BaseSettings):
     llm_max_tokens: int = 2048
     llm_temperature: float = 1.0
     llm_system_prompt: str = "You are a helpful assistant."
-    llm_routing_model: str = ""
-    llm_generation_model: str = "llama-3.3-70b-versatile"
+    llm_routing_model: str = "openai/gpt-oss-20b"
+    llm_generation_model: str = "openai/gpt-oss-120b"
     llm_input_cost_per_million: float = 0.59
     llm_output_cost_per_million: float = 0.79
     prompt_max_tokens: int = 12000
