@@ -137,3 +137,82 @@ class AuthController:
         from app.services.user_approval_service import UserApprovalService
 
         return UserApprovalService(db).reject_user(user_id, admin_id)
+
+    # ── Admin — Tenant-scoped User Management ──────────────────────────────
+
+    @staticmethod
+    def admin_list_users(tenant_id: str, db: Session):
+        """List all users in the admin's own tenant."""
+        from app.services.super_admin_service import SuperAdminService
+
+        service = SuperAdminService(db)
+        return service.get_tenant_users(tenant_id)
+
+    @staticmethod
+    def admin_delete_user(user_id: str, requester_id: str, tenant_id: str, db: Session):
+        """Delete a user from the admin's tenant.
+
+        Guards:
+        - Cannot delete self.
+        - Target user must belong to the same tenant.
+        """
+        from app.repositories.user_repository import UserRepository
+        from app.services.super_admin_service import SuperAdminService
+
+        # Verify the target user belongs to the admin's tenant.
+        user_repo = UserRepository(db)
+        target = user_repo.find_by_id(user_id)
+        if not target or str(target.tenant_id) != str(tenant_id):
+            raise HTTPException(
+                status_code=404, detail="User not found in your tenant."
+            )
+
+        return SuperAdminService(db).delete_user(user_id, requester_id)
+
+    @staticmethod
+    def admin_update_user_role(
+        user_id: str, role: str, requester_tenant_id: str, db: Session
+    ):
+        """Update a user's role, scoped to the admin's tenant.
+
+        Guards:
+        - Target user must belong to the same tenant.
+        - Cannot change the role of a super_admin.
+        """
+        from app.repositories.user_repository import UserRepository
+        from app.services.super_admin_service import SuperAdminService
+
+        user_repo = UserRepository(db)
+        target = user_repo.find_by_id(user_id)
+        if not target or str(target.tenant_id) != str(requester_tenant_id):
+            raise HTTPException(
+                status_code=404, detail="User not found in your tenant."
+            )
+        if target.role == "super_admin":
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot change the role of a super admin.",
+            )
+
+        return SuperAdminService(db).update_user_role(user_id, role)
+
+    @staticmethod
+    def admin_update_user_status(
+        user_id: str, approval_status: str, requester_tenant_id: str, db: Session
+    ):
+        """Update a user's approval status, scoped to the admin's tenant.
+
+        Guards:
+        - Target user must belong to the same tenant.
+        """
+        from app.repositories.user_repository import UserRepository
+        from app.services.super_admin_service import SuperAdminService
+
+        user_repo = UserRepository(db)
+        target = user_repo.find_by_id(user_id)
+        if not target or str(target.tenant_id) != str(requester_tenant_id):
+            raise HTTPException(
+                status_code=404, detail="User not found in your tenant."
+            )
+
+        return SuperAdminService(db).update_user_status(user_id, approval_status)

@@ -34,6 +34,7 @@ from app.routes import (
     recommended_qa_route,
     memory_route,
     tenant_database_route,
+    super_admin_route,
 )
 from logging_setup import setup_logging
 
@@ -151,6 +152,7 @@ app.include_router(memory_route.router, prefix="/api", tags=["memory"])
 app.include_router(
     tenant_database_route.router, prefix="/api", tags=["tenant-database"]
 )
+app.include_router(super_admin_route.router, prefix="/api", tags=["super-admin"])
 
 
 # ── Prometheus metrics middleware ─────────────────────────────────────────────

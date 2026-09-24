@@ -151,5 +151,10 @@ class Settings(BaseSettings):
 
         return f"redis://{self.redis_host}:{self.redis_port}/0"
 
+    @property
+    def allow_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.allow_origins.split(",") if o.strip()]
+
 
 settings = Settings()
+settings.allow_origins = settings.allow_origins_list

@@ -18,6 +18,9 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/atlas-ai
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Build, security-scan, and publish image to GHCR
+  # ---------------------------------------------------------------------------
   build-scan-push:
     name: Build, scan, and publish image
     runs-on: ubuntu-latest
@@ -27,9 +30,9 @@ jobs:
         uses: actions/checkout@v4
 
       # ── Free runner disk space (~20+ GB freed) ───────────────────────────
-      # The default ubuntu-latest runner only has ~14-18 GB free. Unused pre-installed
-      # toolchains are removed here so Docker build and Trivy layer extraction have
-      # ample disk space.
+      # The default ubuntu-latest runner only has ~14-18 GB free. Unused
+      # pre-installed toolchains are removed here so Docker build and Trivy
+      # layer extraction have ample disk space.
       - name: Free runner disk space
         run: |
           echo "=== Disk before cleanup ==="
@@ -176,11 +179,9 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL,HIGH
 
-      # ── Tag + push the ALREADY-BUILT image (no second build) ────────────
-      # This is what was filling the disk: a second buildx invocation
-      # re-materializing the image layers. Tagging and pushing the image
-      # that's already loaded in the local daemon avoids that entirely,
-      # and is faster than a rebuild — no cleanup step needed.
+      # ── Tag + push the ALREADY-BUILT image (no second build) ─────────────
+      # Tagging and pushing the image that is already loaded in the local daemon
+      # avoids a second buildx invocation and is faster than a full rebuild.
       - name: Tag and push image to GHCR
         run: |
           while IFS= read -r tag; do
@@ -188,3 +189,154 @@ jobs:
             docker tag "${{ steps.vars.outputs.local_tag }}" "$tag"
             docker push "$tag"
           done <<< "${{ steps.meta.outputs.tags }}"
+
+  # ---------------------------------------------------------------------------
+  # 2. Production deployment to EC2
+  #
+  # Runs ONLY on direct pushes to main (not PRs, not fix/** branches) so
+  # that unreviewed code is never auto-deployed.
+  #
+  # Safety guarantees
+  # ─────────────────
+  # • Migrations run in a short-lived --rm container BEFORE the api service
+  #   is recreated.  If migrations fail, the running api keeps serving traffic.
+  # • Only `api` is recreated (--no-deps).  Postgres, Redis, Qdrant,
+  #   Prometheus, and Grafana are never stopped or recreated.
+  # • Previous ATLAS_IMAGE is written to .env.rollback before any change is
+  #   made so ops can roll back with two commands.
+  # • /health is polled for up to 120 s after the new container starts.
+  #   If it never passes, the script automatically reverts the image tag in
+  #   .env, restarts the old container, and exits non-zero.
+  #
+  # Required GitHub Actions secrets (Settings → Secrets → Actions)
+  # ──────────────────────────────────────────────────────────────
+  #   EC2_HOST     Public IP or hostname of the production EC2 instance.
+  #   EC2_USER     SSH user on that instance (e.g. ec2-user or ubuntu).
+  #   EC2_SSH_KEY  Full contents of the .pem private key file.
+  #   GHCR_PAT     GitHub PAT with read:packages scope — used by docker pull
+  #                on the EC2 host (GITHUB_TOKEN is a CI-only token and
+  #                cannot be used from an external machine).
+  # ---------------------------------------------------------------------------
+  deploy-to-ec2:
+    name: Deploy backend to EC2
+    runs-on: ubuntu-latest
+    needs: build-scan-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Compute image tag for this deploy
+        id: image
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/atlas-ai:sha-${{ github.sha }}"
+          echo "tag=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+      # ── Step 1-7: Rolling backend update ─────────────────────────────────
+      - name: Deploy backend to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          # script_stop: true causes the SSH session to fail as soon as any
+          # command in the script returns a non-zero exit code.
+          script_stop: true
+          script: |
+            set -euo pipefail
+
+            DEPLOY_DIR="/home/${{ secrets.EC2_USER }}/atlas-deploy"
+            NEW_IMAGE="${{ steps.image.outputs.tag }}"
+
+            cd "${DEPLOY_DIR}"
+
+            # ── 1. Save previous image tag for rollback ───────────────────
+            echo "=== [1/7] Saving rollback information ==="
+            PREV_IMAGE=$(grep '^ATLAS_IMAGE=' .env | cut -d= -f2- || echo "unknown")
+            echo "Current (old) image: ${PREV_IMAGE}"
+            echo "New image:           ${NEW_IMAGE}"
+            # .env.rollback gives ops a single file with rollback instructions.
+            cat > .env.rollback <<ROLLBACK_EOF
+            # Auto-generated by GitHub Actions on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            # Rollback procedure:
+            #   cd ${DEPLOY_DIR}
+            #   sed -i "s|^ATLAS_IMAGE=.*|ATLAS_IMAGE=${PREV_IMAGE}|" .env
+            #   docker compose --env-file .env up -d --no-deps api
+            PREV_ATLAS_IMAGE=${PREV_IMAGE}
+            ROLLBACK_EOF
+
+            # ── 2. Authenticate to GHCR ───────────────────────────────────
+            echo "=== [2/7] Logging in to GHCR ==="
+            echo "${{ secrets.GHCR_PAT }}" \
+              | docker login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
+
+            # ── 3. Pull the new image ─────────────────────────────────────
+            echo "=== [3/7] Pulling: ${NEW_IMAGE} ==="
+            docker pull "${NEW_IMAGE}"
+
+            # ── 4. Run database migrations before cutover ─────────────────
+            # Execute alembic upgrade head in a throwaway container that joins
+            # atlas-network so it can reach atlas-postgres.
+            # RUN_MIGRATIONS=false prevents the entrypoint from running
+            # migrations a second time; we call alembic directly as the CMD.
+            # If migrations fail this container exits non-zero, the script
+            # aborts (set -e), and the live api container is never touched.
+            echo "=== [4/7] Running database migrations ==="
+            docker run --rm \
+              --network atlas-network \
+              --env-file "${DEPLOY_DIR}/.env" \
+              -e RUN_MIGRATIONS=false \
+              "${NEW_IMAGE}" \
+              alembic upgrade head
+
+            # ── 5. Update image tag in .env ───────────────────────────────
+            echo "=== [5/7] Writing new image tag to .env ==="
+            sed -i "s|^ATLAS_IMAGE=.*|ATLAS_IMAGE=${NEW_IMAGE}|" .env
+
+            # ── 6. Recreate only atlas-api ────────────────────────────────
+            # --no-deps: only the `api` service is recreated.
+            # Postgres, Redis, Qdrant, Prometheus, and Grafana are untouched.
+            echo "=== [6/7] Recreating atlas-api (--no-deps) ==="
+            docker compose --env-file .env up -d --no-deps api
+
+            # ── 7. Health-check the new container ─────────────────────────
+            # Poll /health for up to 120 s (24 attempts × 5 s).
+            # On timeout: revert .env, restart old image, exit 1.
+            echo "=== [7/7] Health check (120 s budget) ==="
+            for i in $(seq 1 24); do
+              if curl -fsS http://localhost:8000/health > /dev/null 2>&1; then
+                echo "Health check passed on attempt ${i} — deploy complete"
+                exit 0
+              fi
+              echo "  attempt ${i}/24 — waiting 5 s..."
+              sleep 5
+            done
+
+            echo "ERROR: /health never returned 200 within 120 seconds"
+            echo "=== Auto-rolling back to: ${PREV_IMAGE} ==="
+            sed -i "s|^ATLAS_IMAGE=.*|ATLAS_IMAGE=${PREV_IMAGE}|" .env
+            docker compose --env-file .env up -d --no-deps api
+            exit 1
+
+      # ── Post-deploy verification ──────────────────────────────────────────
+      - name: Verify deployment and confirm monitoring is untouched
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -euo pipefail
+
+            echo "=== Running image on atlas-api ==="
+            docker inspect atlas-api --format '{{.Config.Image}}'
+
+            echo "=== /health endpoint ==="
+            curl -fsS http://localhost:8000/health
+
+            echo "=== Alembic current revision ==="
+            docker exec atlas-api alembic current
+
+            echo "=== Monitoring containers (must be running and unchanged) ==="
+            docker ps \
+              --filter name=atlas-prometheus \
+              --filter name=atlas-grafana \
+              --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"

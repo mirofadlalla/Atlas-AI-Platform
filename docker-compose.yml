@@ -114,6 +114,9 @@ services:
 
       # Required secrets
       API_SECRET_KEY: ${API_SECRET_KEY:?Set API_SECRET_KEY in .env}
+      # Bootstrap secret for POST /api/super-admin/setup.
+      # Leave unset after the first super_admin account is created.
+      SUPER_ADMIN_SECRET_KEY: ${SUPER_ADMIN_SECRET_KEY:-}
 
       # External services
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}

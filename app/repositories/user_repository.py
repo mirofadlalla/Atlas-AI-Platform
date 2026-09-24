@@ -48,6 +48,45 @@ class UserRepository:
         self.db.flush()  # Flush to get the ID without committing
         return user
 
+    def find_all_by_tenant(self, tenant_id: str):
+        """Return all users belonging to the specified tenant."""
+        return self.db.query(Users).filter(Users.tenant_id == tenant_id).all()
+
+    def find_all(self):
+        """Return every user in the system (super admin use only)."""
+        return self.db.query(Users).all()
+
+    def delete(self, user_id: str) -> bool:
+        """Delete a user by ID. Returns True if deleted, False if not found."""
+        user = self.find_by_id(user_id)
+        if not user:
+            return False
+        self.db.delete(user)
+        self.db.flush()
+        return True
+
+    def update_role(self, user_id: str, role: str):
+        """Update a user's role. Returns the updated user or None if not found."""
+        user = self.find_by_id(user_id)
+        if not user:
+            return None
+        user.role = role
+        self.db.flush()
+        return user
+
+    def update_approval_status(self, user_id: str, status: str):
+        """Update a user's approval status. Returns the updated user or None if not found."""
+        user = self.find_by_id(user_id)
+        if not user:
+            return None
+        user.approval_status = status
+        self.db.flush()
+        return user
+
+    def count_by_tenant(self, tenant_id: str) -> int:
+        """Return the number of users in a given tenant."""
+        return self.db.query(Users).filter(Users.tenant_id == tenant_id).count()
+
     def commit(self):
         """Commit database changes."""
         self.db.commit()

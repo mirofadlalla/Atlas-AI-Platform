@@ -12,6 +12,7 @@ _ROUTE_MAP = {
     "agent_route": "app.routes.agent_route",
     "recommended_qa_route": "app.routes.recommended_qa_route",
     "memory_route": "app.routes.memory_route",
+    "super_admin_route": "app.routes.super_admin_route",
 }
 
 

@@ -37,30 +37,27 @@ class AuthService:
         if tenant_obj:
             raise HTTPException(status_code=404, detail="Tenant already exists")
 
-        tenant_obj = self.tenant_repo.create(user_data.tenant_name)
+        # Create tenant in 'pending' state — no login until super admin approves.
+        tenant_obj = self.tenant_repo.create(user_data.tenant_name, status="pending")
 
-        # Create admin
+        # Create admin user in 'pending' state.
         hashed_password = password_hash(user_data.password)
-        new_user = self.user_repo.create(
+        self.user_repo.create(
             user_data.name,
             user_data.email,
             hashed_password,
             tenant_obj.id,
             role="admin",
+            approval_status="pending",
         )
+        self.tenant_repo.commit()
 
-        # Generate token
-        access_token = create_access_token(
-            {
-                "sub": new_user.email,
-                "user_id": new_user.id,
-                "role": new_user.role,
-                "approval_status": new_user.approval_status,
-                "tenant_id": tenant_obj.id,
-            }
-        )
-
-        return {"access_token": access_token, "token_type": "bearer"}
+        return {
+            "message": (
+                "Registration submitted. Your organization is awaiting super admin "
+                "approval. You will be notified once access is granted."
+            )
+        }
 
     # Login user and return access token
     def login_user(self, email: str, password: str):
@@ -83,6 +80,24 @@ class AuthService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Your account registration was not approved.",
             )
+
+        # Block users whose tenant has not been approved by a super admin.
+        # Super admin accounts (tenant_id is None) are exempt from this check.
+        if user.tenant_id is not None:
+            tenant = self.tenant_repo.find_by_id(str(user.tenant_id))
+            if tenant and tenant.status == "pending":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Your organization's registration is awaiting super admin "
+                        "approval. You will be notified once access is granted."
+                    ),
+                )
+            if tenant and tenant.status == "rejected":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Your organization's registration was not approved.",
+                )
 
         access_token = create_access_token(
             {

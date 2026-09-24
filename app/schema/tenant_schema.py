@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 
 class TenantRegistrationRequest(BaseModel):
-    """Request model for SaaS tenant registration"""
+    """Request model for SaaS tenant registration."""
 
     organization_name: str
     admin_email: str
@@ -12,11 +12,16 @@ class TenantRegistrationRequest(BaseModel):
 
 
 class TenantRegistrationResponse(BaseModel):
-    """Response model for SaaS tenant registration"""
+    """Response model for SaaS tenant registration.
+
+    Note: no ``access_token`` field — registration is now pending super admin
+    approval and the admin cannot log in until the tenant is activated.
+    """
 
     tenant_id: str
     admin_id: str
     organization_name: str
-    access_token: str
-    message: str
+    admin_email: str
     plan: str = "starter"
+    status: str = "pending"
+    message: str

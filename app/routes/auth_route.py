@@ -18,6 +18,7 @@ from app.schema.tenant_schema import (
     TenantRegistrationRequest,
     TenantRegistrationResponse,
 )
+from app.schema.super_admin_schema import UpdateUserRoleRequest, UpdateUserStatusRequest
 
 from app.core.db import get_db
 from app.services.auth_services.auth_service import get_current_user, require_admin
@@ -41,9 +42,14 @@ def register_tenant(request: TenantRegistrationRequest, db: Session = Depends(ge
 # ==================== Basic Authentication ====================
 
 
-@router.post("/register", response_model=Token)
+@router.post("/register")
 def register(user: UserCreate, request: Request, db: Session = Depends(get_db)):
-    """Register a new admin user and create tenant. Rate-limited per IP."""
+    """Register a new admin user and tenant (pending super admin approval).
+
+    The tenant and its admin are created in a 'pending' state.  No access
+    token is returned.  A super admin must approve the tenant before anyone
+    can log in.  Rate-limited per IP.
+    """
     ip_rate_limit(client_ip=request.client.host, endpoint="register")
     return AuthController.register(user, db)
 
@@ -153,3 +159,64 @@ def reject_user(
 ):
     """Reject a pending user registration (admin only)."""
     return AuthController.reject_user(user_id, current_admin.id, db)
+
+
+# ==================== Admin — Tenant-Scoped User Management ====================
+
+
+@router.get("/admin/users")
+def admin_list_users(
+    current_admin=Depends(require_admin), db: Session = Depends(get_db)
+):
+    """List all users in the admin's own tenant (admin only)."""
+    return AuthController.admin_list_users(str(current_admin.tenant_id), db)
+
+
+@router.delete("/admin/users/{user_id}")
+def admin_delete_user(
+    user_id: str,
+    current_admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Delete a user from the admin's tenant (admin only, cannot delete self)."""
+    return AuthController.admin_delete_user(
+        user_id=user_id,
+        requester_id=str(current_admin.id),
+        tenant_id=str(current_admin.tenant_id),
+        db=db,
+    )
+
+
+@router.patch("/admin/users/{user_id}/role")
+def admin_update_user_role(
+    user_id: str,
+    request: UpdateUserRoleRequest,
+    current_admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Update the role of a user in the admin's own tenant (admin only).
+
+    Cannot promote/demote a super_admin.
+    """
+    return AuthController.admin_update_user_role(
+        user_id=user_id,
+        role=request.role,
+        requester_tenant_id=str(current_admin.tenant_id),
+        db=db,
+    )
+
+
+@router.patch("/admin/users/{user_id}/status")
+def admin_update_user_status(
+    user_id: str,
+    request: UpdateUserStatusRequest,
+    current_admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Update the approval status of a user in the admin's own tenant (admin only)."""
+    return AuthController.admin_update_user_status(
+        user_id=user_id,
+        approval_status=request.approval_status,
+        requester_tenant_id=str(current_admin.tenant_id),
+        db=db,
+    )
