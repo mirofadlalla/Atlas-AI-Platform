@@ -281,7 +281,7 @@ jobs:
             # aborts (set -e), and the live api container is never touched.
             echo "=== [4/7] Running database migrations ==="
             docker run --rm \
-              --network atlas-network \
+              --network atlas-deploy_atlas-network \
               --env-file "${DEPLOY_DIR}/.env" \
               -e RUN_MIGRATIONS=false \
               "${NEW_IMAGE}" \
