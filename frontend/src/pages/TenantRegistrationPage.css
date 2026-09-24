@@ -31,12 +31,14 @@
 .registration-header h1 {
   font-size: 1.8em;
   margin: 0 0 10px 0;
+  color: var(--text-on-accent);
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
   font-weight: 700;
 }
 
 .registration-header p {
   font-size: 1em;
+  color: var(--text-on-accent);
   opacity: 0.95;
   margin: 0;
 }
@@ -105,7 +107,7 @@
 .form-group small {
   display: block;
   margin-top: 5px;
-  color: #9CA3AF;
+  color: var(--text-tertiary);
   font-size: 0.85em;
 }
 

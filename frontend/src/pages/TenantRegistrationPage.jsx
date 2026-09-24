@@ -63,22 +63,22 @@ function TenantRegistrationPage({ setIsAuthenticated, setUser }) {
       );
 
       // Store authentication
-      localStorage.setItem('token', data.access_token);
-      localStorage.setItem('user', JSON.stringify({
-        id: data.admin_id, // Ensure ID is stored
-        email: data.admin_email,
+      const resolvedEmail = data.admin_email || adminEmail;
+      const resolvedOrg = data.organization_name || organizationName;
+      const userData = {
+        id: data.admin_id,
+        email: resolvedEmail,
         role: 'admin',
         tenant_id: data.tenant_id,
-        organization: data.organization_name,
-      }));
+        organization_name: resolvedOrg,
+        approval_status: 'approved',
+      };
+
+      localStorage.setItem('token', data.access_token);
+      localStorage.setItem('user', JSON.stringify(userData));
 
       setIsAuthenticated(true);
-      setUser({
-        id: data.admin_id,
-        email: data.admin_email,
-        role: 'admin',
-        organization: data.organization_name,
-      });
+      setUser(userData);
 
       navigate('/');
     } catch (err) {
@@ -92,7 +92,7 @@ function TenantRegistrationPage({ setIsAuthenticated, setUser }) {
     <div className="tenant-registration-container">
       <div className="registration-card">
         <div className="registration-header">
-          <h1>🚀 Create Your Atlas AI Workspace</h1>
+          <h1>Create Your Atlas AI Workspace</h1>
           <p>Set up your multi-tenant RAG platform</p>
         </div>
 

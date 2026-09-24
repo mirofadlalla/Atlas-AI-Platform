@@ -98,6 +98,36 @@
   margin-bottom: 20px;
 }
 
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.form-row .form-group {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.form-row .form-group-narrow {
+  flex: 0 0 140px;
+}
+
+@media (max-width: 560px) {
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .form-row .form-group {
+    margin-bottom: 20px;
+  }
+
+  .form-row .form-group-narrow {
+    flex: 1;
+  }
+}
+
 .form-group label {
   display: block;
   margin-bottom: 8px;

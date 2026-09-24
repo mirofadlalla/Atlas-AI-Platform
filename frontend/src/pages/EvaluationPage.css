@@ -106,7 +106,7 @@
   transform: translateY(-2px);
   box-shadow: var(--shadow-glow);
   border-color: var(--accent-light);
-  background: linear-gradient(135deg, #A855F7 0%, #C084FC 100%);
+  background: linear-gradient(135deg, #A855F7 0%, var(--accent-light) 100%);
 }
 
 .btn-primary:active:not(:disabled) {
@@ -129,13 +129,13 @@
 
 .success-message {
   background-color: rgba(16, 185, 129, 0.1);
-  color: #86EFAC;
+  color: var(--text-success);
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
 .error-message {
   background-color: rgba(239, 68, 68, 0.1);
-  color: #FCA5A5;
+  color: var(--text-error);
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
@@ -161,6 +161,19 @@
   border-radius: var(--radius-md);
   font-family: var(--font-mono);
   font-size: 0.9em;
+}
+
+.result-details pre {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  overflow-x: auto;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  margin-top: 12px;
 }
 
 .evaluation-metrics {

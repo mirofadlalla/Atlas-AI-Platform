@@ -42,7 +42,7 @@
 }
 
 .btn-refresh:hover {
-  background: linear-gradient(135deg, #A855F7 0%, #C084FC 100%);
+  background: linear-gradient(135deg, #A855F7 0%, var(--accent-light) 100%);
   transform: translateY(-2px);
   box-shadow: var(--shadow-glow);
 }
@@ -154,7 +154,7 @@
 
 .token-info {
   font-size: 0.9em;
-  color: #666;
+  color: var(--text-muted);
 }
 
 /* Usage Metrics */

@@ -122,6 +122,92 @@
   --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ===== LIGHT THEME OVERRIDES ===== */
+/* Activated by setting data-theme="light" on <html>. Same variable names as
+   the dark palette above, so every component that already consumes the
+   variables re-themes automatically with no per-component changes. */
+
+[data-theme="light"] {
+  /* Backgrounds */
+  --bg-base: #F7F8FB;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F1F3F9;
+  --bg-elevated: #FFFFFF;
+  --bg-hover: #EEF0F7;
+  --bg-quaternary: #E6E9F2;
+
+  /* Accents stay the same brand purple, tuned slightly darker for contrast on white */
+  --accent-primary: #6D28D9;
+  --accent-secondary: #7C3AED;
+  --accent-light: #9333EA;
+  --accent-bright: #C026D3;
+
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #6D28D9 0%, #7C3AED 100%);
+  --gradient-header: linear-gradient(135deg, #FFFFFF 0%, #F1F3F9 100%);
+  --gradient-subtle: linear-gradient(135deg, #FFFFFF 0%, #EEF0F7 100%);
+  --gradient-glow: radial-gradient(circle, rgba(109, 40, 217, 0.15) 0%, rgba(109, 40, 217, 0.05) 100%);
+
+  /* Text Colors */
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-tertiary: #6B7280;
+  --text-muted: #6B7280;
+  --text-faint: #9CA3AF;
+  --text-inverse: #FFFFFF;
+
+  /* Status Colors */
+  --status-success: #059669;
+  --status-warning: #D97706;
+  --status-error: #DC2626;
+  --status-info: #2563EB;
+
+  --color-error: #DC2626;
+  --color-success: #059669;
+  --color-warning: #D97706;
+  --color-info: #2563EB;
+
+  /* Status background tints */
+  --bg-error: rgba(220, 38, 38, 0.08);
+  --bg-success: rgba(5, 150, 105, 0.08);
+  --bg-warning: rgba(217, 119, 6, 0.08);
+  --bg-info: rgba(37, 99, 235, 0.08);
+
+  /* Text on status tints */
+  --text-success: #047857;
+  --text-warning: #B45309;
+  --text-error: #B91C1C;
+  --text-info: #1D4ED8;
+
+  --text-on-accent: #FFFFFF;
+
+  /* UI Elements */
+  --border-color: rgba(17, 24, 39, 0.1);
+  --border-light: rgba(17, 24, 39, 0.14);
+  --border-focus: rgba(109, 40, 217, 0.4);
+
+  /* Shadows - lighter, since dark shadows read as muddy on white */
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06);
+  --shadow-md: 0 4px 12px rgba(17, 24, 39, 0.08);
+  --shadow-lg: 0 10px 30px rgba(17, 24, 39, 0.12);
+  --shadow-xl: 0 20px 50px rgba(17, 24, 39, 0.16);
+  --shadow-glow: 0 0 20px rgba(109, 40, 217, 0.2);
+  --shadow-glow-sm: 0 0 10px rgba(109, 40, 217, 0.15);
+}
+
+/* Smooth transition when switching themes */
+body,
+.card,
+.btn,
+button,
+input,
+textarea,
+select,
+nav {
+  transition: background-color var(--transition-base), color var(--transition-base),
+    border-color var(--transition-base);
+}
+
 /* ===== GLOBAL RESETS ===== */
 
 * {
@@ -320,7 +406,7 @@ button:disabled,
 
 /* ===== FORM ELEMENTS ===== */
 
-input,
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 textarea,
 select {
   font-family: var(--font-primary);
@@ -338,13 +424,52 @@ textarea::placeholder {
   color: var(--text-muted);
 }
 
-input:focus,
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
 textarea:focus,
 select:focus {
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
   background-color: var(--bg-tertiary);
+}
+
+/* Checkboxes & radios: themed via accent-color instead of the full input
+   treatment above, which was designed for text fields and looked wrong
+   (oversized padding, stretched width) on native controls. */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* File inputs: theme the button Chromium/Firefox render for "Choose File"
+   so it matches the app instead of the browser's default grey control. */
+input[type="file"] {
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+
+input[type="file"]::file-selector-button {
+  font-family: var(--font-primary);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  margin-right: var(--space-md);
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+input[type="file"]::file-selector-button:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
 }
 
 /* ===== CARD STYLES ===== */

@@ -163,30 +163,32 @@ export default function TenantDatabasePage() {
                 </select>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="db-host">Host</label>
-                <input
-                  id="db-host"
-                  name="host"
-                  required
-                  value={form.host}
-                  onChange={handleFieldChange}
-                  placeholder="e.g. db.example.com or localhost"
-                  autoComplete="off"
-                />
-              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="db-host">Host</label>
+                  <input
+                    id="db-host"
+                    name="host"
+                    required
+                    value={form.host}
+                    onChange={handleFieldChange}
+                    placeholder="e.g. db.example.com or localhost"
+                    autoComplete="off"
+                  />
+                </div>
 
-              <div className="form-group">
-                <label htmlFor="db-port">Port</label>
-                <input
-                  id="db-port"
-                  name="port"
-                  type="number"
-                  value={form.port}
-                  onChange={handleFieldChange}
-                  min={1}
-                  max={65535}
-                />
+                <div className="form-group form-group-narrow">
+                  <label htmlFor="db-port">Port</label>
+                  <input
+                    id="db-port"
+                    name="port"
+                    type="number"
+                    value={form.port}
+                    onChange={handleFieldChange}
+                    min={1}
+                    max={65535}
+                  />
+                </div>
               </div>
 
               <div className="form-group">
@@ -202,55 +204,59 @@ export default function TenantDatabasePage() {
                 />
               </div>
 
-              <div className="form-group">
-                <label htmlFor="db-user">Username</label>
-                <input
-                  id="db-user"
-                  name="username"
-                  required
-                  value={form.username}
-                  onChange={handleFieldChange}
-                  placeholder="e.g. readonly_user"
-                  autoComplete="username"
-                />
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="db-user">Username</label>
+                  <input
+                    id="db-user"
+                    name="username"
+                    required
+                    value={form.username}
+                    onChange={handleFieldChange}
+                    placeholder="e.g. readonly_user"
+                    autoComplete="username"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="db-pass">Password</label>
+                  <input
+                    id="db-pass"
+                    name="password"
+                    required
+                    type="password"
+                    value={form.password}
+                    onChange={handleFieldChange}
+                    autoComplete="new-password"
+                    placeholder="Database password"
+                  />
+                </div>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="db-pass">Password</label>
-                <input
-                  id="db-pass"
-                  name="password"
-                  required
-                  type="password"
-                  value={form.password}
-                  onChange={handleFieldChange}
-                  autoComplete="new-password"
-                  placeholder="Database password"
-                />
-              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="db-schema">Default Schema</label>
+                  <input
+                    id="db-schema"
+                    name="default_schema"
+                    value={form.default_schema}
+                    onChange={handleFieldChange}
+                    placeholder="public"
+                  />
+                </div>
 
-              <div className="form-group">
-                <label htmlFor="db-schema">Default Schema</label>
-                <input
-                  id="db-schema"
-                  name="default_schema"
-                  value={form.default_schema}
-                  onChange={handleFieldChange}
-                  placeholder="public"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="db-timeout">Connection Timeout (seconds)</label>
-                <input
-                  id="db-timeout"
-                  name="connection_timeout"
-                  type="number"
-                  value={form.connection_timeout}
-                  onChange={handleFieldChange}
-                  min={1}
-                  max={60}
-                />
+                <div className="form-group">
+                  <label htmlFor="db-timeout">Connection Timeout (seconds)</label>
+                  <input
+                    id="db-timeout"
+                    name="connection_timeout"
+                    type="number"
+                    value={form.connection_timeout}
+                    onChange={handleFieldChange}
+                    min={1}
+                    max={60}
+                  />
+                </div>
               </div>
 
               <button className="btn-primary" disabled={busy} type="submit">

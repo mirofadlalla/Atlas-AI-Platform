@@ -11,14 +11,21 @@ import QueryPage from './pages/QueryPage';
 import AgentPage from './pages/AgentPage';
 import IngestPage from './pages/IngestPage';
 import AdminPanel from './pages/AdminPanel';
+import AdminUsersPage from './pages/AdminUsersPage';
+import SuperAdminDashboardPage from './pages/SuperAdminDashboardPage';
+import SuperAdminTenantsPage from './pages/SuperAdminTenantsPage';
+import SuperAdminTenantDetailPage from './pages/SuperAdminTenantDetailPage';
+import SuperAdminUsersPage from './pages/SuperAdminUsersPage';
 import EvaluationPage from './pages/EvaluationPage';
 import CostAnalyticsPage from './pages/CostAnalyticsPage';
 import TenantDatabasePage from './pages/TenantDatabasePage';
 
 // Import components
 import Navigation from './components/Navigation';
-import ProtectedRoute, { AdminRoute } from './components/ProtectedRoute';
+import ProtectedRoute, { AdminRoute, SuperAdminRoute } from './components/ProtectedRoute';
 import { ToastProvider } from './components/Toast';
+import apiService from './services/apiService';
+import { mergeProfileIntoUser } from './utils/user';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -68,6 +75,20 @@ function App() {
         
         setIsAuthenticated(true);
         setUser(user);
+
+        // The JWT/local copy doesn't always carry the organization name
+        // the user chose at signup — fetch the full profile once per
+        // session so the nav can show it instead of a raw tenant_id.
+        apiService
+          .getProfile()
+          .then((profile) => {
+            const merged = mergeProfileIntoUser(user, profile);
+            setUser(merged);
+            localStorage.setItem('user', JSON.stringify(merged));
+          })
+          .catch(() => {
+            // Non-fatal: fall back to whatever we already have locally.
+          });
       } catch (e) {
         console.error('Failed to parse user data:', e);
         localStorage.removeItem('token');
@@ -99,18 +120,32 @@ function App() {
           {isAuthenticated && <Navigation user={user} onLogout={handleLogout} />}
         
         <Routes>
-          {/* Public Routes */}
-          <Route 
-            path="/login" 
-            element={<LoginPage setIsAuthenticated={setIsAuthenticated} setUser={setUser} />} 
+          {/* Public Routes — redirect away if already signed in, so a
+              logged-in user hitting these URLs (back button, stale
+              bookmark) doesn't see the nav bar and an auth form at once. */}
+          <Route
+            path="/login"
+            element={
+              isAuthenticated ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <LoginPage setIsAuthenticated={setIsAuthenticated} setUser={setUser} />
+              )
+            }
           />
-          <Route 
-            path="/register" 
-            element={<RegisterPage />} 
+          <Route
+            path="/register"
+            element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
           />
-          <Route 
-            path="/tenant/register" 
-            element={<TenantRegistrationPage setIsAuthenticated={setIsAuthenticated} setUser={setUser} />} 
+          <Route
+            path="/tenant/register"
+            element={
+              isAuthenticated ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <TenantRegistrationPage setIsAuthenticated={setIsAuthenticated} setUser={setUser} />
+              )
+            }
           />
 
           {/* Protected Routes */}
@@ -178,7 +213,56 @@ function App() {
               </AdminRoute>
             }
           />
-          <Route path="/admin/database" element={<AdminRoute isAuthenticated={isAuthenticated} user={user}><TenantDatabasePage /></AdminRoute>} />
+          <Route
+            path="/admin/users"
+            element={
+              <AdminRoute isAuthenticated={isAuthenticated} user={user}>
+                <AdminUsersPage user={user} />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/database"
+            element={
+              <AdminRoute isAuthenticated={isAuthenticated} user={user}>
+                <TenantDatabasePage />
+              </AdminRoute>
+            }
+          />
+
+          {/* Super Admin Routes */}
+          <Route
+            path="/super-admin"
+            element={
+              <SuperAdminRoute isAuthenticated={isAuthenticated} user={user}>
+                <SuperAdminDashboardPage user={user} />
+              </SuperAdminRoute>
+            }
+          />
+          <Route
+            path="/super-admin/tenants"
+            element={
+              <SuperAdminRoute isAuthenticated={isAuthenticated} user={user}>
+                <SuperAdminTenantsPage user={user} />
+              </SuperAdminRoute>
+            }
+          />
+          <Route
+            path="/super-admin/tenants/:id"
+            element={
+              <SuperAdminRoute isAuthenticated={isAuthenticated} user={user}>
+                <SuperAdminTenantDetailPage user={user} />
+              </SuperAdminRoute>
+            }
+          />
+          <Route
+            path="/super-admin/users"
+            element={
+              <SuperAdminRoute isAuthenticated={isAuthenticated} user={user}>
+                <SuperAdminUsersPage user={user} />
+              </SuperAdminRoute>
+            }
+          />
 
           {/* Catch all */}
           <Route path="*" element={<Navigate to="/" />} />

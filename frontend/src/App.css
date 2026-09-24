@@ -53,7 +53,7 @@
 .error-message {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #FCA5A5;
+  color: var(--text-error);
   padding: var(--space-lg);
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-lg);
@@ -63,7 +63,7 @@
 .success-message {
   background: rgba(16, 185, 129, 0.1);
   border: 1px solid rgba(16, 185, 129, 0.3);
-  color: #86EFAC;
+  color: var(--text-success);
   padding: var(--space-lg);
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-lg);

@@ -1,10 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
+import { getOrganizationName } from '../utils/user';
 import './Navigation.css';
 
 function Navigation({ user, onLogout }) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('token');
@@ -23,6 +26,8 @@ function Navigation({ user, onLogout }) {
     user?.email?.split('@')[0] ||
     user?.email ||
     'User';
+
+  const orgName = getOrganizationName(user);
 
   return (
     <nav className="navigation" aria-label="Main navigation">
@@ -59,16 +64,54 @@ function Navigation({ user, onLogout }) {
         {user?.role === 'admin' && (
           <>
             <span className="nav-divider" aria-hidden="true" />
-            <NavLink to="/admin"          className={({ isActive }) => `nav-link nav-link-admin${isActive ? ' nav-link-active' : ''}`} onClick={closeMenu} role="listitem">Admin</NavLink>
+            <NavLink to="/admin" end className={({ isActive }) => `nav-link nav-link-admin${isActive ? ' nav-link-active' : ''}`} onClick={closeMenu} role="listitem">Admin</NavLink>
+            <NavLink to="/admin/users" className={({ isActive }) => `nav-link nav-link-admin${isActive ? ' nav-link-active' : ''}`} onClick={closeMenu} role="listitem">Users</NavLink>
             <NavLink to="/admin/database" className={({ isActive }) => `nav-link nav-link-admin${isActive ? ' nav-link-active' : ''}`} onClick={closeMenu} role="listitem">Tenant DB</NavLink>
+          </>
+        )}
+        {user?.role === 'super_admin' && (
+          <>
+            <span className="nav-divider" aria-hidden="true" />
+            <NavLink to="/super-admin" end className={({ isActive }) => `nav-link nav-link-super-admin${isActive ? ' nav-link-active' : ''}`} onClick={closeMenu} role="listitem">Super Admin</NavLink>
+            <NavLink to="/super-admin/tenants" className={({ isActive }) => `nav-link nav-link-super-admin${isActive ? ' nav-link-active' : ''}`} onClick={closeMenu} role="listitem">Tenants</NavLink>
+            <NavLink to="/super-admin/users" className={({ isActive }) => `nav-link nav-link-super-admin${isActive ? ' nav-link-active' : ''}`} onClick={closeMenu} role="listitem">Users</NavLink>
           </>
         )}
       </div>
 
       <div className="nav-right">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="theme-toggle"
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? (
+            /* Sun icon — shown so the user knows clicking switches to light mode */
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            </svg>
+          ) : (
+            /* Moon icon — shown so the user knows clicking switches to dark mode */
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          )}
+        </button>
         <div className="user-info" aria-label={`Signed in as ${displayName}`}>
           <span className="user-name">{displayName}</span>
-          <span className="user-role">{user?.role}</span>
+          <span className="user-role">
+            {user?.role === 'super_admin' ? (
+              <span className="badge-super-admin-nav">Super Admin</span>
+            ) : (
+              <>
+                {user?.role}
+                {orgName && <span className="user-org"> · {orgName}</span>}
+              </>
+            )}
+          </span>
         </div>
         <button onClick={handleLogout} className="btn-logout">
           Logout

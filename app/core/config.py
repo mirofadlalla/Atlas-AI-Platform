@@ -153,8 +153,28 @@ class Settings(BaseSettings):
 
     @property
     def allow_origins_list(self) -> list[str]:
-        return [o.strip() for o in self.allow_origins.split(",") if o.strip()]
+        """Return CORS origins as a normalised ``list[str]``.
+
+        ``allow_origins`` can arrive as either type depending on how the
+        environment variable is supplied:
+
+        * **pydantic-settings v2** tries JSON parsing first.  A JSON array
+          ``["https://a.com","https://b.com"]`` or a bare comma-separated
+          string that pydantic-settings parses into a list both result in
+          ``self.allow_origins`` already being a ``list[str]``.
+
+        * A plain comma-separated **string** (e.g. set via ``os.environ``
+          before the settings object is constructed, or via an older
+          pydantic-settings code path) results in ``self.allow_origins``
+          being a ``str``.
+
+        This property normalises both cases so callers always receive
+        ``list[str]`` with whitespace stripped and empty entries removed.
+        """
+        if isinstance(self.allow_origins, list):
+            return [o.strip() for o in self.allow_origins if o.strip()]
+        # Fallback: treat as a comma-separated string
+        return [o.strip() for o in str(self.allow_origins).split(",") if o.strip()]
 
 
 settings = Settings()
-settings.allow_origins = settings.allow_origins_list

@@ -54,7 +54,17 @@ function QueryPage({ user }) {
       const streamResponse = await apiService.askQuestion(query, sessionIdRef.current);
       
       if (!streamResponse.ok) {
-        throw new Error(`Error: ${streamResponse.status}`);
+        let errMsg = `Error: ${streamResponse.status}`;
+        try {
+          const text = await streamResponse.text();
+          try {
+            const json = JSON.parse(text);
+            errMsg = json.detail || json.message || errMsg;
+          } catch {
+            errMsg = text || errMsg;
+          }
+        } catch (_) {}
+        throw new Error(errMsg);
       }
 
       // Read the stream
@@ -67,19 +77,27 @@ function QueryPage({ user }) {
         const lines = eventBlock.split('\n');
         const eventName = lines.find((line) => line.startsWith('event:'))?.slice(6).trim();
         const dataLine = lines.find((line) => line.startsWith('data:'))?.slice(5).trim();
-        if (!eventName || !dataLine) return;
+        if (!dataLine) return;
 
-        const payload = JSON.parse(dataLine);
-        if (eventName === 'answer') {
-          fullAnswer += payload.content || '';
+        let payload;
+        try {
+          payload = JSON.parse(dataLine);
+        } catch {
+          payload = { content: dataLine };
+        }
+
+        const type = eventName || payload.type || (payload.content !== undefined ? 'answer' : payload.documents ? 'documents' : 'unknown');
+
+        if (type === 'answer') {
+          fullAnswer += (typeof payload.content === 'string' ? payload.content : (payload.text || ''));
           setAnswer(fullAnswer);
           if (answerBoxRef.current) {
             answerBoxRef.current.scrollTop = answerBoxRef.current.scrollHeight;
           }
-        } else if (eventName === 'documents') {
+        } else if (type === 'documents') {
           setRetrievedDocs(payload.documents || []);
-        } else if (eventName === 'error') {
-          throw new Error(payload.message || 'Failed to get answer');
+        } else if (type === 'error') {
+          throw new Error(payload.message || payload.error || 'Failed to get answer');
         }
       };
 
@@ -157,7 +175,7 @@ function QueryPage({ user }) {
                   disabled={loading || !query.trim()}
                   className="btn-primary"
                 >
-                  {loading ? 'Searching…' : '🚀 Ask Question'}
+                  {loading ? 'Searching…' : 'Ask Question'}
                 </button>
                 <button
                   type="button"
@@ -166,7 +184,7 @@ function QueryPage({ user }) {
                   disabled={loading}
                   aria-label="Clear query and results"
                 >
-                  ✕ Clear
+                  Clear
                 </button>
               </div>
             </div>

@@ -435,11 +435,9 @@
 }
 
 .recommended-label {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: var(--fw-600);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: var(--text-secondary);
   margin: 0 0 10px 0;
 }
 

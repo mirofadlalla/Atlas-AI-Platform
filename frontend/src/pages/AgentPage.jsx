@@ -49,6 +49,10 @@ const AgentPage = () => {
   };
 
   useEffect(() => {
+    // Skip the very first run: on mount there's nothing to show yet, and
+    // scrolling to an empty output area pulls the whole page (nav included)
+    // out of view before the user has asked anything.
+    if (!currentThought && !finalAnswer && !toolStatus) return;
     scrollToBottom();
   }, [currentThought, finalAnswer, toolStatus]);
 
@@ -73,14 +77,8 @@ const AgentPage = () => {
     setLoading(true);
 
     try {
-      const user = JSON.parse(localStorage.getItem('user'));
-      const tenantId = parseInt(user?.tenant_id, 10);
-
-      if (!tenantId || isNaN(tenantId)) {
-        setError('Tenant ID not found or invalid. Please log in again.');
-        setLoading(false);
-        return;
-      }
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const tenantId = user?.tenant_id;
 
       const response = await apiService.askAgent(question, tenantId, sessionIdRef.current);
 
@@ -207,14 +205,8 @@ const AgentPage = () => {
     setLoading(true);
 
     try {
-      const user = JSON.parse(localStorage.getItem('user'));
-      const tenantId = parseInt(user?.tenant_id, 10);
-
-      if (!tenantId || isNaN(tenantId)) {
-        setError('Tenant ID not found or invalid. Please log in again.');
-        setLoading(false);
-        return;
-      }
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const tenantId = user?.tenant_id;
 
       const response = await apiService.askAgentBatch(question, tenantId, sessionIdRef.current);
 
@@ -231,6 +223,17 @@ const AgentPage = () => {
       console.error('Batch error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleClearMemory = async () => {
+    try {
+      await apiService.clearMemory();
+      sessionIdRef.current = crypto.randomUUID();
+      sessionStorage.setItem('atlas-agent-session-id', sessionIdRef.current);
+      resetState();
+    } catch (err) {
+      setError(`Failed to clear memory: ${err.message}`);
     }
   };
 
@@ -302,13 +305,25 @@ const AgentPage = () => {
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading || !question.trim()}
-            className="submit-button"
-          >
-            {loading ? 'Processing…' : isBatchMode ? 'Get Answer' : 'Start Streaming'}
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              type="submit"
+              disabled={loading || !question.trim()}
+              className="submit-button"
+            >
+              {loading ? 'Processing…' : isBatchMode ? 'Get Answer' : 'Start Streaming'}
+            </button>
+            <button
+              type="button"
+              onClick={handleClearMemory}
+              disabled={loading}
+              className="submit-button"
+              style={{ background: 'var(--surface-color, #374151)' }}
+              title="Clear conversation memory for your user account"
+            >
+              🧹 Clear Memory
+            </button>
+          </div>
         </form>
 
         {error && (

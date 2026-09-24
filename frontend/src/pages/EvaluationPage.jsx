@@ -199,12 +199,12 @@ function EvaluationPage({ user }) {
         <div className="evaluation-metrics">
           <h3>📈 Metrics Evaluated</h3>
           <ul>
-            <li>✅ Precision@K - Fraction of retrieved documents that are relevant</li>
-            <li>✅ Recall@K - Fraction of relevant documents that were retrieved</li>
-            <li>✅ F1 Score - Harmonic mean of precision and recall</li>
-            <li>✅ MRR - How early the first relevant result appears</li>
-            <li>✅ Jaccard Stability - Consistency across repeated queries</li>
-            <li>✅ Token F1 - Keyword overlap with ground truth answers</li>
+            <li>Precision@K - Fraction of retrieved documents that are relevant</li>
+            <li>Recall@K - Fraction of relevant documents that were retrieved</li>
+            <li>F1 Score - Harmonic mean of precision and recall</li>
+            <li>MRR - How early the first relevant result appears</li>
+            <li>Jaccard Stability - Consistency across repeated queries</li>
+            <li>Token F1 - Keyword overlap with ground truth answers</li>
           </ul>
         </div>
       </div>

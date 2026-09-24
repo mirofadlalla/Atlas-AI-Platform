@@ -41,11 +41,13 @@
 .register-header h1 {
   font-size: var(--text-3xl);
   font-weight: var(--fw-700);
+  color: var(--text-on-accent);
   margin: 0 0 6px 0;
 }
 
 .register-header p {
   font-size: var(--text-base);
+  color: var(--text-on-accent);
   opacity: 0.9;
   margin: 0;
 }

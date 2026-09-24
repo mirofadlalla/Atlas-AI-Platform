@@ -101,7 +101,7 @@
   background-color: rgba(34, 197, 94, 0.1);
   border: 1px solid rgba(34, 197, 94, 0.3);
   border-radius: var(--radius-md);
-  color: #22c55e;
+  color: var(--status-success);
   font-size: 0.95em;
   font-weight: 500;
 }
@@ -111,15 +111,25 @@
   min-height: 80px;
 }
 
-.checkbox-group input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
+.form-group.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.checkbox-group label {
+.form-group.checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
+.form-group.checkbox label {
+  display: inline;
   margin: 0;
   font-weight: 500;
+  font-size: var(--text-base);
   cursor: pointer;
 }
 
@@ -141,7 +151,7 @@
   transform: translateY(-2px);
   box-shadow: var(--shadow-glow);
   border-color: var(--accent-light);
-  background: linear-gradient(135deg, #A855F7 0%, #C084FC 100%);
+  background: linear-gradient(135deg, #A855F7 0%, var(--accent-light) 100%);
 }
 
 .btn-submit:active:not(:disabled) {
@@ -167,7 +177,7 @@
 
 .success-message {
   background-color: rgba(16, 185, 129, 0.1);
-  color: #86EFAC;
+  color: var(--text-success);
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
@@ -178,7 +188,7 @@
 
 .error-message {
   background-color: rgba(239, 68, 68, 0.1);
-  color: #FCA5A5;
+  color: var(--text-error);
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
@@ -237,7 +247,7 @@
 
 .info-box p {
   margin: 0;
-  color: #FBBF24;
+  color: var(--text-warning);
   font-size: 0.95em;
 }
 
@@ -247,7 +257,7 @@
   padding: 15px 20px;
   border-radius: var(--radius-lg);
   margin-top: 20px;
-  color: #93C5FD;
+  color: var(--text-info);
 }
 
 @media (max-width: 768px) {

@@ -1,0 +1,114 @@
+/* SuperAdminTenantDetailPage.css */
+
+.tenant-profile-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+}
+
+.tenant-profile-main {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex: 1;
+  min-width: 280px;
+}
+
+.tenant-avatar {
+  width: 64px;
+  height: 64px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+
+.tenant-profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tenant-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tenant-title-row h2 {
+  font-size: var(--text-2xl);
+  font-weight: var(--fw-700);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.tenant-id-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tenant-id-label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-weight: var(--fw-500);
+}
+
+.tenant-id-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--accent-light);
+  background: var(--bg-elevated);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.tenant-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.tenant-profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .tenant-profile-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tenant-profile-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .tenant-profile-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .tenant-profile-actions button {
+    flex: 1;
+  }
+}

@@ -2,7 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import apiService from '../services/apiService';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
+import UserManagementTable from '../components/UserManagementTable';
 import './AdminPanel.css';
+
+function formatDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString();
+}
 
 function AdminPanel({ user }) {
   const toast = useToast();
@@ -10,6 +17,7 @@ function AdminPanel({ user }) {
   const [invitations, setInvitations] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
   const [recommendedQA, setRecommendedQA] = useState([]);
+  const [tenantUsers, setTenantUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [email, setEmail] = useState('');
@@ -43,14 +51,16 @@ function AdminPanel({ user }) {
     setLoading(true);
     setError('');
     try {
-      const [invData, appData, recData] = await Promise.all([
+      const [invData, appData, recData, usersData] = await Promise.all([
         apiService.getPendingInvitations().catch(() => ({ invitations: [] })),
         apiService.getPendingApprovals().catch(() => ({ pending_users: [] })),
         apiService.getRecommendedQuestions().catch(() => ({ recommended_qa: [] })),
+        apiService.getAdminUsers().catch(() => []),
       ]);
       setInvitations(invData.invitations || []);
       setPendingUsers(appData.pending_users || []);
       setRecommendedQA(recData.recommended_qa || []);
+      setTenantUsers(Array.isArray(usersData) ? usersData : []);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -185,6 +195,52 @@ function AdminPanel({ user }) {
     }
   };
 
+  const handleUserRoleChange = async (targetUser, newRole) => {
+    if (newRole === 'super_admin' || targetUser.role === 'super_admin') {
+      toast.error('Admins cannot assign or modify the super_admin role.');
+      return;
+    }
+    try {
+      await apiService.updateAdminUserRole(targetUser.id, newRole);
+      toast.success(`Role for ${targetUser.name || targetUser.email} updated to ${newRole}!`);
+      loadData();
+    } catch (err) {
+      toast.error('Error updating user role: ' + getErrorMessage(err));
+    }
+  };
+
+  const handleUserStatusChange = async (targetUser, newStatus) => {
+    if (targetUser.role === 'super_admin') {
+      toast.error('Admins cannot modify the approval status of a super admin.');
+      return;
+    }
+    try {
+      await apiService.updateAdminUserStatus(targetUser.id, newStatus);
+      toast.success(`Status for ${targetUser.name || targetUser.email} updated to ${newStatus}!`);
+      loadData();
+    } catch (err) {
+      toast.error('Error updating user status: ' + getErrorMessage(err));
+    }
+  };
+
+  const handleUserDelete = async (targetUser) => {
+    if (targetUser.id === user?.id || targetUser.id === user?.user_id) {
+      toast.error('You cannot delete your own account.');
+      return;
+    }
+    if (targetUser.role === 'super_admin') {
+      toast.error('Admins cannot delete a super admin.');
+      return;
+    }
+    try {
+      await apiService.deleteAdminUser(targetUser.id);
+      toast.success(`User ${targetUser.name || targetUser.email} deleted successfully.`);
+      loadData();
+    } catch (err) {
+      toast.error('Error deleting user: ' + getErrorMessage(err));
+    }
+  };
+
   // ── early return for non-admins ───────────────────────────────────────────────
   if (user?.role !== 'admin') {
     return (
@@ -268,6 +324,16 @@ function AdminPanel({ user }) {
           >
             Recommended Q&amp;A ({recommendedQA.length}/10)
           </button>
+          <button
+            role="tab"
+            id="tab-users"
+            aria-selected={activeTab === 'users'}
+            aria-controls="panel-users"
+            className={`tab-button ${activeTab === 'users' ? 'active' : ''}`}
+            onClick={() => setActiveTab('users')}
+          >
+            Manage Users ({tenantUsers.length})
+          </button>
         </div>
 
         {/* ===== INVITATIONS TAB ===== */}
@@ -307,8 +373,8 @@ function AdminPanel({ user }) {
                           <h4>{inv.invited_email}</h4>
                           <span className={`status-badge status-${inv.status}`}>{inv.status}</span>
                         </div>
-                        <p>Sent: {new Date(inv.created_at).toLocaleDateString()}</p>
-                        <p>Expires: {new Date(inv.expires_at).toLocaleDateString()}</p>
+                        <p>Sent: {formatDate(inv.created_at)}</p>
+                        <p>Expires: {formatDate(inv.expires_at)}</p>
                         {inv.token && (
                           <p>
                             Token: <span className="token-value">{inv.token}</span>{' '}
@@ -357,7 +423,7 @@ function AdminPanel({ user }) {
                           <h4>{pendingUser.name}</h4>
                         </div>
                         <p className="email">{pendingUser.email}</p>
-                        <p>Registered: {new Date(pendingUser.created_at).toLocaleDateString()}</p>
+                        <p>Registered: {formatDate(pendingUser.created_at)}</p>
                       </div>
                       <div className="item-actions">
                         <button
@@ -455,6 +521,28 @@ function AdminPanel({ user }) {
                 <div className="empty-state">No recommended questions added for this tenant yet</div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ===== MANAGE USERS TAB ===== */}
+        {activeTab === 'users' && (
+          <div className="tab-content" role="tabpanel" id="panel-users" aria-labelledby="tab-users">
+            <div className="tab-content-header" style={{ marginBottom: '20px' }}>
+              <h3 style={{ margin: 0 }}>Organization Users ({tenantUsers.length})</h3>
+              <p style={{ margin: '6px 0 0 0', color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
+                Manage roles and approval statuses for users within your organization.
+              </p>
+            </div>
+            <UserManagementTable
+              users={tenantUsers}
+              currentUser={user}
+              isSuperAdmin={false}
+              showTenantColumn={false}
+              loading={loading}
+              onRoleChange={handleUserRoleChange}
+              onStatusChange={handleUserStatusChange}
+              onDelete={handleUserDelete}
+            />
           </div>
         )}
       </div>

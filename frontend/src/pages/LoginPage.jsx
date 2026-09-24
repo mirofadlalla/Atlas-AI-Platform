@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import apiService from '../services/apiService';
+import { mergeProfileIntoUser } from '../utils/user';
 import './LoginPage.css';
 
 function LoginPage({ setIsAuthenticated, setUser }) {
@@ -63,8 +64,22 @@ function LoginPage({ setIsAuthenticated, setUser }) {
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
         setIsAuthenticated(true);
-        
+
         navigate('/');
+
+        // Fetch the full profile in the background so the organization
+        // name the user picked at signup shows up in the nav, rather
+        // than only the raw tenant_id the JWT carries.
+        apiService
+          .getProfile()
+          .then((profile) => {
+            const merged = mergeProfileIntoUser(userData, profile);
+            setUser(merged);
+            localStorage.setItem('user', JSON.stringify(merged));
+          })
+          .catch(() => {
+            // Non-fatal: the user is still signed in with what we have.
+          });
       }
     } catch (err) {
       setError(err.message || 'Login failed');
@@ -77,7 +92,7 @@ function LoginPage({ setIsAuthenticated, setUser }) {
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
-          <h1>🌍 Atlas AI</h1>
+          <h1>Atlas AI</h1>
           <p>RAG Platform Login</p>
         </div>
 
