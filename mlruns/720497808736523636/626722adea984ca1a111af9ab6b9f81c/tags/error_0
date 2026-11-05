@@ -1,3 +1,0 @@
-Unexpected Response: 400 (Bad Request)
-Raw response content:
-b'{"status":{"error":"Wrong input: Vector dimension error: expected dim: 1024, got 384"},"time":0.004287592}'

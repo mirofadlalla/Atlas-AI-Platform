@@ -50,3 +50,9 @@ Thumbs.db
 tmp/
 .system_generated/
 scratch/
+
+
+.pnpm-store/
+__pycache__/
+*.pyc
+mlruns/
