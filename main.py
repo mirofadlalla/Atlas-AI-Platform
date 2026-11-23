@@ -91,6 +91,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # Fix 7: was bare except:pass
         logger.error(f"Failed to load recommended Q&A cache: {e}", exc_info=True)
 
+    # Initialize LangGraph checkpoint store
+    try:
+        from app.agent.core.checkpoint import setup_checkpointer
+        await setup_checkpointer()
+        logger.info("LangGraph checkpoint store initialized.")
+    except Exception as e:
+        logger.warning(f"Checkpoint store initialization warning: {e}")
+
     # Start background Prometheus resource-metrics task
     async def _record_metrics_periodically():
         from app.core.monitors import record_resource_metrics

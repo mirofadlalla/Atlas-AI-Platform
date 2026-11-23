@@ -1,12 +1,12 @@
 """Shared question-type classification — single source of truth.
 
 Previously this module maintained its own keyword lists that could contradict
-the production router's ``calculate_deterministic_route()`` patterns, leading
+the production router's calculate_deterministic_route() patterns, leading
 to thought-node tool-selection hints that disagreed with the routing decision
 already made upstream.
 
-Now ``classify_question_type`` delegates to the same deterministic route
-calculator used by the router, mapping its output to ``"data"`` / ``"knowledge"``.
+Now classify_question_type delegates to the same deterministic route
+calculator used by the router, mapping its output to "data" / "knowledge".
 The legacy keyword lists are kept only as a tiebreaker for ambiguous routes
 (COMPLEX / DIRECT_QA / GREETING) where the router does not emit a clear
 SQL-vs-retrieval signal.
@@ -347,7 +347,7 @@ _RETRIEVAL_ROUTES = {"OBVIOUS_RETRIEVAL", "SIMPLE_RETRIEVAL"}
 
 def classify_question_type(question: str) -> str:
     """
-    Return ``"data"`` (SQL) or ``"knowledge"`` (retrieval) for *question*.
+    Return "data" (SQL) or "knowledge" (retrieval) for *question*.
 
     Delegates to the production router's deterministic classifier so the
     thought-node's tool-selection hint is always consistent with the routing

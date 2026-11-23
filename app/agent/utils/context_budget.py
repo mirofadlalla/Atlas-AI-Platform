@@ -1,11 +1,11 @@
 """Prompt context size limits with language-aware token estimation.
 
-The old ``len(text) // 4`` heuristic assumed English throughout (≈ 4 chars/token).
+The old len(text) // 4 heuristic assumed English throughout (≈ 4 chars/token).
 Arabic and other non-Latin scripts tokenize at ≈ 1–2 tokens/character in BPE
 vocabularies, making the old estimate off by 2–3× for bilingual prompts.
 
 Strategy (in priority order):
-1. Use ``tiktoken`` for exact counts when it is installed.
+1. Use tiktoken for exact counts when it is installed.
 2. Fall back to a character-class heuristic that applies separate rates for
    ASCII (≈ 4 chars/token) and non-ASCII (≈ 1 char/token) characters.
 """

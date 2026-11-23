@@ -21,6 +21,13 @@ class RetrievalTool(AgentTool):
     attempted_key = "retrieval_attempted"
     has_data_key = "retrieval_has_results"
 
+    def _fingerprint(self, state: AgentState) -> dict:
+        from app.agent.utils.state_helpers import get_current_question
+
+        question = get_current_question(state)
+        tenant_id = state.get("tenant_id", "")
+        return {"question": question, "tenant_id": tenant_id}
+
     def run(self, state: AgentState) -> ToolResult:
         question = get_current_question(state)
         tenant_id = state["tenant_id"]

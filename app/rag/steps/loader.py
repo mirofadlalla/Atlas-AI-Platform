@@ -39,23 +39,23 @@ class DocumentLoader:
         """
         Load a file and attach rich metadata to every page/chunk.
 
-        Automatically injects the following fields into ``doc.metadata`` so
+        Automatically injects the following fields into doc.metadata so
         they are available as Qdrant payload for indexed filtering:
 
-        - ``file_type``   — normalised type label (``"pdf"``, ``"word"`` …)
-        - ``file_name``   — original filename without directory path
-        - ``language``    — language tag; defaults to ``"unknown"`` unless the
-                            caller supplies it in ``custom_metadata``.
+        - file_type   — normalised type label ("pdf", "word" …)
+        - file_name   — original filename without directory path
+        - language    — language tag; defaults to "unknown" unless the
+                            caller supplies it in custom_metadata.
 
-        These fields are also used in ``ensure_payload_indexes()`` in
-        ``QdrantRepository`` to create Qdrant payload indexes so that filter
-        queries (e.g. ``file_type = "pdf"``) use an index rather than a full
+        These fields are also used in ensure_payload_indexes() in
+        QdrantRepository to create Qdrant payload indexes so that filter
+        queries (e.g. file_type = "pdf") use an index rather than a full
         collection scan.
 
         Args:
             file_path:       Path to the file on disk.
-            custom_metadata: Extra metadata dict (e.g. ``tenant_id``,
-                             ``department``, ``language``, ``author``).
+            custom_metadata: Extra metadata dict (e.g. tenant_id,
+                             department, language, author).
                              Values here override auto-detected defaults.
 
         Returns:

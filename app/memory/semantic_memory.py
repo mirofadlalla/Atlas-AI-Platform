@@ -56,7 +56,7 @@ class SemanticMemory:
         fact: str,
         user_id: str | int,
         tenant_id: str | int,
-        memory_type: str = "fact",
+        memory_type: str = "fact", # fact, preference, or tool_hint
         importance: float = 0.5,
         dedup_similarity_threshold: float = 0.88,
     ) -> str | None:

@@ -27,7 +27,7 @@ from app.services.hash_service import password_hash
 class SuperAdminService:
     """Service layer for all super admin operations.
 
-    Super admin users have ``tenant_id = None`` — they exist outside any
+    Super admin users have tenant_id = None — they exist outside any
     tenant and have unrestricted read/write access across the whole platform.
     """
 
@@ -396,13 +396,13 @@ class SuperAdminService:
     ) -> UserSummary:
         """Bootstrap the first super admin account.
 
-        Validates the provided ``secret_key`` against the environment variable
-        ``SUPER_ADMIN_SECRET_KEY`` before creating the account.  The created user
-        has ``tenant_id = None`` and ``approval_status = 'approved'``.
+        Validates the provided secret_key against the environment variable
+        SUPER_ADMIN_SECRET_KEY before creating the account.  The created user
+        has tenant_id = None and approval_status = 'approved'.
 
         Args:
             request: Registration payload including the secret key.
-            secret_key_from_env: The value of ``SUPER_ADMIN_SECRET_KEY`` read
+            secret_key_from_env: The value of SUPER_ADMIN_SECRET_KEY read
                                  from the environment by the caller.
 
         Raises:

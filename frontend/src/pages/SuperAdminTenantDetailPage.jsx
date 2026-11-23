@@ -5,6 +5,8 @@ import Spinner from '../components/Spinner';
 import UserManagementTable from '../components/UserManagementTable';
 import TenantEditModal from '../components/TenantEditModal';
 import TenantDeleteModal from '../components/TenantDeleteModal';
+import TenantApproveModal from '../components/TenantApproveModal';
+import TenantRejectModal from '../components/TenantRejectModal';
 import { useToast } from '../components/Toast';
 import './SuperAdminTenantDetailPage.css';
 
@@ -32,6 +34,8 @@ function SuperAdminTenantDetailPage({ user: currentUser }) {
   // Modals
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
 
   const loadTenant = useCallback(async () => {
     if (!id) return;
@@ -58,6 +62,30 @@ function SuperAdminTenantDetailPage({ user: currentUser }) {
       toast.success('Tenant ID copied to clipboard!');
     } catch {
       toast.warning('Could not copy automatically.');
+    }
+  };
+
+  const handleApproveConfirm = async (tenantId, note) => {
+    try {
+      await apiService.approveSuperAdminTenant(tenantId, note);
+      toast.success('Organization workspace approved and activated successfully!');
+      loadTenant();
+    } catch (err) {
+      const msg = err?.data?.detail || err?.message || 'Failed to approve tenant.';
+      toast.error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      throw err;
+    }
+  };
+
+  const handleRejectConfirm = async (tenantId, reason) => {
+    try {
+      await apiService.rejectSuperAdminTenant(tenantId, reason);
+      toast.success('Organization registration declined.');
+      loadTenant();
+    } catch (err) {
+      const msg = err?.data?.detail || err?.message || 'Failed to reject tenant.';
+      toast.error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      throw err;
     }
   };
 
@@ -123,6 +151,8 @@ function SuperAdminTenantDetailPage({ user: currentUser }) {
 
   const tenant = tenantData?.tenant;
   const users = tenantData?.users || [];
+  const isPending = tenant?.status === 'pending';
+  const isRejected = tenant?.status === 'rejected';
 
   return (
     <main className="super-admin-page">
@@ -174,6 +204,91 @@ function SuperAdminTenantDetailPage({ user: currentUser }) {
         </div>
       ) : tenant ? (
         <>
+          {/* Status Alert Banner if Pending or Rejected */}
+          {isPending && (
+            <div
+              style={{
+                background: 'rgba(245, 158, 11, 0.15)',
+                border: '1px solid rgba(245, 158, 11, 0.5)',
+                borderRadius: 'var(--radius-xl)',
+                padding: '18px 24px',
+                marginBottom: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '14px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <span style={{ fontSize: '1.8rem' }}>⏳</span>
+                <div>
+                  <h3 style={{ margin: '0 0 4px 0', color: 'var(--text-warning, #f59e0b)', fontSize: '1.05rem' }}>
+                    Registration Awaiting Super Admin Approval
+                  </h3>
+                  <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                    This organization is pending review. Member and administrator logins remain blocked until approved.
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn-primary btn-sm"
+                  style={{ background: '#10b981', borderColor: '#10b981', fontWeight: 'bold' }}
+                  onClick={() => setApproveModalOpen(true)}
+                >
+                  ✓ Approve Workspace
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  style={{ borderColor: 'rgba(239, 68, 68, 0.5)', color: '#ef4444' }}
+                  onClick={() => setRejectModalOpen(true)}
+                >
+                  ✕ Decline Registration
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isRejected && (
+            <div
+              style={{
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                borderRadius: 'var(--radius-xl)',
+                padding: '16px 20px',
+                marginBottom: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '1.5rem' }}>❌</span>
+                <div>
+                  <strong style={{ color: 'var(--text-error, #ef4444)', fontSize: '1rem' }}>
+                    Organization Registration Declined
+                  </strong>
+                  <p style={{ margin: '2px 0 0 0', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                    This workspace was rejected by a Super Admin. Logins are currently disabled.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                style={{ borderColor: '#10b981', color: '#10b981' }}
+                onClick={() => setApproveModalOpen(true)}
+              >
+                Re-activate Workspace
+              </button>
+            </div>
+          )}
+
           {/* Tenant Profile Card */}
           <div className="tenant-profile-card">
             <div className="tenant-profile-main">
@@ -183,6 +298,39 @@ function SuperAdminTenantDetailPage({ user: currentUser }) {
               <div className="tenant-profile-info">
                 <div className="tenant-title-row">
                   <h2>{tenant.name}</h2>
+                  <span
+                    className={`status-badge status-${tenant.status || 'active'}`}
+                    style={{
+                      display: 'inline-block',
+                      padding: '4px 10px',
+                      borderRadius: 'var(--radius-full)',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.03em',
+                      background:
+                        tenant.status === 'active'
+                          ? 'rgba(16, 185, 129, 0.15)'
+                          : tenant.status === 'pending'
+                          ? 'rgba(245, 158, 11, 0.15)'
+                          : 'rgba(239, 68, 68, 0.15)',
+                      color:
+                        tenant.status === 'active'
+                          ? '#10b981'
+                          : tenant.status === 'pending'
+                          ? '#f59e0b'
+                          : '#ef4444',
+                      border: `1px solid ${
+                        tenant.status === 'active'
+                          ? 'rgba(16, 185, 129, 0.3)'
+                          : tenant.status === 'pending'
+                          ? 'rgba(245, 158, 11, 0.3)'
+                          : 'rgba(239, 68, 68, 0.3)'
+                      }`,
+                    }}
+                  >
+                    {tenant.status === 'pending' ? 'Pending Review' : tenant.status || 'Active'}
+                  </span>
                   <span className="plan-badge">{tenant.plan || 'Free'}</span>
                 </div>
                 <div className="tenant-id-row">
@@ -206,6 +354,26 @@ function SuperAdminTenantDetailPage({ user: currentUser }) {
             </div>
 
             <div className="tenant-profile-actions">
+              {isPending && (
+                <>
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm"
+                    style={{ background: '#10b981', borderColor: '#10b981', fontWeight: '600' }}
+                    onClick={() => setApproveModalOpen(true)}
+                  >
+                    ✓ Approve
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    style={{ borderColor: 'rgba(239, 68, 68, 0.4)', color: '#ef4444' }}
+                    onClick={() => setRejectModalOpen(true)}
+                  >
+                    ✕ Decline
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 className="btn-secondary btn-sm"
@@ -245,6 +413,22 @@ function SuperAdminTenantDetailPage({ user: currentUser }) {
               onDelete={handleDeleteUser}
             />
           </div>
+
+          {/* Approve Tenant Modal */}
+          <TenantApproveModal
+            isOpen={approveModalOpen}
+            tenant={tenant}
+            onClose={() => setApproveModalOpen(false)}
+            onConfirm={handleApproveConfirm}
+          />
+
+          {/* Reject Tenant Modal */}
+          <TenantRejectModal
+            isOpen={rejectModalOpen}
+            tenant={tenant}
+            onClose={() => setRejectModalOpen(false)}
+            onConfirm={handleRejectConfirm}
+          />
 
           {/* Edit Tenant Modal */}
           <TenantEditModal

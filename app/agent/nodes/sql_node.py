@@ -25,9 +25,9 @@ async def sql_node(state: AgentState) -> dict:
     """
     Execute SQL queries against the database using the SQLTool.
 
-    A hard ``asyncio.wait_for`` timeout wraps the blocking ``tool.run`` call so
+    A hard asyncio.wait_for timeout wraps the blocking tool.run call so
     the event loop is never held indefinitely even when the DB hangs before the
-    ``SET LOCAL statement_timeout`` is applied (e.g. during lock contention or
+    SET LOCAL statement_timeout is applied (e.g. during lock contention or
     connection-pool exhaustion).
     """
     await emit_node_status(
@@ -43,7 +43,7 @@ async def sql_node(state: AgentState) -> dict:
 
         try:
             result = await asyncio.wait_for(
-                asyncio.to_thread(tool.run, s),
+                asyncio.to_thread(tool.safe_run, s),
                 timeout=agent_settings.sql_query_timeout_seconds,
             )
         except asyncio.TimeoutError:

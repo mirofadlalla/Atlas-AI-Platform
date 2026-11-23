@@ -27,7 +27,7 @@ class SemanticChunkingFunction:
         logger.info("Step 1: Creating initial token-based chunks...")
 
         token_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=2000, chunk_overlap=50
+            chunk_size=2000, chunk_overlap=300
         )
         initial_docs = token_splitter.create_documents(
             [text], metadatas=[metadata]

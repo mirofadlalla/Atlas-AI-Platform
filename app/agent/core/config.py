@@ -53,6 +53,19 @@ class AgentSettings(BaseSettings):
     run_idempotency_ttl_seconds: int = 3600
     loop_detection_window: int = 6
 
+    # ── LangGraph Checkpoint settings ─────────────────────────────────────────
+    checkpoint_backend: str = "sqlite"             # "sqlite" or "postgres"
+    checkpoint_db_url: str = ""                    # Empty = use derived DATABASE_URL with psycopg driver
+    checkpoint_sqlite_path: str = "./atlas_checkpoints.db"
+    checkpoint_table_prefix: str = "lg_"           # prefix for langgraph checkpoint tables
+
+    # ── Tool idempotency settings ──────────────────────────────────────────────
+    tool_idempotency_enabled: bool = True
+    tool_idempotency_sql_ttl: int = 3600           # seconds
+    tool_idempotency_retrieval_ttl: int = 86400
+    tool_idempotency_lock_ttl: int = 30
+    tool_idempotency_backend: str = "redis"        # "redis" or "postgres"
+
     @property
     def allowed_tables(self) -> set[str] | None:
         if not self.sql_namespace.strip():

@@ -65,7 +65,11 @@ function LoginPage({ setIsAuthenticated, setUser }) {
         setUser(userData);
         setIsAuthenticated(true);
 
-        navigate('/');
+        if (userData.role === 'super_admin') {
+          navigate('/super-admin');
+        } else {
+          navigate('/');
+        }
 
         // Fetch the full profile in the background so the organization
         // name the user picked at signup shows up in the nav, rather

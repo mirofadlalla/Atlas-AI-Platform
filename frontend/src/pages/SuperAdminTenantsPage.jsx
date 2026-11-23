@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import apiService from '../services/apiService';
 import Spinner from '../components/Spinner';
 import EmptyState from '../components/EmptyState';
 import TenantEditModal from '../components/TenantEditModal';
 import TenantDeleteModal from '../components/TenantDeleteModal';
+import TenantApproveModal from '../components/TenantApproveModal';
+import TenantRejectModal from '../components/TenantRejectModal';
 import { useToast } from '../components/Toast';
 import './SuperAdminTenantsPage.css';
 
@@ -22,15 +24,29 @@ function formatDate(value) {
 
 function SuperAdminTenantsPage() {
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialStatus = searchParams.get('status') || 'all';
+
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [planFilter, setPlanFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
+
+  // Sync state if URL search params change
+  useEffect(() => {
+    const s = searchParams.get('status');
+    if (s && s !== statusFilter) {
+      setStatusFilter(s);
+    }
+  }, [searchParams, statusFilter]);
 
   // Modals
   const [editModal, setEditModal] = useState({ isOpen: false, tenant: null });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, tenant: null });
+  const [approveModal, setApproveModal] = useState({ isOpen: false, tenant: null });
+  const [rejectModal, setRejectModal] = useState({ isOpen: false, tenant: null });
 
   const loadTenants = useCallback(async () => {
     setLoading(true);
@@ -49,6 +65,30 @@ function SuperAdminTenantsPage() {
   useEffect(() => {
     loadTenants();
   }, [loadTenants]);
+
+  const handleApproveConfirm = async (tenantId, note) => {
+    try {
+      await apiService.approveSuperAdminTenant(tenantId, note);
+      toast.success('Organization workspace approved and activated successfully!');
+      loadTenants();
+    } catch (err) {
+      const msg = err?.data?.detail || err?.message || 'Failed to approve tenant.';
+      toast.error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      throw err;
+    }
+  };
+
+  const handleRejectConfirm = async (tenantId, reason) => {
+    try {
+      await apiService.rejectSuperAdminTenant(tenantId, reason);
+      toast.success('Organization registration declined.');
+      loadTenants();
+    } catch (err) {
+      const msg = err?.data?.detail || err?.message || 'Failed to reject tenant.';
+      toast.error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      throw err;
+    }
+  };
 
   const handleEditSave = async (tenantId, payload) => {
     try {
@@ -83,6 +123,20 @@ function SuperAdminTenantsPage() {
     return Array.from(set);
   }, [tenants]);
 
+  // Counts by status
+  const counts = useMemo(() => {
+    let pending = 0;
+    let active = 0;
+    let rejected = 0;
+    tenants.forEach((t) => {
+      const s = t.status || 'active';
+      if (s === 'pending') pending++;
+      else if (s === 'rejected') rejected++;
+      else active++;
+    });
+    return { all: tenants.length, pending, active, rejected };
+  }, [tenants]);
+
   // Filtered tenants
   const filteredTenants = useMemo(() => {
     return tenants.filter((t) => {
@@ -93,9 +147,22 @@ function SuperAdminTenantsPage() {
 
       const matchesPlan = planFilter === 'all' || t.plan === planFilter;
 
-      return matchesSearch && matchesPlan;
+      const tenantStatus = t.status || 'active';
+      const matchesStatus = statusFilter === 'all' || tenantStatus === statusFilter;
+
+      return matchesSearch && matchesPlan && matchesStatus;
     });
-  }, [tenants, searchTerm, planFilter]);
+  }, [tenants, searchTerm, planFilter, statusFilter]);
+
+  const handleStatusFilterChange = (newStatus) => {
+    setStatusFilter(newStatus);
+    if (newStatus === 'all') {
+      searchParams.delete('status');
+      setSearchParams(searchParams);
+    } else {
+      setSearchParams({ status: newStatus });
+    }
+  };
 
   return (
     <main className="super-admin-page">
@@ -136,6 +203,45 @@ function SuperAdminTenantsPage() {
         </div>
       )}
 
+      {/* Status Filter Tabs */}
+      <div className="status-tabs-container" style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className={`btn-sm ${statusFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => handleStatusFilterChange('all')}
+        >
+          All Organizations ({counts.all})
+        </button>
+        <button
+          type="button"
+          className={`btn-sm ${statusFilter === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
+          style={
+            statusFilter === 'pending'
+              ? { background: '#f59e0b', borderColor: '#f59e0b', color: '#000', fontWeight: 'bold' }
+              : counts.pending > 0
+              ? { borderColor: 'rgba(245, 158, 11, 0.6)', color: '#f59e0b' }
+              : {}
+          }
+          onClick={() => handleStatusFilterChange('pending')}
+        >
+          ⏳ Pending Review ({counts.pending})
+        </button>
+        <button
+          type="button"
+          className={`btn-sm ${statusFilter === 'active' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => handleStatusFilterChange('active')}
+        >
+          Active ({counts.active})
+        </button>
+        <button
+          type="button"
+          className={`btn-sm ${statusFilter === 'rejected' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => handleStatusFilterChange('rejected')}
+        >
+          Rejected ({counts.rejected})
+        </button>
+      </div>
+
       {/* Toolbar */}
       <div className="table-toolbar">
         <div className="search-box">
@@ -160,6 +266,18 @@ function SuperAdminTenantsPage() {
         </div>
 
         <div className="filter-group">
+          <select
+            className="filter-select"
+            value={statusFilter}
+            onChange={(e) => handleStatusFilterChange(e.target.value)}
+            aria-label="Filter by approval status"
+          >
+            <option value="all">All Statuses ({counts.all})</option>
+            <option value="pending">Pending Review ({counts.pending})</option>
+            <option value="active">Active ({counts.active})</option>
+            <option value="rejected">Rejected ({counts.rejected})</option>
+          </select>
+
           <select
             className="filter-select"
             value={planFilter}
@@ -189,16 +307,17 @@ function SuperAdminTenantsPage() {
           description={
             tenants.length === 0
               ? 'No tenants have registered on this platform yet.'
-              : 'Try clearing your search or plan filter.'
+              : 'Try clearing your search or filters.'
           }
           action={
-            (searchTerm || planFilter !== 'all') && (
+            (searchTerm || planFilter !== 'all' || statusFilter !== 'all') && (
               <button
                 type="button"
                 className="btn-secondary btn-sm"
                 onClick={() => {
                   setSearchTerm('');
                   setPlanFilter('all');
+                  handleStatusFilterChange('all');
                 }}
               >
                 Reset Filters
@@ -212,6 +331,7 @@ function SuperAdminTenantsPage() {
             <thead>
               <tr>
                 <th scope="col">Organization / Tenant</th>
+                <th scope="col">Status</th>
                 <th scope="col">Plan</th>
                 <th scope="col">User Count</th>
                 <th scope="col">Created Date</th>
@@ -219,59 +339,139 @@ function SuperAdminTenantsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredTenants.map((tenant) => (
-                <tr key={tenant.id}>
-                  <td className="tenant-name-col">
-                    <Link
-                      to={`/super-admin/tenants/${tenant.id}`}
-                      className="tenant-link"
-                    >
-                      <strong>{tenant.name}</strong>
-                    </Link>
-                    <div className="tenant-id-text">{tenant.id}</div>
-                  </td>
-                  <td>
-                    <span className="plan-badge">{tenant.plan || 'Free'}</span>
-                  </td>
-                  <td>
-                    <span className="user-count-chip">
-                      {tenant.user_count ?? 0} {tenant.user_count === 1 ? 'user' : 'users'}
-                    </span>
-                  </td>
-                  <td className="tenant-date-col">{formatDate(tenant.created_at)}</td>
-                  <td className="text-right">
-                    <div className="table-action-btns">
+              {filteredTenants.map((tenant) => {
+                const isPending = tenant.status === 'pending';
+                return (
+                  <tr key={tenant.id} style={isPending ? { background: 'rgba(245, 158, 11, 0.05)' } : {}}>
+                    <td className="tenant-name-col">
                       <Link
                         to={`/super-admin/tenants/${tenant.id}`}
-                        className="btn-action btn-action-view"
-                        title="View tenant details & users"
+                        className="tenant-link"
                       >
-                        View
+                        <strong>{tenant.name}</strong>
                       </Link>
-                      <button
-                        type="button"
-                        className="btn-action"
-                        onClick={() => setEditModal({ isOpen: true, tenant })}
-                        title="Edit tenant name/plan"
+                      <div className="tenant-id-text">{tenant.id}</div>
+                    </td>
+                    <td>
+                      <span
+                        className={`status-badge status-${tenant.status || 'active'}`}
+                        style={{
+                          display: 'inline-block',
+                          padding: '3px 8px',
+                          borderRadius: 'var(--radius-full)',
+                          fontSize: '0.75rem',
+                          fontWeight: '600',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.03em',
+                          background:
+                            tenant.status === 'active'
+                              ? 'rgba(16, 185, 129, 0.15)'
+                              : tenant.status === 'pending'
+                              ? 'rgba(245, 158, 11, 0.15)'
+                              : 'rgba(239, 68, 68, 0.15)',
+                          color:
+                            tenant.status === 'active'
+                              ? '#10b981'
+                              : tenant.status === 'pending'
+                              ? '#f59e0b'
+                              : '#ef4444',
+                          border: `1px solid ${
+                            tenant.status === 'active'
+                              ? 'rgba(16, 185, 129, 0.3)'
+                              : tenant.status === 'pending'
+                              ? 'rgba(245, 158, 11, 0.3)'
+                              : 'rgba(239, 68, 68, 0.3)'
+                          }`,
+                        }}
                       >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-action btn-action-danger"
-                        onClick={() => setDeleteModal({ isOpen: true, tenant })}
-                        title="Delete tenant"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        {tenant.status || 'active'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="plan-badge">{tenant.plan || 'Free'}</span>
+                    </td>
+                    <td>
+                      <span className="user-count-chip">
+                        {tenant.user_count ?? 0} {tenant.user_count === 1 ? 'user' : 'users'}
+                      </span>
+                    </td>
+                    <td className="tenant-date-col">{formatDate(tenant.created_at)}</td>
+                    <td className="text-right">
+                      <div className="table-action-btns">
+                        {isPending ? (
+                          <>
+                            <button
+                              type="button"
+                              className="btn-action"
+                              style={{
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                color: '#10b981',
+                                borderColor: 'rgba(16, 185, 129, 0.3)',
+                                fontWeight: '600',
+                              }}
+                              onClick={() => setApproveModal({ isOpen: true, tenant })}
+                              title="Approve organization"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-action btn-action-danger"
+                              onClick={() => setRejectModal({ isOpen: true, tenant })}
+                              title="Reject organization"
+                            >
+                              Reject
+                            </button>
+                          </>
+                        ) : null}
+                        <Link
+                          to={`/super-admin/tenants/${tenant.id}`}
+                          className="btn-action btn-action-view"
+                          title="View tenant details & users"
+                        >
+                          View
+                        </Link>
+                        <button
+                          type="button"
+                          className="btn-action"
+                          onClick={() => setEditModal({ isOpen: true, tenant })}
+                          title="Edit tenant name/plan"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-action btn-action-danger"
+                          onClick={() => setDeleteModal({ isOpen: true, tenant })}
+                          title="Delete tenant"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
+
+      {/* Approve Tenant Modal */}
+      <TenantApproveModal
+        isOpen={approveModal.isOpen}
+        tenant={approveModal.tenant}
+        onClose={() => setApproveModal({ isOpen: false, tenant: null })}
+        onConfirm={handleApproveConfirm}
+      />
+
+      {/* Reject Tenant Modal */}
+      <TenantRejectModal
+        isOpen={rejectModal.isOpen}
+        tenant={rejectModal.tenant}
+        onClose={() => setRejectModal({ isOpen: false, tenant: null })}
+        onConfirm={handleRejectConfirm}
+      />
 
       {/* Edit Tenant Modal */}
       <TenantEditModal

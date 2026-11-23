@@ -26,6 +26,13 @@ class SQLTool(AgentTool):
     attempted_key = "sql_attempted"
     has_data_key = "sql_has_results"
 
+    def _fingerprint(self, state: AgentState) -> dict:
+        from app.agent.utils.state_helpers import get_current_question
+
+        question = get_current_question(state)
+        tenant_id = state.get("tenant_id", "")
+        return {"question": question, "tenant_id": tenant_id}
+
     def run(self, state: AgentState) -> ToolResult:
         question = get_current_question(state)
         try:

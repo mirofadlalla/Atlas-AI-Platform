@@ -8,6 +8,7 @@ cache management, and post-execution logging / Prometheus metrics.
 import json
 import logging
 import time
+import uuid
 
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -93,7 +94,12 @@ class AgentController:
                     "memory_write": "Persisting Memory",
                 }
 
-                async for event in agent_app.astream_events(inputs, version="v2"):
+                lg_config = {
+                    "configurable": {
+                        "thread_id": inputs.get("session_id") or inputs.get("run_id") or str(uuid.uuid4())
+                    }
+                }
+                async for event in agent_app.astream_events(inputs, config=lg_config, version="v2"):
                     event_type = event.get("event", "")
                     event_name = event.get("name", "")
                     data = event.get("data", {})
@@ -268,7 +274,12 @@ class AgentController:
                 return cached
 
         try:
-            result = await agent_app.ainvoke(inputs)
+            lg_config = {
+                "configurable": {
+                    "thread_id": inputs.get("session_id") or inputs.get("run_id") or str(uuid.uuid4())
+                }
+            }
+            result = await agent_app.ainvoke(inputs, config=lg_config)
 
             latency = time.time() - start_time
             step_count = result.get("step_count", 0)

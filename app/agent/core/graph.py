@@ -89,4 +89,15 @@ builder.add_conditional_edges(
 
 builder.add_edge("memory_write", END)
 
-agent_app = builder.compile()
+# ── Checkpointer ──────────────────────────────────────────────────────────────
+try:
+    from app.agent.core.checkpoint import get_checkpointer as _get_checkpointer
+
+    _checkpointer = _get_checkpointer()
+except Exception:
+    _checkpointer = None
+
+if _checkpointer is not None:
+    agent_app = builder.compile(checkpointer=_checkpointer)
+else:
+    agent_app = builder.compile()

@@ -510,6 +510,32 @@ class ApiService {
     return this.handleResponse(response);
   }
 
+  async getSuperAdminPendingTenants() {
+    const response = await fetch(`${this.baseURL}/super-admin/tenants/pending`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse(response);
+  }
+
+  async approveSuperAdminTenant(tenantId, note = '') {
+    const response = await fetch(`${this.baseURL}/super-admin/tenants/${tenantId}/approve`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ note: note || null }),
+    });
+    return this.handleResponse(response);
+  }
+
+  async rejectSuperAdminTenant(tenantId, reason = 'Your registration did not meet our requirements.') {
+    const response = await fetch(`${this.baseURL}/super-admin/tenants/${tenantId}/reject`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ reason: reason || 'Your registration did not meet our requirements.' }),
+    });
+    return this.handleResponse(response);
+  }
+
   async getSuperAdminTenantDetail(tenantId) {
     const response = await fetch(`${this.baseURL}/super-admin/tenants/${tenantId}`, {
       method: 'GET',
@@ -628,7 +654,7 @@ class ApiService {
     }
 
     // ── 403 Forbidden: account approval revoked mid-session ────────────────
-    if (response.status === 403) {
+    if (response.status === 403 && typeof window !== 'undefined' && window.location.pathname !== '/login') {
       try {
         const body = await response.clone().json();
         const detail = (body.detail || '').toLowerCase();
@@ -637,7 +663,7 @@ class ApiService {
           localStorage.removeItem('user');
           sessionStorage.setItem(
             'auth_redirect_message',
-            'Your account access has been revoked. Please contact your administrator.'
+            'Your account or organization access has been suspended or is awaiting approval.'
           );
           window.location.href = '/login';
           return new Promise(() => {});

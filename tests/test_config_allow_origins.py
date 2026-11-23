@@ -18,7 +18,6 @@ F  — single-element list      →  single-element list (no spurious split)
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helper: instantiate a Settings object with allow_origins forced to a
 # specific value without touching the environment or the real singleton.
@@ -81,9 +80,7 @@ def test_allow_origins_list_from_list():
 
 def test_allow_origins_list_strips_whitespace_string():
     """Leading/trailing whitespace around origins is stripped (string input)."""
-    s = _make_settings(
-        "https://example.com,  http://localhost:5173  "
-    )
+    s = _make_settings("https://example.com,  http://localhost:5173  ")
     assert s.allow_origins_list == [
         "https://example.com",
         "http://localhost:5173",
@@ -92,9 +89,7 @@ def test_allow_origins_list_strips_whitespace_string():
 
 def test_allow_origins_list_strips_whitespace_list():
     """Leading/trailing whitespace around origins is stripped (list input)."""
-    s = _make_settings(
-        ["  https://example.com  ", "http://localhost:5173  "]
-    )
+    s = _make_settings(["  https://example.com  ", "http://localhost:5173  "])
     assert s.allow_origins_list == [
         "https://example.com",
         "http://localhost:5173",
@@ -117,9 +112,7 @@ def test_allow_origins_list_filters_empty_entries_string():
 
 def test_allow_origins_list_filters_empty_entries_list():
     """Empty / blank entries inside a list are dropped."""
-    s = _make_settings(
-        ["https://example.com", "  ", "", "http://localhost:5173"]
-    )
+    s = _make_settings(["https://example.com", "  ", "", "http://localhost:5173"])
     assert s.allow_origins_list == [
         "https://example.com",
         "http://localhost:5173",

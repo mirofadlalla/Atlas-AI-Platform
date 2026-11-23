@@ -48,7 +48,7 @@ async def retrieval_node(state: AgentState) -> dict:
 
         try:
             result = await asyncio.wait_for(
-                asyncio.to_thread(tool.run, s),
+                asyncio.to_thread(tool.safe_run, s),
                 timeout=agent_settings.retrieval_timeout_seconds,
             )
         except asyncio.TimeoutError:

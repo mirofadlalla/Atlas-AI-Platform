@@ -99,7 +99,7 @@ class IngestController:
 
         try:
             upload_dir = Path("app/files/uploads")
-            upload_dir.mkdir(parents=True, exist_ok=True)
+            upload_dir.mkdir(parents=True, exist_ok=True) # Ensure the upload directory exists
 
             unique_name = f"{uuid.uuid4().hex}_{safe_name}"
             file_path = upload_dir / unique_name

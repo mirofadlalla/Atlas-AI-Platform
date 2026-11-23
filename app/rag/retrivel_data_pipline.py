@@ -159,9 +159,9 @@ def build_query_cache_key(
         (
             f"tenant={tenant_id}",
             f"user={user_id or ''}",
-            f"session={session_id or ''}",
-            f"query={query.strip()}",
-            f"history={chat_history}",
+            # f"session={session_id or ''}",
+            # f"query={query.strip()}",
+            # f"history={chat_history}",
         )
     )
     return f"{tenant_id}:{hashlib.md5(cache_input.encode()).hexdigest()}"
@@ -242,10 +242,15 @@ class RetrievalPipeline:
         self.local_llm = _cached_llm
 
         prompt = ChatPromptTemplate.from_template(
-            "Answer the following question based only on the assembled context:\n\n"
-            "{context}\n\n"
-            "Question: {input}\n\n"
-            "Answer:"
+            "You are a helpful and precise assistant.\n"
+            "Strictly answer the question using ONLY the retrieved context below.\n"
+            "Rules:\n"
+            "- Answer the question directly and concisely. Keep the answer short and correct; do not add unnecessary explanations or filler.\n"
+            "- If the context does not contain the answer, or if you do not know, say exactly: \"I don't know.\"\n"
+            "- Do not extrapolate, speculate, or use outside knowledge.\n\n"
+            "CONTEXT:\n{context}\n\n"
+            "QUESTION: {input}\n\n"
+            "ANSWER:"
         )
 
         self.document_chain = create_stuff_documents_chain(self.local_llm, prompt)

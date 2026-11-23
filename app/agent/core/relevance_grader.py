@@ -2,10 +2,10 @@
 Corrective RAG (CRAG) Relevance Grader for Retrieval Path.
 
 State Semantics:
-- `retrieval_has_results`: True ONLY if retrieved chunks pass similarity pre-filter
+- retrieval_has_results: True ONLY if retrieved chunks pass similarity pre-filter
   and LLM relevance grading.
-- `relevant_docs`: Filtered list of doc dicts that survived pre-filter and LLM grading.
-- `retrieval_context`: Formatted string built exclusively from `relevant_docs` (None if 0 relevant).
+- relevant_docs: Filtered list of doc dicts that survived pre-filter and LLM grading.
+- retrieval_context: Formatted string built exclusively from relevant_docs (None if 0 relevant).
 """
 
 from __future__ import annotations

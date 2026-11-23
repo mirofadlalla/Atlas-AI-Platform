@@ -8,11 +8,11 @@ celery_app = Celery(
     backend=os.getenv("CELERY_RESULT_BACKEND", "rpc://"),  # RabbitMQ backend
 )
 
-# Prodcer -> Exchange -> Queue -> Worker
+# Producer -> Exchange -> Queue -> Worker
 
 default_exchange = Exchange("atlas_ai_exchange", type="direct")
 
-# define queus
+# define queues
 celery_app.conf.task_queues = (
     Queue("ingest_data_queue", default_exchange, routing_key="ingest"),
     Queue("eval_data_queue", default_exchange, routing_key="eval"),
@@ -20,13 +20,14 @@ celery_app.conf.task_queues = (
     Queue("queue_dead", default_exchange, routing_key="dead"),
 )
 
+# define default queue and routing key
 celery_app.conf.task_default_queue = "logging_queue"
 celery_app.conf.task_default_exchange = "atlas_ai_exchange"
 celery_app.conf.task_default_routing_key = "logging"
 
 # define when task cames which queue and routes should go
 celery_app.conf.task_routes = {
-    "app.services.rag_services.ingest_rag_service.ingest_file_task": {
+    "app.services.rag_services.ingest_rag_service.ingest_file_task": { # لما task اسمها ingest_file_task تتبعت، ودّيها للـ queue دي.
         "queue": "ingest_data_queue",
         "routing_key": "ingest",
     },
@@ -81,9 +82,12 @@ celery_app.conf.update(
     task_time_limit=600,  # 10 min
     # =========================
     # RETRIES & ACKS
-    # =========================
-    task_acks_late=True,
-    task_reject_on_worker_lost=True,
+    # أفكر لحظة. آه، الفكرة كده بس محتاجة تصحيح بسيط. الـ task مش بتبقى في الـ queue بعد ما تتسلم للـ worker، بتبقى unacknowledged عنده. لو الـ worker مات الـ RabbitMQ يكتشف إن الكونكشن اتقطع وساعتها يعمل لها redelivery لworker تاني، وده اللي بيساعد عليه task_reject_on_worker_lost=True. ومن غير acks_late=True الرسالة ممكن تتشال من الـ queue بدري قبل ما التنفيذ يخلص، وده خطر لأنه ممكن يسبب فقدان شغل فعلي.
+
+    # الخلاصة: الإعدادتين دول بيخلّوا الإعادة ممكنة وبيحسّنوا الاعتمادية، بس الاعتمادية الكاملة برضو مسؤوليتك أنت.
+    #      # =========================
+    task_acks_late=True, # Acknowledge tasks after they have been executed, not just received because if the worker crashes before executing the task, it will be re-queued and executed by another worker.
+    task_reject_on_worker_lost=True, # If a worker crashes while executing a task, the task will be re-queued and executed by another worker.
     task_default_retry_delay=30,
     task_max_retries=3,
     # =========================
@@ -93,6 +97,24 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
 )
+'''
+    timezone="UTC" => all the backend infrastructure will work in UTC timezone, and the frontend will convert to the user's timezone. This is important because we have different components in different regions:
+    EC2 → Egypt
+    Worker → Germany
+    Database → another region
+
+    بدل مشاكل:
+
+    15:00 Egypt
+    14:00 UTC
+    16:00 ...
+
+    تخلي كل الـ backend infrastructure يتعامل بـ:
+
+    UTC
+
+    والـ frontend يحول للـ user's timezone.
+'''
 
 celery_app.autodiscover_tasks(["app.services"])
 # Explicitly register all task modules so Celery workers discover and register them

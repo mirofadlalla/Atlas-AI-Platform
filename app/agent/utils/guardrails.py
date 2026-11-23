@@ -100,7 +100,7 @@ def sanitize_untrusted_block(text: str) -> str:
        → Latin 'o') and removes zero-width characters so attackers cannot
        bypass regex patterns via invisible or look-alike characters.
     2. **Pattern substitution** — replaces each matched phrase with
-       ``[filtered]``.
+       [filtered].
     """
     import unicodedata
 

@@ -30,10 +30,10 @@ def get_schema_description(
     tenant_id:
         Used as part of the cache key so each tenant's schema view is stored
         separately.  This is critical in multi-tenant deployments where tenants
-        have different ``allowed_tables`` configurations.
+        have different allowed_tables configurations.
     allowed_tables:
-        Explicit set of tables this tenant may see.  If ``None``, falls back to
-        ``agent_settings.allowed_tables`` (the global ``AGENT_SQL_NAMESPACE``
+        Explicit set of tables this tenant may see.  If None, falls back to
+        agent_settings.allowed_tables (the global AGENT_SQL_NAMESPACE
         env var).  Callers should pass the tenant-specific allow-list here once
         per-tenant table configuration is stored in the database.
     """

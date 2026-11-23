@@ -54,8 +54,8 @@ router = APIRouter(prefix="/super-admin")
 def setup_super_admin(request: CreateSuperAdminRequest, db: Session = Depends(get_db)):
     """Bootstrap the first super admin account.
 
-    Validates the ``secret_key`` in the request body against the
-    ``SUPER_ADMIN_SECRET_KEY`` environment variable.  No JWT is required.
+    Validates the secret_key in the request body against the
+    SUPER_ADMIN_SECRET_KEY environment variable.  No JWT is required.
     """
     return SuperAdminController.create_super_admin(request, db)
 

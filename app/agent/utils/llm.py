@@ -28,10 +28,6 @@ logger = logging.getLogger(__name__)
 
 LLMTier = Literal["routing", "generation"]
 
-# Groq approximate $/1M tokens (llama-3.3-70b); override via env if needed
-_DEFAULT_INPUT_COST_PER_M = 0.59
-_DEFAULT_OUTPUT_COST_PER_M = 0.79
-
 
 def _estimate_cost_usd(input_tokens: int, output_tokens: int) -> float:
     in_cost = (input_tokens / 1_000_000) * agent_settings.llm_input_cost_per_million
@@ -114,10 +110,10 @@ async def async_call_agent_llm_stream(
 
     Fixes applied:
     - **Event-loop safety (3.1):** The producer thread is signalled to stop via a
-      ``threading.Event`` and the ``ThreadPoolExecutor`` is shut down with
-      ``wait=False`` — so a streaming error never stalls the event loop.
+      threading.Event and the ThreadPoolExecutor is shut down with
+      wait=False — so a streaming error never stalls the event loop.
     - **Circuit breaker (3.4):** The entire stream is wrapped in
-      ``llm_circuit_breaker.async_call`` so provider failures open the breaker and
+      llm_circuit_breaker.async_call so provider failures open the breaker and
       back-pressure is applied on the async hot path, not just the sync SQL path.
     """
     tenant_label = tenant_id or "unknown"

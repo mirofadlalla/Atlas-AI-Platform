@@ -38,10 +38,10 @@ class InternalMetricsController:
         Dispatch incoming metric payload to the correct Prometheus instruments.
 
         Supported metric_type values:
-            - ``query_run``   — query latency, token usage, cost
-            - ``agent_run``   — agent execution metrics
-            - ``ingest_run``  — document ingestion metrics
-            - ``eval_run``    — evaluation run metrics
+            - query_run   — query latency, token usage, cost
+            - agent_run   — agent execution metrics
+            - ingest_run  — document ingestion metrics
+            - eval_run    — evaluation run metrics
 
         Args:
             payload: Dict from the request body containing metric_type and values.

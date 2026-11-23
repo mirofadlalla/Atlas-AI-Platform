@@ -73,7 +73,7 @@ class SQLValidator:
     @staticmethod
     def _add_tenant_where(select_node: exp.Select) -> None:
         """
-        Inject ``tenant_id = :tenant_id`` into a SELECT node's WHERE clause in-place.
+        Inject tenant_id = :tenant_id into a SELECT node's WHERE clause in-place.
 
         If a WHERE clause already exists it is ANDed with the new predicate so
         existing filters are preserved.
@@ -100,10 +100,10 @@ class SQLValidator:
           branch (left / right), which are themselves either SELECT or nested
           set-operation nodes.
         - **Subqueries inside FROM** are intentionally skipped.  Those inner
-          tables are protected by the ``allowed_tables`` allow-list and the
+          tables are protected by the allowed_tables allow-list and the
           outer branch's injected predicate.  Injecting into a derived-table
-          SELECT would add ``WHERE tenant_id = :tenant_id`` to a result-set
-          that may not expose a ``tenant_id`` column, causing a runtime error.
+          SELECT would add WHERE tenant_id = :tenant_id to a result-set
+          that may not expose a tenant_id column, causing a runtime error.
         """
         if isinstance(node, exp.Select):
             SQLValidator._add_tenant_where(node)

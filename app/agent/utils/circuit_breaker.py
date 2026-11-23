@@ -83,7 +83,7 @@ class CircuitBreaker:
         """
         Async-aware circuit-breaker wrapper.
 
-        Identical semantics to ``call()`` but awaits ``async_fn`` instead of
+        Identical semantics to call() but awaits async_fn instead of
         calling it synchronously, so the event loop is never blocked.
         """
         with self._lock:

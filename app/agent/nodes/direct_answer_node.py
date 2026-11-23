@@ -19,7 +19,7 @@ async def direct_answer_node(state: AgentState) -> dict:
     """
     Handle greetings, meta-questions, or direct general QA without tools.
 
-    If ``state`` contains a pre-built ``direct_response`` (e.g. greeting from
+    If state contains a pre-built direct_response (e.g. greeting from
     the router) it is emitted directly.  Otherwise, an LLM is called with the
     full conversation context — history, recalled memories, and episodic session
     summaries — so follow-up questions receive coherent, context-aware answers.
@@ -55,7 +55,14 @@ async def direct_answer_node(state: AgentState) -> dict:
         context_block = "\n\n".join(context_parts)
         prompt = (
             f"{context_block}\n\n" if context_block else ""
-        ) + f"QUESTION: {question}\n\nAnswer clearly and concisely:"
+        ) + (
+            f"QUESTION: {question}\n\n"
+            "RULES:\n"
+            "- Answer the user's greeting or question directly, politely, and concisely.\n"
+            "- Keep the answer short and to the point. Do not add unsolicited explanations, filler, or assumptions.\n"
+            "- If asked a factual question that requires external information or knowledge you do not have, state: \"I don't know.\"\n\n"
+            "Answer:"
+        )
 
         response_dict = await async_call_agent_llm_stream(
             prompt=prompt,
