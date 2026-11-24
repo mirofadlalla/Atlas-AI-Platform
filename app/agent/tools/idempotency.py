@@ -55,7 +55,7 @@ def get_redis_client():
 def build_key(tool_name: str, tenant_id: str, run_id: str, input_dict: dict) -> str:
     """Return full 64-char SHA-256 hex digest for the given inputs.
 
-    Redis key prefix: ``atlas:idem:{hex}``
+    Redis key prefix: atlas:idem:{hex}
     """
     raw = f"{tool_name}|{tenant_id}|{run_id}|{sorted(input_dict.items())}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -67,9 +67,9 @@ def build_key(tool_name: str, tenant_id: str, run_id: str, input_dict: dict) -> 
 
 
 def fetch_cached_result(key: str):
-    """GET from Redis at ``atlas:idem:{key}``.
+    """GET from Redis at atlas:idem:{key}.
 
-    Returns a :class:`ToolResult` on hit, or ``None`` on miss / error.
+    Returns a :class:`ToolResult` on hit, or None on miss / error.
     """
     try:
         from app.agent.tools.base import ToolResult
@@ -115,9 +115,9 @@ def cache_tool_result(key: str, result, ttl: int) -> None:
 
 
 def acquire_lock(key: str, ttl: int = 30) -> bool:
-    """SET ``atlas:lock:{key} 1 NX EX ttl``.
+    """SET atlas:lock:{key} 1 NX EX ttl.
 
-    Returns ``True`` if the lock was acquired, ``False`` otherwise.
+    Returns True if the lock was acquired, False otherwise.
     """
     try:
         client = get_redis_client()
@@ -134,7 +134,7 @@ def acquire_lock(key: str, ttl: int = 30) -> bool:
 
 
 def release_lock(key: str) -> None:
-    """DEL ``atlas:lock:{key}``.
+    """DEL atlas:lock:{key}.
 
     Silently swallows all exceptions.
     """
